@@ -1,9 +1,8 @@
 from models.schemas import RegisterUser, ViewerRegister, CreatorRegister, AdminRegister
 from fastapi import FastAPI, HTTPException, APIRouter, Depends
 from database import creators_collection, viewers_collection, admin_collection
-from utils.security import hash_password
 from datetime import datetime
-
+from utils.security import hash_password, verify_password, create_access_token, get_current_user, require_role
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
@@ -138,3 +137,52 @@ def register_admin(user: AdminRegister):
     result = admin_collection.insert_one(admin_doc)
 
     return {"message": "Admin registered successfully", "userId": str(result.inserted_id)}
+
+# ---------- Login ----------
+
+@router.post("/login")
+def login(credentials: dict):
+    email = credentials.get("email")
+    password = credentials.get("password")
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
+    user = viewers_collection.find_one({"email": email})
+    role = "viewer"
+
+    if not user:
+        user = creators_collection.find_one({"email": email})
+        role = "director"
+
+    if not user:
+        user = admin_collection.find_one({"email": email})
+        role = "admin"
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if not verify_password(password, user["passwordHash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_access_token(user_id=str(user["_id"]), role=role)
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": role,
+        "username": user["username"],
+        "userId": str(user["_id"]),
+    }
+
+# ---------- Protected test route ----------
+
+@router.get("/me")
+def get_me(current_user: dict = Depends(get_current_user)):
+    return {"message": "You are authenticated", "user": current_user}
+
+# ---------- Director-only test route ----------
+
+@router.get("/director-only")
+def director_only_route(current_user: dict = Depends(require_role("director"))):
+    return {"message": "Welcome, director", "user": current_user}
