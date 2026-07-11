@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.auth import router as auth_router
+from app.auth import router as auth
 
 app = FastAPI(title="Proscenium")
 
@@ -12,7 +12,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, tags=["Auth"])
+app.include_router(auth, tags=["Auth"])
+
 
 @app.get("/")
 def root():
