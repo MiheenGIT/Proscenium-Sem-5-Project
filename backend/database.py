@@ -13,5 +13,6 @@ db = client["proscenium"]
 viewers_collection = db["viewers_collection"]
 creators_collection = db["creators_collection"]
 admin_collection = db["admin_collection"]
+film_collection = db["film_collection"]
 
 print(">>> database.py loaded, using PyMongo")

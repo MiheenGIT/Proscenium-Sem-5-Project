@@ -1,7 +1,8 @@
+import Director from './director.jsx'
 
 function App() {
   return(
-    <h4> Frontend is active</h4>
+    <Director />
   );
 }
 
