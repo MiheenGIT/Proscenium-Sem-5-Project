@@ -1,6 +1,6 @@
 from models.schemas import RegisterUser, ViewerRegister, CreatorRegister, AdminRegister
 from fastapi import FastAPI, HTTPException, APIRouter, Depends
-from database import creators_collection, viewers_collection, admin_collection
+from database import directors_collection, viewers_collection, admin_collection
 from datetime import datetime
 from utils.security import hash_password, verify_password, create_access_token, get_current_user, require_role
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -18,7 +18,7 @@ def _validate_dob(dob_date):
 def _check_email_unique(email: str):
     # checked across ALL role collections, not just the one being registered
     existing_viewer = viewers_collection.find_one({"email": email})
-    existing_creator = creators_collection.find_one({"email": email})
+    existing_creator = directors_collection.find_one({"email": email})
     existing_admin = admin_collection.find_one({"email": email})
     if existing_viewer or existing_creator or existing_admin:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -97,7 +97,7 @@ def register_creator(user: CreatorRegister):
         "createdAt": now,
         "updatedAt": now,
     }
-    result = creators_collection.insert_one(creator_doc)
+    result = directors_collection.insert_one(creator_doc)
 
     return {"message": "Creator registered successfully", "userId": str(result.inserted_id)}
 
@@ -152,7 +152,7 @@ def login(credentials: dict):
     role = "viewer"
 
     if not user:
-        user = creators_collection.find_one({"email": email})
+        user = directors_collection.find_one({"email": email})
         role = "director"
 
     if not user:
@@ -168,7 +168,7 @@ def login(credentials: dict):
     token = create_access_token(user_id=str(user["_id"]), role=role)
 
     return {
-        "access_token": token,
+        "token": token,
         "token_type": "bearer",
         "role": role,
         "username": user["username"],

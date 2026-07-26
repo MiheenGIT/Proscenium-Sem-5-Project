@@ -11,7 +11,7 @@ client = MongoClient(MONGO_URL, tlsCAFile=certifi.where())
 db = client["proscenium"]
 
 viewers_collection = db["viewers_collection"]
-creators_collection = db["creators_collection"]
+directors_collection = db["directors_collection"]
 admin_collection = db["admin_collection"]
 film_collection = db["film_collection"]
 

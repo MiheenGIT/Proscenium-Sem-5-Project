@@ -1,11 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from utils.security import require_role
 import os, shutil
 from bson import ObjectId
 import subprocess
 import glob
 import cloudinary
 import cloudinary.uploader
-from database import film_collection
+from database import film_collection, directors_collection
 
 from database import db
 from datetime import datetime
@@ -13,12 +14,17 @@ from datetime import datetime
 router = APIRouter(prefix='/directors', tags=["directors"])
 media_root = "media"
 
+
 @router.post("/upload-video")
 async def upload_vid(
     title: str = Form(...),
     description: str = Form(...),
-    film: UploadFile = File(...)
+    film: UploadFile = File(...),
+    payload: dict = Depends(require_role("director", "admin"))
 ):
+    director = directors_collection.find_one({"_id": ObjectId(payload["user_id"])})
+    if not director:
+        raise HTTPException(status_code=401, detail="Director not found")
     video_id = str(ObjectId())
 
     raw_folder= os.path.join(media_root, video_id, "raw")
@@ -172,9 +178,8 @@ async def upload_vid(
     )
 
     shutil.rmtree(raw_folder)
-
     video_doc = {
-        "directorId": None,  # TODO: replace with real logged-in director's _id once auth is wired into this route
+        "directorId": ObjectId(payload["user_id"]),  # TODO: replace with real logged-in director's _id once auth is wired into this route
         "title": title,
         "slug": title.lower().replace(" ", "-"),
         "description": description,
