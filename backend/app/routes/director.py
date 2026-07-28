@@ -11,6 +11,19 @@ from database import film_collection, directors_collection
 from database import db
 from datetime import datetime
 
+from bson.errors import InvalidId
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+)
+
+
 router = APIRouter(prefix='/directors', tags=["directors"])
 media_root = "media"
 
@@ -231,11 +244,91 @@ async def upload_vid(
             "master_url": master_result["secure_url"]
         }
 
+@router.get("/videos/{video_id}/moderation-status")
+async def get_moderation_status(
+    video_id: str,
+    payload: dict = Depends(require_role("director", "admin"))
+):
+    try:
+        oid = ObjectId(video_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    video = film_collection.find_one({"_id": oid})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if payload["role"] == "director" and str(video["directorId"]) != payload["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    return {
+        "videoId": video_id,
+        "title": video.get("title"),
+        "moderationStatus": video.get("moderationStatus"),
+        "comment": video.get("moderationComment"),
+        "moderatedAt": video.get("moderatedAt"),
+    }
+
+
+@router.post("/videos/{video_id}/resubmit")
+async def resubmit_video(
+    video_id: str,
+    payload: dict = Depends(require_role("director"))
+):
+    try:
+        oid = ObjectId(video_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    video = film_collection.find_one({"_id": oid})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if str(video["directorId"]) != payload["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    if video["moderationStatus"] != "rejected":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only rejected videos can be resubmitted (current status: {video['moderationStatus']})"
+        )
+
+    now = datetime.utcnow()
+    history_entry = {
+        "action": "resubmitted",
+        "comment": None,
+        "moderatedBy": ObjectId(payload["user_id"]),
+        "moderatedAt": now,
+    }
+
+    film_collection.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "moderationStatus": "pending",
+                "moderationComment": None,
+                "moderatedBy": None,
+                "moderatedAt": None,
+                "updatedAt": now,
+            },
+            "$push": {"moderationHistory": history_entry},
+        }
+    )
+    return {"message": "Video resubmitted for review", "videoId": video_id}
+
 @router.get("/latest-video")
 async def get_latest_video():
-    film = film_collection.find_one(sort=[("uploadedAt", -1)])
+    film = film_collection.find_one(
+        {
+            "moderationStatus": "approved",
+            "visibility": "public"
+        },
+        sort=[("publishedAt", -1)]
+    )
+
     if not film:
-        return {"error": "No videos found in database"}
+        return {"error": "No approved videos available"}
+
     return {
         "title": film.get("title"),
         "hlsManifestUrl": film.get("hlsManifestUrl")

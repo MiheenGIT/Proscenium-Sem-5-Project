@@ -107,3 +107,31 @@ class AdminRegister(BaseModel):
     @classmethod
     def password_strength(cls, v):
         return _check_password_strength(v)
+
+
+class RejectVideoRequest(BaseModel):
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def reason_not_blank(cls, v):
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError("Rejection reason must be at least 3 characters")
+        if len(v) > 500:
+            raise ValueError("Rejection reason must be under 500 characters")
+        return v
+
+
+class ApproveVideoRequest(BaseModel):
+    comment: Optional[str] = None
+
+    @field_validator("comment")
+    @classmethod
+    def comment_length(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) > 500:
+            raise ValueError("Comment must be under 500 characters")
+        return v or None
