@@ -4,9 +4,10 @@ from bson.errors import InvalidId
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 from pydantic import BaseModel, Field
+from models.schemas import CommentCreateRequest, HeartbeatRequest
 
 from utils.security import require_role
-from database import film_collection, video_views_collection, viewers_collection, watch_sessions_collection
+from database import film_collection, video_views_collection, viewers_collection, watch_sessions_collection, comments_collection
 
 router = APIRouter(prefix="/viewer", tags=["viewer"])
 
@@ -195,9 +196,6 @@ VIEW_THRESHOLD_FRACTION = 0.75
 PLAYBACK_DRIFT_TOLERANCE = 5     # seconds of allowed mismatch between wall-clock gap and reported playback advance
 
 
-class HeartbeatRequest(BaseModel):
-    currentTimeSec: float = Field(..., ge=0)
-
 
 @router.post("/videos/{video_id}/heartbeat")
 def watch_heartbeat(
@@ -284,3 +282,213 @@ def watch_heartbeat(
             film_collection.update_one({"_id": oid}, {"$inc": {"views": 1}})
 
     return {"counted": just_crossed_threshold, "accumulatedSeconds": new_accumulated}
+
+
+def _serialize_comment(comment: dict) -> dict:
+    return {
+        "id": str(comment["_id"]),
+        "videoId": str(comment["videoId"]),
+        "viewerId": str(comment["viewerId"]),
+        "text": comment["text"],
+        "parentId": str(comment["parentId"]) if comment.get("parentId") else None,
+        "replyIds": [str(r) for r in comment.get("replyIds", [])],
+        "createdAt": comment["createdAt"],
+    }
+
+
+# ---------- add a top-level comment ----------
+
+@router.post("/videos/{video_id}/comments")
+def add_comment(
+    video_id: str,
+    body: CommentCreateRequest,
+    payload: dict = Depends(require_role("viewer"))
+):
+    oid, video = _get_public_video_or_404(video_id)
+    viewer_id = ObjectId(payload["user_id"])
+    now = datetime.utcnow()
+
+    comment_doc = {
+        "videoId": oid,
+        "viewerId": viewer_id,
+        "text": body.text,
+        "parentId": None,
+        "replyIds": [],
+        "createdAt": now,
+    }
+    result = comments_collection.insert_one(comment_doc)
+    comment_doc["_id"] = result.inserted_id
+
+    film_collection.update_one({"_id": oid}, {"$inc": {"commentCount": 1}})
+    return _serialize_comment(comment_doc)
+
+
+# ---------- reply to any comment, top-level or nested ----------
+
+@router.post("/videos/{video_id}/comments/{comment_id}/reply")
+def reply_to_comment(
+    video_id: str,
+    comment_id: str,
+    body: CommentCreateRequest,
+    payload: dict = Depends(require_role("viewer"))
+):
+    try:
+        video_oid = ObjectId(video_id)
+        parent_oid = ObjectId(comment_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid id")
+
+    _get_public_video_or_404(video_id)
+
+    parent = comments_collection.find_one({"_id": parent_oid, "videoId": video_oid})
+    if not parent:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    viewer_id = ObjectId(payload["user_id"])
+    now = datetime.utcnow()
+
+    reply_doc = {
+        "videoId": video_oid,
+        "viewerId": viewer_id,
+        "text": body.text,
+        "parentId": parent_oid,
+        "replyIds": [],
+        "createdAt": now,
+    }
+    result = comments_collection.insert_one(reply_doc)
+    reply_doc["_id"] = result.inserted_id
+
+    # register this reply against its parent's replyIds list
+    comments_collection.update_one(
+        {"_id": parent_oid},
+        {"$push": {"replyIds": reply_doc["_id"]}}
+    )
+
+    film_collection.update_one({"_id": video_oid}, {"$inc": {"commentCount": 1}})
+    return _serialize_comment(reply_doc)
+
+
+# ---------- list top-level comments for a video ----------
+
+@router.get("/videos/{video_id}/comments")
+def list_comments(
+    video_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    payload: dict = Depends(require_role("viewer"))
+):
+    oid, video = _get_public_video_or_404(video_id)
+
+    query = {"videoId": oid, "parentId": None}
+    skip = (page - 1) * limit
+    total = comments_collection.count_documents(query)
+    comments = list(
+        comments_collection.find(query)
+        .sort("createdAt", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+
+    return {
+        "count": total,
+        "page": page,
+        "limit": limit,
+        "comments": [_serialize_comment(c) for c in comments]
+    }
+
+
+# ---------- list direct replies to a specific comment ----------
+
+@router.get("/videos/{video_id}/comments/{comment_id}/replies")
+def list_replies(
+    video_id: str,
+    comment_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    payload: dict = Depends(require_role("viewer"))
+):
+    try:
+        video_oid = ObjectId(video_id)
+        parent_oid = ObjectId(comment_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid id")
+
+    _get_public_video_or_404(video_id)
+
+    query = {"videoId": video_oid, "parentId": parent_oid}
+    skip = (page - 1) * limit
+    total = comments_collection.count_documents(query)
+    replies = list(
+        comments_collection.find(query)
+        .sort("createdAt", 1)
+        .skip(skip)
+        .limit(limit)
+    )
+
+    return {
+        "count": total,
+        "page": page,
+        "limit": limit,
+        "replies": [_serialize_comment(r) for r in replies]
+    }
+
+
+# ---------- delete a comment (cascades to all descendant replies) ----------
+
+def _collect_descendant_ids(comment_id: ObjectId) -> list:
+    """Iteratively walks parentId links to gather every descendant reply id,
+    at any depth, without recursion (avoids deep call stacks on long threads)."""
+    all_ids = []
+    frontier = [comment_id]
+    while frontier:
+        children = list(
+            comments_collection.find({"parentId": {"$in": frontier}}, {"_id": 1})
+        )
+        child_ids = [c["_id"] for c in children]
+        all_ids.extend(child_ids)
+        frontier = child_ids
+    return all_ids
+
+
+@router.delete("/videos/{video_id}/comments/{comment_id}")
+def delete_comment(
+    video_id: str,
+    comment_id: str,
+    payload: dict = Depends(require_role("viewer"))
+):
+    try:
+        video_oid = ObjectId(video_id)
+        comment_oid = ObjectId(comment_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid id")
+
+    comment = comments_collection.find_one({"_id": comment_oid, "videoId": video_oid})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    viewer_id = ObjectId(payload["user_id"])
+    if comment["viewerId"] != viewer_id:
+        raise HTTPException(status_code=403, detail="Not your comment")
+
+    descendant_ids = _collect_descendant_ids(comment_oid)
+    all_ids_to_delete = [comment_oid] + descendant_ids
+
+    comments_collection.delete_many({"_id": {"$in": all_ids_to_delete}})
+
+    # remove this comment's reference from its parent's replyIds, if it had one
+    if comment.get("parentId"):
+        comments_collection.update_one(
+            {"_id": comment["parentId"]},
+            {"$pull": {"replyIds": comment_oid}}
+        )
+
+    film_collection.update_one(
+        {"_id": video_oid},
+        {"$inc": {"commentCount": -len(all_ids_to_delete)}}
+    )
+
+    return {
+        "message": "Comment deleted",
+        "commentId": comment_id,
+        "removedCount": len(all_ids_to_delete)
+    }

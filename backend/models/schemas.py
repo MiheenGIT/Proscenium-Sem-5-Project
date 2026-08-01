@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, constr, Field
 from datetime import date
 from typing import Literal, Optional
 
@@ -135,3 +135,9 @@ class ApproveVideoRequest(BaseModel):
         if len(v) > 500:
             raise ValueError("Comment must be under 500 characters")
         return v or None
+
+class CommentCreateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+
+class HeartbeatRequest(BaseModel):
+    currentTimeSec: float = Field(..., ge=0)
