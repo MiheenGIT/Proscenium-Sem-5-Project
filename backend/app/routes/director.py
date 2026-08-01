@@ -27,6 +27,18 @@ cloudinary.config(
 router = APIRouter(prefix='/directors', tags=["directors"])
 media_root = "media"
 
+def _get_video_duration_sec(file_path: str) -> float:
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        file_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        return float(result.stdout.strip())
+    except (ValueError, AttributeError):
+        return 0.0
 
 @router.post("/upload-video")
 async def upload_vid(
@@ -47,6 +59,8 @@ async def upload_vid(
 
     with open(raw_path, "wb") as f:
         shutil.copyfileobj(film.file, f)
+
+    duration_sec = _get_video_duration_sec(raw_path)
 
     output_480p_path = os.path.join(raw_folder, "index.m3u8")
 
@@ -200,7 +214,7 @@ async def upload_vid(
         "tags": [],
         "language": "",
         "subtitles": [],
-        "durationSec": 0,
+        "durationSec": duration_sec,
         "thumbnailUrl": "",
         "hlsManifestUrl": master_result["secure_url"],
         "rawFileUrl": "",  # raw file was deleted locally, leave blank unless you keep a cloud copy
@@ -268,6 +282,8 @@ async def reupload_video(
 
     with open(raw_path, "wb") as f:
         shutil.copyfileobj(film.file, f)
+
+    duration_sec = _get_video_duration_sec(raw_path)
 
     # ---- 480p ----
     output_480p_path = os.path.join(raw_folder, "index.m3u8")
@@ -423,6 +439,7 @@ async def reupload_video(
                 "visibility": "private",    # pull from public view until re-approved
                 "publishedAt": None,        # no longer considered "published" until re-approved
                 "updatedAt": now,
+                "durationSec": duration_sec,
             },
             "$push": {"moderationHistory": history_entry},
         }
