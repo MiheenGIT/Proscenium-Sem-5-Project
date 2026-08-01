@@ -14,5 +14,6 @@ viewers_collection = db["viewers_collection"]
 directors_collection = db["directors_collection"]
 admin_collection = db["admin_collection"]
 film_collection = db["film_collection"]
+video_views_collection = db["video_views"]
 
 print(">>> database.py loaded, using PyMongo")

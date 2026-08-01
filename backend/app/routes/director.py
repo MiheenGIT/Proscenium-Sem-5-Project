@@ -244,6 +244,198 @@ async def upload_vid(
             "master_url": master_result["secure_url"]
         }
 
+@router.post("/videos/{video_id}/reupload")
+async def reupload_video(
+    video_id: str,
+    film: UploadFile = File(...),
+    payload: dict = Depends(require_role("director"))
+):
+    try:
+        oid = ObjectId(video_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    video = film_collection.find_one({"_id": oid})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if str(video["directorId"]) != payload["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    raw_folder = os.path.join(media_root, video_id, "raw")
+    os.makedirs(raw_folder, exist_ok=True)
+    raw_path = os.path.join(raw_folder, "original.mp4")
+
+    with open(raw_path, "wb") as f:
+        shutil.copyfileobj(film.file, f)
+
+    # ---- 480p ----
+    output_480p_path = os.path.join(raw_folder, "index.m3u8")
+    cmd_480p = [
+        "ffmpeg",
+        "-i", raw_path,
+        "-vf", "scale=854:480",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-b:v", "1000k",
+        "-b:a", "128k",
+        "-g", "180",
+        "-keyint_min", "180",
+        "-sc_threshold", "0",
+        "-hls_time", "6",
+        "-hls_list_size", "0",
+        "-hls_segment_filename", os.path.join(raw_folder, "seg_%03d.ts"),
+        "-f", "hls",
+        output_480p_path
+    ]
+    result480p = subprocess.run(cmd_480p, capture_output=True, text=True)
+
+    segment_files = sorted(glob.glob(os.path.join(raw_folder, "seg_*.ts")))
+    segment_urls_480p = []
+    for segment_path in segment_files:
+        result = cloudinary.uploader.upload(
+            segment_path,
+            resource_type="video",
+            folder=f"proscenium/{video_id}/480p"
+        )
+        segment_urls_480p.append(result["secure_url"])
+
+    with open(output_480p_path, "r") as f:
+        lines = f.readlines()
+
+    i = 0
+    new_lines = []
+    for segs in lines:
+        if segs.startswith("#"):
+            new_lines.append(segs)
+        elif segs.strip() == "":
+            continue
+        else:
+            new_lines.append(segment_urls_480p[i] + "\n")
+            i += 1
+
+    with open(output_480p_path, "w") as f:
+        f.writelines(new_lines)
+
+    index_480p_upload = cloudinary.uploader.upload(
+        output_480p_path,
+        resource_type="raw",
+        folder=f"proscenium/{video_id}"
+    )
+    index_480p_url = index_480p_upload["secure_url"]
+
+    # ---- 720p ----
+    output_720p_path = os.path.join(raw_folder, "index720.m3u8")
+    cmd_720p = [
+        "ffmpeg",
+        "-i", raw_path,
+        "-vf", "scale=1280:720",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-b:v", "2500k",
+        "-b:a", "128k",
+        "-g", "180",
+        "-keyint_min", "180",
+        "-sc_threshold", "0",
+        "-hls_time", "6",
+        "-hls_list_size", "0",
+        "-hls_segment_filename", os.path.join(raw_folder, "seg720_%03d.ts"),
+        "-f", "hls",
+        output_720p_path
+    ]
+    result720p = subprocess.run(cmd_720p, capture_output=True, text=True)
+
+    segment_files = sorted(glob.glob(os.path.join(raw_folder, "seg720_*.ts")))
+    segment_urls_720p = []
+    for segment_path in segment_files:
+        result = cloudinary.uploader.upload(
+            segment_path,
+            resource_type="video",
+            folder=f"proscenium/{video_id}/720p"
+        )
+        segment_urls_720p.append(result["secure_url"])
+
+    with open(output_720p_path, "r") as f:
+        lines = f.readlines()
+
+    i = 0
+    new_lines = []
+    for segs in lines:
+        if segs.startswith("#"):
+            new_lines.append(segs)
+        elif segs.strip() == "":
+            continue
+        else:
+            new_lines.append(segment_urls_720p[i] + "\n")
+            i += 1
+
+    with open(output_720p_path, "w") as f:
+        f.writelines(new_lines)
+
+    index_720p_upload = cloudinary.uploader.upload(
+        output_720p_path,
+        resource_type="raw",
+        folder=f"proscenium/{video_id}"
+    )
+    index_720p_url = index_720p_upload["secure_url"]
+
+    # ---- master manifest ----
+    master_path = os.path.join(raw_folder, "master.m3u8")
+    master_content = f"""#EXTM3U
+#EXT-X-VERSION:3
+
+#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480
+{index_480p_url}
+
+#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
+{index_720p_url}
+"""
+    with open(master_path, "w") as f:
+        f.write(master_content)
+
+    master_result = cloudinary.uploader.upload(
+        master_path,
+        resource_type="raw",
+        folder=f"proscenium/{video_id}"
+    )
+
+    shutil.rmtree(raw_folder)
+
+    # ---- update mongo doc ----
+    now = datetime.utcnow()
+    history_entry = {
+        "action": "reuploaded",
+        "comment": None,
+        "moderatedBy": ObjectId(payload["user_id"]),
+        "moderatedAt": now,
+    }
+
+    film_collection.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "hlsManifestUrl": master_result["secure_url"],
+                "moderationStatus": "pending",
+                "moderationComment": None,
+                "moderatedBy": None,
+                "moderatedAt": None,
+                "status": "ready",          # file itself is ready to stream, just unreviewed
+                "visibility": "private",    # pull from public view until re-approved
+                "publishedAt": None,        # no longer considered "published" until re-approved
+                "updatedAt": now,
+            },
+            "$push": {"moderationHistory": history_entry},
+        }
+    )
+
+    return {
+        "video_id": video_id,
+        "message": "Video reuploaded and resubmitted for review",
+        "480p_status": result480p.returncode,
+        "720p_status": result720p.returncode,
+        "hlsManifestUrl": master_result["secure_url"]
+    }
+
 @router.get("/videos/{video_id}/moderation-status")
 async def get_moderation_status(
     video_id: str,
