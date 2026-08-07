@@ -4,10 +4,11 @@ from bson.errors import InvalidId
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 from pydantic import BaseModel, Field
-from models.schemas import CommentCreateRequest, HeartbeatRequest
-
+from models.schemas import CommentCreateRequest, HeartbeatRequest, ReactionRequest, BioUpdateRequest
 from utils.security import require_role
-from database import film_collection, video_views_collection, viewers_collection, watch_sessions_collection, comments_collection
+from database import film_collection, video_views_collection, viewers_collection, watch_sessions_collection, comments_collection, video_reactions_collection
+
+from utils.moderation import check_comment_text
 
 router = APIRouter(prefix="/viewer", tags=["viewer"])
 
@@ -141,6 +142,7 @@ def get_video_detail(
         "description": video.get("description"),
         "thumbnailUrl": video.get("thumbnailUrl"),
         "genres": video.get("genres", []),
+        "cast": video.get("cast", []),
         "tags": video.get("tags", []),
         "durationSec": video.get("durationSec", 0),
         "releaseYear": video.get("releaseYear"),
@@ -293,6 +295,7 @@ def _serialize_comment(comment: dict) -> dict:
         "parentId": str(comment["parentId"]) if comment.get("parentId") else None,
         "replyIds": [str(r) for r in comment.get("replyIds", [])],
         "createdAt": comment["createdAt"],
+        "moderationStatus": comment.get("moderationStatus", "visible"),
     }
 
 
@@ -308,6 +311,9 @@ def add_comment(
     viewer_id = ObjectId(payload["user_id"])
     now = datetime.utcnow()
 
+    ai_result = check_comment_text(body.text)
+    moderation_status = "auto_hidden" if ai_result["flagged"] else "visible"
+
     comment_doc = {
         "videoId": oid,
         "viewerId": viewer_id,
@@ -315,11 +321,22 @@ def add_comment(
         "parentId": None,
         "replyIds": [],
         "createdAt": now,
+        "moderationStatus": moderation_status,
+        "aiFlagged": ai_result["flagged"],
+        "aiFlagCategories": ai_result["categories"],
+        "aiCheckFailed": ai_result["checkFailed"],
+        "moderatedBy": None,
+        "moderatedAt": None,
+        "moderationHistory": [],
     }
     result = comments_collection.insert_one(comment_doc)
     comment_doc["_id"] = result.inserted_id
 
     film_collection.update_one({"_id": oid}, {"$inc": {"commentCount": 1}})
+
+    if ai_result["flagged"]:
+        viewers_collection.update_one({"_id": viewer_id}, {"$inc": {"flagCount": 1}})
+
     return _serialize_comment(comment_doc)
 
 
@@ -347,6 +364,9 @@ def reply_to_comment(
     viewer_id = ObjectId(payload["user_id"])
     now = datetime.utcnow()
 
+    ai_result = check_comment_text(body.text)
+    moderation_status = "auto_hidden" if ai_result["flagged"] else "visible"
+
     reply_doc = {
         "videoId": video_oid,
         "viewerId": viewer_id,
@@ -354,6 +374,13 @@ def reply_to_comment(
         "parentId": parent_oid,
         "replyIds": [],
         "createdAt": now,
+        "moderationStatus": moderation_status,
+        "aiFlagged": ai_result["flagged"],
+        "aiFlagCategories": ai_result["categories"],
+        "aiCheckFailed": ai_result["checkFailed"],
+        "moderatedBy": None,
+        "moderatedAt": None,
+        "moderationHistory": [],
     }
     result = comments_collection.insert_one(reply_doc)
     reply_doc["_id"] = result.inserted_id
@@ -365,6 +392,10 @@ def reply_to_comment(
     )
 
     film_collection.update_one({"_id": video_oid}, {"$inc": {"commentCount": 1}})
+
+    if ai_result["flagged"]:
+        viewers_collection.update_one({"_id": viewer_id}, {"$inc": {"flagCount": 1}})
+
     return _serialize_comment(reply_doc)
 
 
@@ -379,7 +410,7 @@ def list_comments(
 ):
     oid, video = _get_public_video_or_404(video_id)
 
-    query = {"videoId": oid, "parentId": None}
+    query = {"videoId": oid, "parentId": None, "moderationStatus": {"$ne": "auto_hidden"}}
     skip = (page - 1) * limit
     total = comments_collection.count_documents(query)
     comments = list(
@@ -415,7 +446,7 @@ def list_replies(
 
     _get_public_video_or_404(video_id)
 
-    query = {"videoId": video_oid, "parentId": parent_oid}
+    query = {"videoId": video_oid, "parentId": parent_oid, "moderationStatus": {"$ne": "auto_hidden"}}
     skip = (page - 1) * limit
     total = comments_collection.count_documents(query)
     replies = list(
@@ -492,3 +523,48 @@ def delete_comment(
         "commentId": comment_id,
         "removedCount": len(all_ids_to_delete)
     }
+
+@router.put("/profile/bio")
+def update_viewer_bio(body: BioUpdateRequest, payload: dict = Depends(require_role("viewer"))):
+    viewers_collection.update_one(
+        {"_id": ObjectId(payload["user_id"])},
+        {"$set": {"bio": body.bio, "updatedAt": datetime.utcnow()}}
+    )
+    return {"message": "Bio updated", "bio": body.bio}
+
+
+@router.post("/videos/{video_id}/react")
+def react_to_video(
+    video_id: str,
+    body: ReactionRequest,
+    payload: dict = Depends(require_role("viewer"))
+):
+    oid, video = _get_public_video_or_404(video_id)
+    viewer_id = ObjectId(payload["user_id"])
+
+    existing = video_reactions_collection.find_one({"videoId": oid, "viewerId": viewer_id})
+
+    if existing and existing["type"] == body.type:
+        # same reaction tapped again -> remove it (toggle off)
+        video_reactions_collection.delete_one({"_id": existing["_id"]})
+        film_collection.update_one({"_id": oid}, {"$inc": {body.type + "s": -1}})
+        return {"message": f"{body.type} removed", "videoId": video_id, "reaction": None}
+
+    if existing:
+        # switching from like -> dislike or vice versa
+        old_type = existing["type"]
+        video_reactions_collection.update_one(
+            {"_id": existing["_id"]}, {"$set": {"type": body.type}}
+        )
+        film_collection.update_one(
+            {"_id": oid},
+            {"$inc": {old_type + "s": -1, body.type + "s": 1}}
+        )
+        return {"message": f"changed to {body.type}", "videoId": video_id, "reaction": body.type}
+
+    # first reaction from this viewer
+    video_reactions_collection.insert_one({
+        "videoId": oid, "viewerId": viewer_id, "type": body.type,
+    })
+    film_collection.update_one({"_id": oid}, {"$inc": {body.type + "s": 1}})
+    return {"message": f"{body.type}d", "videoId": video_id, "reaction": body.type}

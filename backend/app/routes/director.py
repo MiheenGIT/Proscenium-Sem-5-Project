@@ -7,10 +7,10 @@ import glob
 import cloudinary
 import cloudinary.uploader
 from database import film_collection, directors_collection
-
+from models.schemas import BioUpdateRequest
 from database import db
 from datetime import datetime
-
+import json 
 from bson.errors import InvalidId
 
 from dotenv import load_dotenv
@@ -45,11 +45,23 @@ async def upload_vid(
     title: str = Form(...),
     description: str = Form(...),
     film: UploadFile = File(...),
+    genres: str = Form(""),
+    cast: str = Form("[]"),          # JSON string, e.g. '[{"name":"Jane Doe","characterName":"Detective Rao","photoUrl":"https://..."}]'
+    thumbnailUrl: str = Form(""),
+    releaseYear: int | None = Form(None),
     payload: dict = Depends(require_role("director", "admin"))
 ):
     director = directors_collection.find_one({"_id": ObjectId(payload["user_id"])})
     if not director:
         raise HTTPException(status_code=401, detail="Director not found")
+
+    try:
+        cast_list = json.loads(cast)
+        if not isinstance(cast_list, list):
+            raise ValueError
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="cast must be a valid JSON array of {name, characterName, photoUrl}")
+
     video_id = str(ObjectId())
 
     raw_folder= os.path.join(media_root, video_id, "raw")
@@ -210,12 +222,13 @@ async def upload_vid(
         "title": title,
         "slug": title.lower().replace(" ", "-"),
         "description": description,
-        "genres": [],
+        "genres": [g.strip() for g in genres.split(",") if g.strip()],
         "tags": [],
         "language": "",
         "subtitles": [],
         "durationSec": duration_sec,
-        "thumbnailUrl": "",
+        "cast": cast_list,
+        "thumbnailUrl": thumbnailUrl,
         "hlsManifestUrl": master_result["secure_url"],
         "rawFileUrl": "",  # raw file was deleted locally, leave blank unless you keep a cloud copy
         "resolutions": ["480p", "720p"],
@@ -235,7 +248,7 @@ async def upload_vid(
         "avgRating": 0,
         "reviewCount": 0,
         "commentCount": 0,
-        "releaseYear": None,
+        "releaseYear": releaseYear,
         "productionCountry": "",
         "isFeatured": False,
         "uploadedAt": datetime.utcnow(),
@@ -542,3 +555,11 @@ async def get_latest_video():
         "title": film.get("title"),
         "hlsManifestUrl": film.get("hlsManifestUrl")
     }
+
+@router.put("/profile/bio")
+async def update_director_bio(body: BioUpdateRequest, payload: dict = Depends(require_role("director"))):
+    directors_collection.update_one(
+        {"_id": ObjectId(payload["user_id"])},
+        {"$set": {"bio": body.bio, "updatedAt": datetime.utcnow()}}
+    )
+    return {"message": "Bio updated", "bio": body.bio}

@@ -7,6 +7,8 @@ from utils.security import require_role
 from database import film_collection
 from models.schemas import RejectVideoRequest, ApproveVideoRequest
 
+from database import film_collection, comments_collection
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -34,16 +36,6 @@ def _serialize_video(video: dict) -> dict:
     return video
 
 
-# ---------- list videos pending moderation ----------
-
-@router.get("/videos/pending")
-def list_pending_videos(payload: dict = Depends(require_role("admin"))):
-    videos = list(
-        film_collection.find({"moderationStatus": "pending"}).sort("uploadedAt", 1)
-    )
-    return {"count": len(videos), "videos": [_serialize_video(v) for v in videos]}
-
-
 # ---------- list all videos, optionally filtered by status ----------
 
 @router.get("/videos")
@@ -61,28 +53,19 @@ def list_all_videos(
             )
         query["moderationStatus"] = status
 
-    videos = list(film_collection.find(query).sort("uploadedAt", -1))
+    # pending queue is shown oldest-first (FIFO review order);
+    # everything else defaults to newest-first
+    sort_dir = 1 if status == "pending" else -1
+    videos = list(film_collection.find(query).sort("uploadedAt", sort_dir))
     return {"count": len(videos), "videos": [_serialize_video(v) for v in videos]}
 
 
 # ---------- get single video detail ----------
 
 @router.get("/videos/{video_id}")
-def get_video_detail(video_id: str,
-                     payload: dict = Depends(require_role("admin"))):
-
+def get_video_detail(video_id: str, payload: dict = Depends(require_role("admin"))):
     _, video = _get_video_or_404(video_id)
-
-    return {
-        "id": str(video["_id"]),
-        "title": video["title"],
-        "description": video["description"],
-        "hlsManifestUrl": video["hlsManifestUrl"],
-        "thumbnailUrl": video.get("thumbnailUrl"),
-        "uploadedAt": video["uploadedAt"],
-        "moderationStatus": video["moderationStatus"],
-        "directorId": str(video["directorId"])
-    }
+    return _serialize_video(video)
    # return _serialize_video(video)
 
 # ---------- watch a video ----------
@@ -201,3 +184,85 @@ def reset_video_status(video_id: str, payload: dict = Depends(require_role("admi
         }}
     )
     return {"message": "Video reset to pending", "videoId": video_id}
+
+# ---------- comment moderation ----------
+
+def _serialize_flagged_comment(c: dict) -> dict:
+    return {
+        "id": str(c["_id"]),
+        "videoId": str(c["videoId"]),
+        "viewerId": str(c["viewerId"]),
+        "text": c["text"],
+        "moderationStatus": c["moderationStatus"],
+        "aiFlagCategories": c.get("aiFlagCategories", []),
+        "aiCheckFailed": c.get("aiCheckFailed", False),
+        "createdAt": c["createdAt"],
+    }
+
+
+@router.get("/comments/flagged")
+def list_flagged_comments(payload: dict = Depends(require_role("admin"))):
+    comments = list(
+        comments_collection.find({"moderationStatus": "auto_hidden"}).sort("createdAt", 1)
+    )
+    return {"count": len(comments), "comments": [_serialize_flagged_comment(c) for c in comments]}
+
+
+@router.post("/comments/{comment_id}/restore")
+def restore_comment(comment_id: str, payload: dict = Depends(require_role("admin"))):
+    try:
+        oid = ObjectId(comment_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid comment id")
+
+    now = datetime.utcnow()
+    moderator_id = ObjectId(payload["user_id"])
+
+    result = comments_collection.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "moderationStatus": "visible",
+                "moderatedBy": moderator_id,
+                "moderatedAt": now,
+            },
+            "$push": {"moderationHistory": {
+                "action": "restored_by_admin",
+                "moderatedBy": moderator_id,
+                "moderatedAt": now,
+            }},
+        }
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return {"message": "Comment restored", "commentId": comment_id}
+
+
+@router.post("/comments/{comment_id}/remove")
+def admin_remove_comment(comment_id: str, payload: dict = Depends(require_role("admin"))):
+    try:
+        oid = ObjectId(comment_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid comment id")
+
+    now = datetime.utcnow()
+    moderator_id = ObjectId(payload["user_id"])
+
+    result = comments_collection.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "moderationStatus": "removed",
+                "moderatedBy": moderator_id,
+                "moderatedAt": now,
+            },
+            "$push": {"moderationHistory": {
+                "action": "removed_by_admin",
+                "moderatedBy": moderator_id,
+                "moderatedAt": now,
+            }},
+        }
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return {"message": "Comment permanently removed", "commentId": comment_id}

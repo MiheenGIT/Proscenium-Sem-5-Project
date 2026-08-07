@@ -136,8 +136,20 @@ class ApproveVideoRequest(BaseModel):
             raise ValueError("Comment must be under 500 characters")
         return v or None
 
+
 class CommentCreateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1000)
 
 class HeartbeatRequest(BaseModel):
     currentTimeSec: float = Field(..., ge=0)
+
+class BioUpdateRequest(BaseModel):
+    bio: str = Field(max_length=1000)
+
+class ReactionRequest(BaseModel):
+    type: Literal["like", "dislike"]    
+
+class CastMember(BaseModel):
+    name: str
+    characterName: str
+    photoUrl: Optional[str] = None    
