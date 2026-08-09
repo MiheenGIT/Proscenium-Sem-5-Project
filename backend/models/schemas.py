@@ -50,9 +50,11 @@ class ViewerRegister(BaseModel):
     email: EmailStr
     password: str
     date_of_birth: date
+    bio: Optional[str] = None
     role: Literal["viewer"] = "viewer"
     genrePreferences: Optional[list[str]] = []
     maturitySetting: Optional[str] = "all"
+    avatarUrl: Optional[str] = None
 
     @field_validator("username")
     @classmethod
@@ -76,6 +78,7 @@ class CreatorRegister(BaseModel):
     studioName: Optional[str] = None
     bio: Optional[str] = None
     portfolioUrl: Optional[str] = None
+    avatarUrl: Optional[str] = None
 
     @field_validator("username")
     @classmethod
@@ -97,6 +100,7 @@ class AdminRegister(BaseModel):
     date_of_birth: date
     role: Literal["admin"] = "admin"
     adminLevel: Optional[str] = "moderator"  # e.g. "moderator" | "superadmin"
+    avatarUrl: Optional[str] = None
 
     @field_validator("username")
     @classmethod
@@ -145,6 +149,9 @@ class HeartbeatRequest(BaseModel):
 
 class BioUpdateRequest(BaseModel):
     bio: str = Field(max_length=1000)
+
+class AvatarUpdateRequest(BaseModel):
+    avatarUrl: str = Field(max_length=2000)
 
 class ReactionRequest(BaseModel):
     type: Literal["like", "dislike"]    

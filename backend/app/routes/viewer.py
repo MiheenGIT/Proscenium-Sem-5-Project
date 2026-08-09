@@ -5,7 +5,9 @@ from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 from pydantic import BaseModel, Field
 from models.schemas import CommentCreateRequest, HeartbeatRequest, ReactionRequest, BioUpdateRequest
+from fastapi import UploadFile, File
 from utils.security import require_role
+from utils.cloudinary_helpers import upload_avatar
 from database import film_collection, video_views_collection, viewers_collection, watch_sessions_collection, comments_collection, video_reactions_collection
 
 from utils.moderation import check_comment_text

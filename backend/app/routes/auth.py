@@ -1,8 +1,11 @@
 from models.schemas import RegisterUser, ViewerRegister, CreatorRegister, AdminRegister
-from fastapi import FastAPI, HTTPException, APIRouter, Depends
+from fastapi import FastAPI, HTTPException, APIRouter, Depends, Form, UploadFile, File
 from database import directors_collection, viewers_collection, admin_collection
-from datetime import datetime
+from datetime import datetime, date
+from typing import Optional, List
+from pydantic import EmailStr, ValidationError
 from utils.security import hash_password, verify_password, create_access_token, get_current_user, require_role
+from utils.cloudinary_helpers import upload_avatar
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
@@ -27,7 +30,27 @@ def _check_email_unique(email: str):
 # ---------- Viewer ----------
 
 @router.post("/register/viewer")
-def register_viewer(user: ViewerRegister):
+def register_viewer(
+    username: str = Form(...),
+    email: EmailStr = Form(...),
+    password: str = Form(...),
+    date_of_birth: date = Form(...),
+    bio: Optional[str] = Form(None),
+    genrePreferences: Optional[List[str]] = Form(None),
+    maturitySetting: Optional[str] = Form("all"),
+    avatar: Optional[UploadFile] = File(None),
+):
+    try:
+        user = ViewerRegister(
+            username=username, email=email, password=password,
+            date_of_birth=date_of_birth,
+            bio=bio,
+            genrePreferences=genrePreferences or [],
+            maturitySetting=maturitySetting,
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
     user_data = user.dict()
     dob = _validate_dob(user_data["date_of_birth"])
     email = user_data["email"]
@@ -36,22 +59,22 @@ def register_viewer(user: ViewerRegister):
     password_hash = hash_password(user_data.pop("password"))
     now = datetime.now()
 
+    avatar_url = upload_avatar(avatar, username) if avatar else None
+
     viewer_doc = {
         "username": user_data["username"],
         "email": email,
         "passwordHash": password_hash,
         "date_of_birth": dob,
         "role": "viewer",
-        "avatarUrl": None,
-        "bio": None,
+        "avatarUrl": avatar_url,
+        "bio": user_data.get("bio", None),
         "isBanned": False,
         "banReason": None,
         "bannedAt": None,
         "bannedBy": None,
         "isVerifiedEmail": False,
-        "resetToken": None,
-        "resetTokenExpiry": None,
-        "loginCount": 1,
+        "loginCount": 0,
         "genrePreferences": user_data.get("genrePreferences", []),
         "maturitySetting": user_data.get("maturitySetting", "all"),
         "createdAt": now,
@@ -65,7 +88,25 @@ def register_viewer(user: ViewerRegister):
 # ---------- Creator / Director ----------
 
 @router.post("/register/creator")
-def register_creator(user: CreatorRegister):
+def register_creator(
+    username: str = Form(...),
+    email: EmailStr = Form(...),
+    password: str = Form(...),
+    date_of_birth: date = Form(...),
+    studioName: Optional[str] = Form(None),
+    bio: Optional[str] = Form(None),
+    portfolioUrl: Optional[str] = Form(None),
+    avatar: Optional[UploadFile] = File(None),
+):
+    try:
+        user = CreatorRegister(
+            username=username, email=email, password=password,
+            date_of_birth=date_of_birth,
+            studioName=studioName, bio=bio, portfolioUrl=portfolioUrl,
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
     user_data = user.dict()
     dob = _validate_dob(user_data["date_of_birth"])
     email = user_data["email"]
@@ -74,22 +115,22 @@ def register_creator(user: CreatorRegister):
     password_hash = hash_password(user_data.pop("password"))
     now = datetime.now()
 
+    avatar_url = upload_avatar(avatar, username) if avatar else None
+
     creator_doc = {
         "username": user_data["username"],
         "email": email,
         "passwordHash": password_hash,
         "date_of_birth": dob,
         "role": "director",
-        "avatarUrl": None,
+        "avatarUrl": avatar_url,
         "bio": user_data.get("bio", None),
         "isBanned": False,
         "banReason": None,
         "bannedAt": None,
         "bannedBy": None,
         "isVerifiedEmail": False,
-        "resetToken": None,
-        "resetTokenExpiry": None,
-        "loginCount": 1,
+        "loginCount": 0,
         "studioName": user_data.get("studioName", None),
         "portfolioUrl": user_data.get("portfolioUrl", None),
         "verificationStatus": "pending",
@@ -105,7 +146,22 @@ def register_creator(user: CreatorRegister):
 # ---------- Admin ----------
 
 @router.post("/register/admin")
-def register_admin(user: AdminRegister):
+def register_admin(
+    username: str = Form(...),
+    email: EmailStr = Form(...),
+    password: str = Form(...),
+    date_of_birth: date = Form(...),
+    adminLevel: Optional[str] = Form("moderator"),
+    avatar: Optional[UploadFile] = File(None),
+):
+    try:
+        user = AdminRegister(
+            username=username, email=email, password=password,
+            date_of_birth=date_of_birth, adminLevel=adminLevel,
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
     user_data = user.dict()
     dob = _validate_dob(user_data["date_of_birth"])
     email = user_data["email"]
@@ -114,22 +170,22 @@ def register_admin(user: AdminRegister):
     password_hash = hash_password(user_data.pop("password"))
     now = datetime.now()
 
+    avatar_url = upload_avatar(avatar, username) if avatar else None
+
     admin_doc = {
         "username": user_data["username"],
         "email": email,
         "passwordHash": password_hash,
         "date_of_birth": dob,
         "role": "admin",
-        "avatarUrl": None,
+        "avatarUrl": avatar_url,
         "bio": None,
         "isBanned": False,
         "banReason": None,
         "bannedAt": None,
         "bannedBy": None,
         "isVerifiedEmail": False,
-        "resetToken": None,
-        "resetTokenExpiry": None,
-        "loginCount": 1,
+        "loginCount": 0,
         "adminLevel": user_data.get("adminLevel", "moderator"),
         "createdAt": now,
         "updatedAt": now,
@@ -150,20 +206,25 @@ def login(credentials: dict):
 
     user = viewers_collection.find_one({"email": email})
     role = "viewer"
+    collection = viewers_collection
 
     if not user:
         user = directors_collection.find_one({"email": email})
         role = "director"
+        collection = directors_collection
 
     if not user:
         user = admin_collection.find_one({"email": email})
         role = "admin"
+        collection = admin_collection
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if not verify_password(password, user["passwordHash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    collection.update_one({"_id": user["_id"]}, {"$inc": {"loginCount": 1}})
 
     token = create_access_token(user_id=str(user["_id"]), role=role)
 

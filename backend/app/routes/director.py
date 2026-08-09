@@ -1,5 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from utils.security import require_role
+from utils.cloudinary_helpers import upload_avatar
 import os, shutil
 from bson import ObjectId
 import subprocess
@@ -46,7 +47,11 @@ async def upload_vid(
     description: str = Form(...),
     film: UploadFile = File(...),
     genres: str = Form(""),
-    cast: str = Form("[]"),          # JSON string, e.g. '[{"name":"Jane Doe","characterName":"Detective Rao","photoUrl":"https://..."}]'
+    tags: str = Form(""),
+    language: str = Form(""),
+    productionCountry: str = Form(""),
+    cast: str = Form("[]"),          # JSON string, e.g. '[{"name":"Jane Doe","characterName":"Detective Rao"}]' — no photoUrl, see castPhotos
+    castPhotos: list[UploadFile] = File([]),  # image files, same order as entries in `cast`
     thumbnailUrl: str = Form(""),
     releaseYear: int | None = Form(None),
     payload: dict = Depends(require_role("director", "admin"))
@@ -60,9 +65,21 @@ async def upload_vid(
         if not isinstance(cast_list, list):
             raise ValueError
     except (json.JSONDecodeError, ValueError):
-        raise HTTPException(status_code=400, detail="cast must be a valid JSON array of {name, characterName, photoUrl}")
+        raise HTTPException(status_code=400, detail="cast must be a valid JSON array of {name, characterName}")
+
+    if castPhotos and len(castPhotos) != len(cast_list):
+        raise HTTPException(
+            status_code=400,
+            detail=f"castPhotos count ({len(castPhotos)}) must match cast entries count ({len(cast_list)})"
+        )
 
     video_id = str(ObjectId())
+
+    for idx, member in enumerate(cast_list):
+        if castPhotos:
+            member["photoUrl"] = upload_avatar(castPhotos[idx], f"{video_id}_cast_{idx}")
+        else:
+            member["photoUrl"] = None
 
     raw_folder= os.path.join(media_root, video_id, "raw")
     os.makedirs(raw_folder, exist_ok=True)
@@ -73,6 +90,7 @@ async def upload_vid(
         shutil.copyfileobj(film.file, f)
 
     duration_sec = _get_video_duration_sec(raw_path)
+    file_size_bytes = os.path.getsize(raw_path)
 
     output_480p_path = os.path.join(raw_folder, "index.m3u8")
 
@@ -223,8 +241,8 @@ async def upload_vid(
         "slug": title.lower().replace(" ", "-"),
         "description": description,
         "genres": [g.strip() for g in genres.split(",") if g.strip()],
-        "tags": [],
-        "language": "",
+        "tags": [t.strip() for t in tags.split(",") if t.strip()],
+        "language": language,
         "subtitles": [],
         "durationSec": duration_sec,
         "cast": cast_list,
@@ -232,8 +250,8 @@ async def upload_vid(
         "hlsManifestUrl": master_result["secure_url"],
         "rawFileUrl": "",  # raw file was deleted locally, leave blank unless you keep a cloud copy
         "resolutions": ["480p", "720p"],
-        "fileSizeBytes": 0,
-        "mimeType": "video/mp4",
+        "fileSizeBytes": file_size_bytes,
+        "mimeType": film.content_type or "video/mp4",
         "status": "ready",
         "visibility": "private",
         "ageRestricted": False,
@@ -249,7 +267,7 @@ async def upload_vid(
         "reviewCount": 0,
         "commentCount": 0,
         "releaseYear": releaseYear,
-        "productionCountry": "",
+        "productionCountry": productionCountry,
         "isFeatured": False,
         "uploadedAt": datetime.utcnow(),
         "publishedAt": None,
@@ -297,6 +315,7 @@ async def reupload_video(
         shutil.copyfileobj(film.file, f)
 
     duration_sec = _get_video_duration_sec(raw_path)
+    file_size_bytes = os.path.getsize(raw_path)
 
     # ---- 480p ----
     output_480p_path = os.path.join(raw_folder, "index.m3u8")
@@ -453,6 +472,8 @@ async def reupload_video(
                 "publishedAt": None,        # no longer considered "published" until re-approved
                 "updatedAt": now,
                 "durationSec": duration_sec,
+                "fileSizeBytes": file_size_bytes,
+                "mimeType": film.content_type or "video/mp4",
             },
             "$push": {"moderationHistory": history_entry},
         }
