@@ -1,22 +1,34 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 from utils.security import require_role
-from utils.cloudinary_helpers import upload_avatar
+from utils.cloudinary_helpers import upload_avatar, _cleanup_cloudinary_assets, delete_cast_photo
 import os, shutil
 from bson import ObjectId
 import subprocess
 import glob
 import cloudinary
 import cloudinary.uploader
-from database import film_collection, directors_collection
+from database import film_collection, directors_collection, cast_collection
 from models.schemas import BioUpdateRequest
 from database import db
 from datetime import datetime
 import json 
+from typing import Any
 from bson.errors import InvalidId
 
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
+
+REALESRGAN_EXE = os.getenv(
+    "REALESRGAN_EXE",
+    str(Path("realesrgan") / "realesrgan-ncnn-vulkan.exe")
+)
+
+REALESRGAN_MODEL = os.getenv(
+    "REALESRGAN_MODEL",
+    "realesrgan-x4plus"
+)
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -41,8 +53,202 @@ def _get_video_duration_sec(file_path: str) -> float:
     except (ValueError, AttributeError):
         return 0.0
 
+
+def _get_video_resolution(file_path: str) -> tuple[int, int]:
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=s=x:p=0",
+        file_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    try:
+        width, height = result.stdout.strip().split("x")
+        return int(width), int(height)
+    except (ValueError, AttributeError):
+        return 0, 0
+
+
+RESOLUTION_LADDER = [
+    {"label": "360p",  "width": 640,  "height": 360,  "v_bitrate": "600k",   "bandwidth": 600_000},
+    {"label": "480p",  "width": 854,  "height": 480,  "v_bitrate": "1000k",  "bandwidth": 1_000_000},
+    {"label": "720p",  "width": 1280, "height": 720,  "v_bitrate": "2500k",  "bandwidth": 2_500_000},
+    {"label": "1080p", "width": 1920, "height": 1080, "v_bitrate": "4500k",  "bandwidth": 4_500_000},
+    {"label": "1440p", "width": 2560, "height": 1440, "v_bitrate": "8000k",  "bandwidth": 8_000_000},
+    {"label": "2160p", "width": 3840, "height": 2160, "v_bitrate": "16000k", "bandwidth": 16_000_000},
+]
+
+
+def _ai_upscale_video(
+    input_path: str,
+    output_path: str,
+    work_folder: str
+) -> None:
+    frames_in = os.path.join(work_folder, "frames_in")
+    frames_out = os.path.join(work_folder, "frames_out")
+
+    os.makedirs(frames_in, exist_ok=True)
+    os.makedirs(frames_out, exist_ok=True)
+
+    extract_cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-qscale:v", "1",
+        "-qmin", "1",
+        "-qmax", "1",
+        "-vsync", "0",
+        os.path.join(frames_in, "frame%08d.png")
+    ]
+
+    extract_result = subprocess.run(
+        extract_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if extract_result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg frame extraction failed: {extract_result.stderr}"
+        )
+
+    upscale_cmd = [
+        REALESRGAN_EXE,
+        "-i", frames_in,
+        "-o", frames_out,
+        "-n", REALESRGAN_MODEL,
+        "-s", "4",
+        "-f", "png"
+    ]
+
+    upscale_result = subprocess.run(
+        upscale_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if upscale_result.returncode != 0:
+        raise RuntimeError(
+            f"Real-ESRGAN failed: {upscale_result.stderr}"
+        )
+
+    merge_cmd = [
+        "ffmpeg",
+        "-i", os.path.join(frames_out, "frame%08d.png"),
+        "-i", input_path,
+        "-map", "0:v:0",
+        "-map", "1:a:0?",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-pix_fmt", "yuv420p",
+        "-shortest",
+        output_path
+    ]
+
+    merge_result = subprocess.run(
+        merge_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if merge_result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg video merge failed: {merge_result.stderr}"
+        )
+
+
+def _transcode_and_upload_rendition(raw_path: str, raw_folder: str, video_id: str, rendition: dict, source_height: int) -> dict:
+    """Transcodes one HLS rendition, using AI upscaling when the target
+    resolution is above the source resolution."""
+
+    label = rendition["label"]
+    output_path = os.path.join(raw_folder, f"index_{label}.m3u8")
+
+    input_path = raw_path
+    ai_work_folder = None
+
+    if rendition["height"] > source_height:
+        ai_work_folder = os.path.join(raw_folder, f"ai_{label}")
+        os.makedirs(ai_work_folder, exist_ok=True)
+
+        ai_upscaled_path = os.path.join(
+            ai_work_folder,
+            f"upscaled_{label}.mp4"
+        )
+
+        _ai_upscale_video(
+            raw_path,
+            ai_upscaled_path,
+            ai_work_folder
+        )
+
+        input_path = ai_upscaled_path
+
+    cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-vf", f"scale={rendition['width']}:{rendition['height']}:flags=lanczos",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-b:v", rendition["v_bitrate"],
+        "-b:a", "128k",
+        "-g", "180",
+        "-keyint_min", "180",
+        "-sc_threshold", "0",
+        "-hls_time", "6",
+        "-hls_list_size", "0",
+        "-hls_segment_filename", os.path.join(raw_folder, f"seg_{label}_%03d.ts"),
+        "-f", "hls",
+        output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    segment_files = sorted(glob.glob(os.path.join(raw_folder, f"seg_{label}_*.ts")))
+    segment_urls = []
+    for segment_path in segment_files:
+        upload_result = cloudinary.uploader.upload(
+            segment_path,
+            resource_type="video",
+            folder=f"proscenium/{video_id}/{label}"
+        )
+        segment_urls.append(upload_result["secure_url"])
+
+    with open(output_path, "r") as f:
+        lines = f.readlines()
+
+    i = 0
+    new_lines = []
+    for line in lines:
+        if line.startswith("#"):
+            new_lines.append(line)
+        elif line.strip() == "":
+            continue
+        else:
+            new_lines.append(segment_urls[i] + "\n")
+            i += 1
+
+    with open(output_path, "w") as f:
+        f.writelines(new_lines)
+
+    index_upload = cloudinary.uploader.upload(
+        output_path,
+        resource_type="raw",
+        folder=f"proscenium/{video_id}"
+    )
+
+    return {
+        "label": label,
+        "returncode": result.returncode,
+        "segment_urls": segment_urls,
+        "index_url": index_upload["secure_url"],
+        "bandwidth": rendition["bandwidth"],
+        "resolution": f"{rendition['width']}x{rendition['height']}",
+    }
+
 @router.post("/upload-video")
 async def upload_vid(
+    request: Request,
     title: str = Form(...),
     description: str = Form(...),
     film: UploadFile = File(...),
@@ -50,8 +256,7 @@ async def upload_vid(
     tags: str = Form(""),
     language: str = Form(""),
     productionCountry: str = Form(""),
-    cast: str = Form("[]"),          # JSON string, e.g. '[{"name":"Jane Doe","characterName":"Detective Rao"}]' — no photoUrl, see castPhotos
-    castPhotos: list[UploadFile] = File([]),  # image files, same order as entries in `cast`
+    cast: str = Form("[]"),
     thumbnailUrl: str = Form(""),
     releaseYear: int | None = Form(None),
     payload: dict = Depends(require_role("director", "admin"))
@@ -65,21 +270,41 @@ async def upload_vid(
         if not isinstance(cast_list, list):
             raise ValueError
     except (json.JSONDecodeError, ValueError):
-        raise HTTPException(status_code=400, detail="cast must be a valid JSON array of {name, characterName}")
-
-    if castPhotos and len(castPhotos) != len(cast_list):
-        raise HTTPException(
-            status_code=400,
-            detail=f"castPhotos count ({len(castPhotos)}) must match cast entries count ({len(cast_list)})"
-        )
+        raise HTTPException(status_code=400, detail="cast must be a valid JSON array of {clientId, name, characterName}")
 
     video_id = str(ObjectId())
+    video_oid = ObjectId(video_id)
 
-    for idx, member in enumerate(cast_list):
-        if castPhotos:
-            member["photoUrl"] = upload_avatar(castPhotos[idx], f"{video_id}_cast_{idx}")
-        else:
-            member["photoUrl"] = None
+    # dynamic file fields (cast_photo_<clientId>) can't be declared as a
+    # regular File(...) param since we don't know the field names ahead of
+    # time — pull them straight off the parsed multipart form instead.
+    form = await request.form()
+    now = datetime.utcnow()
+    cast_doc_ids = []
+
+    for member in cast_list:
+        # insert first (photo pending) so the photo's Cloudinary folder can be
+        # keyed by this doc's own _id — the one stable identifier available
+        # both now and later, when a member is edited or removed individually
+        cast_doc = {
+            "videoId": video_oid,
+            "name": member.get("name", ""),
+            "characterName": member.get("characterName", ""),
+            "photoUrl": None,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        inserted = cast_collection.insert_one(cast_doc)
+        cast_id = inserted.inserted_id
+
+        client_id = member.get("clientId")
+        photo_file = form.get(f"cast_photo_{client_id}") if client_id else None
+        has_photo = bool(photo_file and getattr(photo_file, "filename", ""))
+        if has_photo:
+            photo_url = upload_avatar(photo_file, f"{video_id}_cast_{cast_id}")
+            cast_collection.update_one({"_id": cast_id}, {"$set": {"photoUrl": photo_url}})
+
+        cast_doc_ids.append(cast_id)
 
     raw_folder= os.path.join(media_root, video_id, "raw")
     os.makedirs(raw_folder, exist_ok=True)
@@ -90,140 +315,25 @@ async def upload_vid(
         shutil.copyfileobj(film.file, f)
 
     duration_sec = _get_video_duration_sec(raw_path)
+    source_width, source_height = _get_video_resolution(raw_path)
     file_size_bytes = os.path.getsize(raw_path)
 
-    output_480p_path = os.path.join(raw_folder, "index.m3u8")
-
-    cmd_480p = [
-        "ffmpeg",
-        "-i", raw_path,
-        "-vf", "scale=854:480",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-b:v", "1000k",
-        "-b:a", "128k",
-        "-g", "180",
-        "-keyint_min", "180",
-        "-sc_threshold", "0",
-        "-hls_time", "6",
-        "-hls_list_size", "0",
-        "-hls_segment_filename", os.path.join(raw_folder, "seg_%03d.ts"),
-        "-f", "hls",
-        output_480p_path
-    ]
-
-    result480p = subprocess.run(cmd_480p, capture_output=True, text=True)
-
-    segment_files = sorted(glob.glob(os.path.join(raw_folder, "seg_*.ts")))
-    
-    segment_urls_480p = []
-
-    for segment_path in segment_files:
-        result = cloudinary.uploader.upload(
-            segment_path,
-            resource_type="video",
-            folder=f"proscenium/{video_id}/480p"
+    renditions = [
+        _transcode_and_upload_rendition(
+            raw_path,
+            raw_folder,
+            video_id,
+            r,
+            source_height
         )
-        segment_urls_480p.append(result["secure_url"])
-
-    with open(output_480p_path, "r") as f:
-        lines = f.readlines()
-
-    i=0
-    new_lines=[]
-
-    for segs in lines:
-        if segs.startswith("#"):
-            new_lines.append(segs)
-        elif segs.strip() == "":
-            continue  # skip blank lines entirely
-        else:
-            new_lines.append(segment_urls_480p[i] + "\n")
-            i += 1
-
-    with open(output_480p_path, "w") as f:
-        f.writelines(new_lines)
-
-    index_480p_upload = cloudinary.uploader.upload(
-        output_480p_path,
-        resource_type="raw",
-        folder=f"proscenium/{video_id}"
-    )
-
-    index_480p_url = index_480p_upload["secure_url"]
-
-    output_720p_path = os.path.join(raw_folder, "index720.m3u8")
-
-    cmd_720p = [
-        "ffmpeg",
-        "-i", raw_path,
-        "-vf", "scale=1280:720",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-b:v", "2500k",
-        "-b:a", "128k",
-        "-g", "180",
-        "-keyint_min", "180",
-        "-sc_threshold", "0",
-        "-hls_time", "6",
-        "-hls_list_size", "0",
-        "-hls_segment_filename", os.path.join(raw_folder, "seg720_%03d.ts"),
-        "-f", "hls",
-        output_720p_path
+        for r in RESOLUTION_LADDER
     ]
-
-    result720p = subprocess.run(cmd_720p, capture_output=True, text=True)
-
-    segment_files = sorted(glob.glob(os.path.join(raw_folder, "seg720_*.ts")))
-
-    segment_urls_720p = []
-
-    for segment_path in segment_files:
-        result = cloudinary.uploader.upload(
-            segment_path,
-            resource_type="video",
-            folder=f"proscenium/{video_id}/720p"
-        )
-        segment_urls_720p.append(result["secure_url"])
-
-    with open(output_720p_path, "r") as f:
-        lines = f.readlines()
-
-    i=0
-    new_lines=[]
-
-    for segs in lines:
-        if segs.startswith("#"):
-            new_lines.append(segs)
-        elif segs.strip() == "":
-            continue  # skip blank lines entirely
-        else:
-            new_lines.append(segment_urls_720p[i] + "\n")
-            i += 1
-
-    with open(output_720p_path, "w") as f:
-        f.writelines(new_lines)
-
-    index_720p_upload = cloudinary.uploader.upload(
-        output_720p_path,
-        resource_type="raw",
-        folder=f"proscenium/{video_id}"
+    master_path = os.path.join(raw_folder, "master.m3u8")
+    stream_blocks = "\n\n".join(
+        f"#EXT-X-STREAM-INF:BANDWIDTH={r['bandwidth']},RESOLUTION={r['resolution']}\n{r['index_url']}"
+        for r in renditions
     )
-
-    index_720p_url = index_720p_upload["secure_url"]
-
-
-    master_path= os.path.join(raw_folder, "master.m3u8")
-
-    master_content = f"""#EXTM3U
-#EXT-X-VERSION:3
-
-#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480
-{index_480p_url}
-
-#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
-{index_720p_url}
-"""
+    master_content = f"#EXTM3U\n#EXT-X-VERSION:3\n\n{stream_blocks}\n"
 
     with open(master_path, "w") as f:
         f.write(master_content)
@@ -236,6 +346,11 @@ async def upload_vid(
 
     shutil.rmtree(raw_folder)
     video_doc = {
+        # pins the Mongo _id to video_id — previously unset, so insert_one
+        # silently minted a *different* _id than the one every other route
+        # (reupload/delete/moderation) looks this film up by. Fixing that
+        # here since cast_collection linkage needs a stable, correct id too.
+        "_id": video_oid,
         "directorId": ObjectId(payload["user_id"]),  # TODO: replace with real logged-in director's _id once auth is wired into this route
         "title": title,
         "slug": title.lower().replace(" ", "-"),
@@ -245,11 +360,11 @@ async def upload_vid(
         "language": language,
         "subtitles": [],
         "durationSec": duration_sec,
-        "cast": cast_list,
+        "cast": cast_doc_ids,
         "thumbnailUrl": thumbnailUrl,
         "hlsManifestUrl": master_result["secure_url"],
         "rawFileUrl": "",  # raw file was deleted locally, leave blank unless you keep a cloud copy
-        "resolutions": ["480p", "720p"],
+        "resolutions": [r["label"] for r in renditions],
         "fileSizeBytes": file_size_bytes,
         "mimeType": film.content_type or "video/mp4",
         "status": "ready",
@@ -280,12 +395,14 @@ async def upload_vid(
             "video_id": video_id,
             "mongo_id": str(insert_result.inserted_id),
             "message": "Transcoding complete",
-            "480p_status": result480p.returncode,
-            "720p_status": result720p.returncode,
-            "480p_segment_urls": segment_urls_480p,
-            "720p_segment_urls": segment_urls_720p,
-            "index_480_url": index_480p_url,
-            "index_720_url": index_720p_url,
+            "renditions": {
+                r["label"]: {
+                    "status": r["returncode"],
+                    "index_url": r["index_url"],
+                    "segment_urls": r["segment_urls"],
+                }
+                for r in renditions
+            },
             "master_url": master_result["secure_url"]
         }
 
@@ -315,129 +432,26 @@ async def reupload_video(
         shutil.copyfileobj(film.file, f)
 
     duration_sec = _get_video_duration_sec(raw_path)
+    source_width, source_height = _get_video_resolution(raw_path)
     file_size_bytes = os.path.getsize(raw_path)
 
-    # ---- 480p ----
-    output_480p_path = os.path.join(raw_folder, "index.m3u8")
-    cmd_480p = [
-        "ffmpeg",
-        "-i", raw_path,
-        "-vf", "scale=854:480",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-b:v", "1000k",
-        "-b:a", "128k",
-        "-g", "180",
-        "-keyint_min", "180",
-        "-sc_threshold", "0",
-        "-hls_time", "6",
-        "-hls_list_size", "0",
-        "-hls_segment_filename", os.path.join(raw_folder, "seg_%03d.ts"),
-        "-f", "hls",
-        output_480p_path
-    ]
-    result480p = subprocess.run(cmd_480p, capture_output=True, text=True)
-
-    segment_files = sorted(glob.glob(os.path.join(raw_folder, "seg_*.ts")))
-    segment_urls_480p = []
-    for segment_path in segment_files:
-        result = cloudinary.uploader.upload(
-            segment_path,
-            resource_type="video",
-            folder=f"proscenium/{video_id}/480p"
+    renditions = [
+        _transcode_and_upload_rendition(
+            raw_path,
+            raw_folder,
+            video_id,
+            r,
+            source_height
         )
-        segment_urls_480p.append(result["secure_url"])
-
-    with open(output_480p_path, "r") as f:
-        lines = f.readlines()
-
-    i = 0
-    new_lines = []
-    for segs in lines:
-        if segs.startswith("#"):
-            new_lines.append(segs)
-        elif segs.strip() == "":
-            continue
-        else:
-            new_lines.append(segment_urls_480p[i] + "\n")
-            i += 1
-
-    with open(output_480p_path, "w") as f:
-        f.writelines(new_lines)
-
-    index_480p_upload = cloudinary.uploader.upload(
-        output_480p_path,
-        resource_type="raw",
-        folder=f"proscenium/{video_id}"
-    )
-    index_480p_url = index_480p_upload["secure_url"]
-
-    # ---- 720p ----
-    output_720p_path = os.path.join(raw_folder, "index720.m3u8")
-    cmd_720p = [
-        "ffmpeg",
-        "-i", raw_path,
-        "-vf", "scale=1280:720",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-b:v", "2500k",
-        "-b:a", "128k",
-        "-g", "180",
-        "-keyint_min", "180",
-        "-sc_threshold", "0",
-        "-hls_time", "6",
-        "-hls_list_size", "0",
-        "-hls_segment_filename", os.path.join(raw_folder, "seg720_%03d.ts"),
-        "-f", "hls",
-        output_720p_path
+        for r in RESOLUTION_LADDER
     ]
-    result720p = subprocess.run(cmd_720p, capture_output=True, text=True)
 
-    segment_files = sorted(glob.glob(os.path.join(raw_folder, "seg720_*.ts")))
-    segment_urls_720p = []
-    for segment_path in segment_files:
-        result = cloudinary.uploader.upload(
-            segment_path,
-            resource_type="video",
-            folder=f"proscenium/{video_id}/720p"
-        )
-        segment_urls_720p.append(result["secure_url"])
-
-    with open(output_720p_path, "r") as f:
-        lines = f.readlines()
-
-    i = 0
-    new_lines = []
-    for segs in lines:
-        if segs.startswith("#"):
-            new_lines.append(segs)
-        elif segs.strip() == "":
-            continue
-        else:
-            new_lines.append(segment_urls_720p[i] + "\n")
-            i += 1
-
-    with open(output_720p_path, "w") as f:
-        f.writelines(new_lines)
-
-    index_720p_upload = cloudinary.uploader.upload(
-        output_720p_path,
-        resource_type="raw",
-        folder=f"proscenium/{video_id}"
-    )
-    index_720p_url = index_720p_upload["secure_url"]
-
-    # ---- master manifest ----
     master_path = os.path.join(raw_folder, "master.m3u8")
-    master_content = f"""#EXTM3U
-#EXT-X-VERSION:3
-
-#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480
-{index_480p_url}
-
-#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
-{index_720p_url}
-"""
+    stream_blocks = "\n\n".join(
+        f"#EXT-X-STREAM-INF:BANDWIDTH={r['bandwidth']},RESOLUTION={r['resolution']}\n{r['index_url']}"
+        for r in renditions
+    )
+    master_content = f"#EXTM3U\n#EXT-X-VERSION:3\n\n{stream_blocks}\n"
     with open(master_path, "w") as f:
         f.write(master_content)
 
@@ -463,6 +477,7 @@ async def reupload_video(
         {
             "$set": {
                 "hlsManifestUrl": master_result["secure_url"],
+                "resolutions": [r["label"] for r in renditions],
                 "moderationStatus": "pending",
                 "moderationComment": None,
                 "moderatedBy": None,
@@ -482,8 +497,7 @@ async def reupload_video(
     return {
         "video_id": video_id,
         "message": "Video reuploaded and resubmitted for review",
-        "480p_status": result480p.returncode,
-        "720p_status": result720p.returncode,
+        "renditions": {r["label"]: r["returncode"] for r in renditions},
         "hlsManifestUrl": master_result["secure_url"]
     }
 
@@ -584,3 +598,207 @@ async def update_director_bio(body: BioUpdateRequest, payload: dict = Depends(re
         {"$set": {"bio": body.bio, "updatedAt": datetime.utcnow()}}
     )
     return {"message": "Bio updated", "bio": body.bio}
+
+# ---------- list my videos ----------
+
+def _serialize_video_summary(video: dict) -> dict:
+    return {
+        "id": str(video["_id"]),
+        "title": video.get("title"),
+        "thumbnailUrl": video.get("thumbnailUrl"),
+        "status": video.get("status"),
+        "moderationStatus": video.get("moderationStatus"),
+        "visibility": video.get("visibility"),
+        "views": video.get("views", 0),
+        "durationSec": video.get("durationSec", 0),
+        "uploadedAt": video.get("uploadedAt"),
+        "publishedAt": video.get("publishedAt"),
+    }
+
+
+@router.get("/videos")
+async def list_my_videos(
+    payload: dict = Depends(require_role("director"))
+):
+    videos = list(
+        film_collection.find({"directorId": ObjectId(payload["user_id"])})
+        .sort("uploadedAt", -1)
+    )
+    return {
+        "count": len(videos),
+        "videos": [_serialize_video_summary(v) for v in videos]
+    }
+
+
+# ---------- get one of my videos, full detail ----------
+
+@router.get("/videos/{video_id}")
+async def get_my_video(
+    video_id: str,
+    payload: dict = Depends(require_role("director"))
+):
+    try:
+        oid = ObjectId(video_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    video = film_collection.find_one({"_id": oid})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if str(video["directorId"]) != payload["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    video["_id"] = str(video["_id"])
+    video["directorId"] = str(video["directorId"])
+    if video.get("moderatedBy"):
+        video["moderatedBy"] = str(video["moderatedBy"])
+    for entry in video.get("moderationHistory", []):
+        if entry.get("moderatedBy"):
+            entry["moderatedBy"] = str(entry["moderatedBy"])
+
+    cast_docs = list(cast_collection.find({"videoId": oid}))
+    for c in cast_docs:
+        c["_id"] = str(c["_id"])
+        c["videoId"] = str(c["videoId"])
+    video["cast"] = cast_docs
+
+    return video
+
+@router.delete("/videos/{video_id}")
+async def delete_my_video(
+    video_id: str,
+    payload: dict = Depends(require_role("director"))
+):
+    try:
+        oid = ObjectId(video_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    video = film_collection.find_one({"_id": oid})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if str(video["directorId"]) != payload["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    _cleanup_cloudinary_assets(video_id)
+    cast_collection.delete_many({"videoId": oid})
+    film_collection.delete_one({"_id": oid})
+
+    return {"message": "Video deleted", "videoId": video_id}
+
+@router.put("/videos/{video_id}")
+async def update_video_metadata(
+    video_id: str,
+    request: Request,
+    title: str | None = Form(None),
+    description: str | None = Form(None),
+    genres: str | None = Form(None),
+    tags: str | None = Form(None),
+    language: str | None = Form(None),
+    productionCountry: str | None = Form(None),
+    thumbnailUrl: str | None = Form(None),
+    releaseYear: int | None = Form(None),
+    # JSON array of {_id?, clientId?, name, characterName}.
+    # _id present  -> updating an existing cast doc (photo optional/unchanged unless a
+    #                 matching cast_photo_{clientId} file is attached)
+    # _id absent   -> a brand-new cast member for this film
+    # any existing cast doc NOT present in this list -> treated as removed
+    cast: str | None = Form(None),
+    payload: dict = Depends(require_role("director"))
+):
+    try:
+        oid = ObjectId(video_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    video = film_collection.find_one({"_id": oid})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if str(video["directorId"]) != payload["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    update_fields: dict[str, Any] = {"updatedAt": datetime.utcnow()}
+
+    if title is not None:
+        update_fields["title"] = title
+        update_fields["slug"] = title.lower().replace(" ", "-")
+    if description is not None:
+        update_fields["description"] = description
+    if genres is not None:
+        update_fields["genres"] = [g.strip() for g in genres.split(",") if g.strip()]
+    if tags is not None:
+        update_fields["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+    if language is not None:
+        update_fields["language"] = language
+    if productionCountry is not None:
+        update_fields["productionCountry"] = productionCountry
+    if thumbnailUrl is not None:
+        update_fields["thumbnailUrl"] = thumbnailUrl
+    if releaseYear is not None:
+        update_fields["releaseYear"] = releaseYear
+
+    if cast is not None:
+        try:
+            cast_list = json.loads(cast)
+            if not isinstance(cast_list, list):
+                raise ValueError
+        except (json.JSONDecodeError, ValueError):
+            raise HTTPException(status_code=400, detail="cast must be a valid JSON array of {_id?, clientId?, name, characterName}")
+
+        form = await request.form()
+        now = datetime.utcnow()
+
+        existing_cast_ids = {str(cid) for cid in video.get("cast", [])}
+        kept_ids = set()
+        resolved_cast_ids = []
+
+        for member in cast_list:
+            member_id = member.get("_id")
+            client_id = member.get("clientId")
+            photo_file = form.get(f"cast_photo_{client_id}") if client_id else None
+            has_new_photo = bool(photo_file and getattr(photo_file, "filename", ""))
+
+            if member_id:
+                if member_id not in existing_cast_ids:
+                    raise HTTPException(status_code=400, detail=f"cast entry {member_id} does not belong to this video")
+                kept_ids.add(member_id)
+                update = {
+                    "name": member.get("name", ""),
+                    "characterName": member.get("characterName", ""),
+                    "updatedAt": now,
+                }
+                if has_new_photo:
+                    update["photoUrl"] = upload_avatar(photo_file, f"{video_id}_cast_{member_id}")
+                cast_collection.update_one({"_id": ObjectId(member_id)}, {"$set": update})
+                resolved_cast_ids.append(ObjectId(member_id))
+            else:
+                doc = {
+                    "videoId": oid,
+                    "name": member.get("name", ""),
+                    "characterName": member.get("characterName", ""),
+                    "photoUrl": None,
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                inserted = cast_collection.insert_one(doc)
+                new_id = inserted.inserted_id
+                if has_new_photo:
+                    photo_url = upload_avatar(photo_file, f"{video_id}_cast_{new_id}")
+                    cast_collection.update_one({"_id": new_id}, {"$set": {"photoUrl": photo_url}})
+                resolved_cast_ids.append(new_id)
+
+        # anything that existed before but wasn't sent back this time = removed
+        removed_ids = existing_cast_ids - kept_ids
+        if removed_ids:
+            for rid in removed_ids:
+                delete_cast_photo(video_id, rid)
+            cast_collection.delete_many({"_id": {"$in": [ObjectId(r) for r in removed_ids]}})
+
+        update_fields["cast"] = resolved_cast_ids
+
+    film_collection.update_one({"_id": oid}, {"$set": update_fields})
+
+    return {"message": "Video metadata updated", "videoId": video_id}

@@ -18,5 +18,6 @@ video_views_collection = db["video_views"]
 watch_sessions_collection = db["watch_sessions"]
 comments_collection = db["comments_collection"]
 video_reactions_collection = db["video_reactions"]
+cast_collection = db["cast"]
 
 print(">>> database.py loaded, using PyMongo")

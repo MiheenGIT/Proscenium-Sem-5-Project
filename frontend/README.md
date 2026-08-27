@@ -1,16 +1,53 @@
-# React + Vite
+# Proscenium — frontend (auth pages)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Setup
 
-Currently, two official plugins are available:
+```bash
+npm install
+cp .env.example .env   # set VITE_API_BASE_URL if your backend isn't on :8000
+npm run dev
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Runs at `http://localhost:5173`.
 
-## React Compiler
+## What's here
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `/login` — email + password, posts to `POST /auth/login`
+- `/register` — Viewer/Director toggle, posts multipart form data to
+  `POST /auth/register/viewer` or `POST /auth/register/creator`
+  (matches `ViewerRegister` / `CreatorRegister` schemas, including
+  optional avatar upload)
+- `/director` — placeholder landing page behind a role guard, to be
+  replaced by the real director panel
 
-## Expanding the ESLint configuration
+Auth state (`token`, `role`, `username`, `userId`) is kept in
+`localStorage` via `AuthContext` — nothing else touches the backend
+yet.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Before this will work: enable CORS on the backend
+
+The FastAPI app doesn't currently have `CORSMiddleware` configured
+anywhere in the files shared with me. Without it, the browser will
+block every request from `localhost:5173` to `localhost:8000` with a
+CORS error, even though curl/Postman work fine (they don't enforce
+CORS). Add this wherever your `FastAPI()` app instance is created
+(likely `main.py`):
+
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+## Not built yet
+
+- The real director dashboard (video list/upload/moderation) —
+  waiting on the missing "list my videos" and "get one video" routes
+  we flagged earlier.
+- Viewer-side pages — your partner's scope.
