@@ -158,37 +158,18 @@ def _ai_upscale_video(
         )
 
 
-def _transcode_and_upload_rendition(raw_path: str, raw_folder: str, video_id: str, rendition: dict, source_height: int) -> dict:
-    """Transcodes one HLS rendition, using AI upscaling when the target
-    resolution is above the source resolution."""
+def _transcode_and_upload_rendition(raw_path: str, raw_folder: str, video_id: str, rendition: dict) -> dict:
+    """Transcodes one HLS rendition without upscaling."""
 
     label = rendition["label"]
     output_path = os.path.join(raw_folder, f"index_{label}.m3u8")
 
     input_path = raw_path
-    ai_work_folder = None
-
-    if rendition["height"] > source_height:
-        ai_work_folder = os.path.join(raw_folder, f"ai_{label}")
-        os.makedirs(ai_work_folder, exist_ok=True)
-
-        ai_upscaled_path = os.path.join(
-            ai_work_folder,
-            f"upscaled_{label}.mp4"
-        )
-
-        _ai_upscale_video(
-            raw_path,
-            ai_upscaled_path,
-            ai_work_folder
-        )
-
-        input_path = ai_upscaled_path
 
     cmd = [
         "ffmpeg",
         "-i", input_path,
-        "-vf", f"scale={rendition['width']}:{rendition['height']}:flags=lanczos",
+        "-vf", f"scale=-2:{rendition['height']}:flags=lanczos",
         "-c:v", "libx264",
         "-c:a", "aac",
         "-b:v", rendition["v_bitrate"],
@@ -318,15 +299,19 @@ async def upload_vid(
     source_width, source_height = _get_video_resolution(raw_path)
     file_size_bytes = os.path.getsize(raw_path)
 
+    available_renditions = [
+        r for r in RESOLUTION_LADDER
+        if r["height"] <= source_height
+    ]
+
     renditions = [
         _transcode_and_upload_rendition(
             raw_path,
             raw_folder,
             video_id,
-            r,
-            source_height
+            r
         )
-        for r in RESOLUTION_LADDER
+        for r in available_renditions
     ]
     master_path = os.path.join(raw_folder, "master.m3u8")
     stream_blocks = "\n\n".join(
@@ -435,15 +420,19 @@ async def reupload_video(
     source_width, source_height = _get_video_resolution(raw_path)
     file_size_bytes = os.path.getsize(raw_path)
 
+    available_renditions = [
+        r for r in RESOLUTION_LADDER
+        if r["height"] <= source_height
+    ]
+
     renditions = [
         _transcode_and_upload_rendition(
             raw_path,
             raw_folder,
             video_id,
-            r,
-            source_height
+            r
         )
-        for r in RESOLUTION_LADDER
+        for r in available_renditions
     ]
 
     master_path = os.path.join(raw_folder, "master.m3u8")
