@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 from utils.security import require_role
 from utils.cloudinary_helpers import upload_avatar, _cleanup_cloudinary_assets, delete_cast_photo
+
 import os, shutil
 from bson import ObjectId
 import subprocess
@@ -9,6 +10,7 @@ import cloudinary
 import cloudinary.uploader
 from database import film_collection, directors_collection, cast_collection
 from models.schemas import BioUpdateRequest
+
 from database import db
 from datetime import datetime
 import json 
@@ -16,19 +18,10 @@ from typing import Any
 from bson.errors import InvalidId
 
 from dotenv import load_dotenv
-from pathlib import Path
 
 load_dotenv()
 
-REALESRGAN_EXE = os.getenv(
-    "REALESRGAN_EXE",
-    str(Path("realesrgan") / "realesrgan-ncnn-vulkan.exe")
-)
 
-REALESRGAN_MODEL = os.getenv(
-    "REALESRGAN_MODEL",
-    "realesrgan-x4plus"
-)
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -80,138 +73,135 @@ RESOLUTION_LADDER = [
     {"label": "2160p", "width": 3840, "height": 2160, "v_bitrate": "16000k", "bandwidth": 16_000_000},
 ]
 
+def _transcode_and_upload_rendition(
+    raw_path: str,
+    raw_folder: str,
+    video_id: str,
+    rendition: dict,
+    input_path: str
+) -> dict:
+    """
+    Creates one HLS rendition using FFmpeg.
 
-def _ai_upscale_video(
-    input_path: str,
-    output_path: str,
-    work_folder: str
-) -> None:
-    frames_in = os.path.join(work_folder, "frames_in")
-    frames_out = os.path.join(work_folder, "frames_out")
-
-    os.makedirs(frames_in, exist_ok=True)
-    os.makedirs(frames_out, exist_ok=True)
-
-    extract_cmd = [
-        "ffmpeg",
-        "-i", input_path,
-        "-qscale:v", "1",
-        "-qmin", "1",
-        "-qmax", "1",
-        "-vsync", "0",
-        os.path.join(frames_in, "frame%08d.png")
-    ]
-
-    extract_result = subprocess.run(
-        extract_cmd,
-        capture_output=True,
-        text=True
-    )
-
-    if extract_result.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg frame extraction failed: {extract_result.stderr}"
-        )
-
-    upscale_cmd = [
-        REALESRGAN_EXE,
-        "-i", frames_in,
-        "-o", frames_out,
-        "-n", REALESRGAN_MODEL,
-        "-s", "4",
-        "-f", "png"
-    ]
-
-    upscale_result = subprocess.run(
-        upscale_cmd,
-        capture_output=True,
-        text=True
-    )
-
-    if upscale_result.returncode != 0:
-        raise RuntimeError(
-            f"Real-ESRGAN failed: {upscale_result.stderr}"
-        )
-
-    merge_cmd = [
-        "ffmpeg",
-        "-i", os.path.join(frames_out, "frame%08d.png"),
-        "-i", input_path,
-        "-map", "0:v:0",
-        "-map", "1:a:0?",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-pix_fmt", "yuv420p",
-        "-shortest",
-        output_path
-    ]
-
-    merge_result = subprocess.run(
-        merge_cmd,
-        capture_output=True,
-        text=True
-    )
-
-    if merge_result.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg video merge failed: {merge_result.stderr}"
-        )
-
-
-def _transcode_and_upload_rendition(raw_path: str, raw_folder: str, video_id: str, rendition: dict) -> dict:
-    """Transcodes one HLS rendition without upscaling."""
+    The caller only requests resolutions that are at or below
+    the uploaded video's original resolution.
+    """
 
     label = rendition["label"]
     output_path = os.path.join(raw_folder, f"index_{label}.m3u8")
 
-    input_path = raw_path
+    # input_path is already decided by the caller.
+    # It will be either the original video or the
+    # OpenVINO AI-upscaled 1080p video.
 
+    # ---------------------------------------------------------
+    # HLS TRANSCODE
+    # ---------------------------------------------------------
     cmd = [
         "ffmpeg",
+        "-y",
         "-i", input_path,
-        "-vf", f"scale=-2:{rendition['height']}:flags=lanczos",
+
+        "-vf",
+        f"scale={rendition['width']}:{rendition['height']}:flags=lanczos",
+
         "-c:v", "libx264",
+        "-preset", "fast",
+        "-pix_fmt", "yuv420p",
+
         "-c:a", "aac",
         "-b:v", rendition["v_bitrate"],
         "-b:a", "128k",
+
         "-g", "180",
         "-keyint_min", "180",
         "-sc_threshold", "0",
+
         "-hls_time", "6",
         "-hls_list_size", "0",
-        "-hls_segment_filename", os.path.join(raw_folder, f"seg_{label}_%03d.ts"),
+
+        "-hls_segment_filename",
+        os.path.join(
+            raw_folder,
+            f"seg_{label}_%03d.ts"
+        ),
+
         "-f", "hls",
         output_path
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
 
-    segment_files = sorted(glob.glob(os.path.join(raw_folder, f"seg_{label}_*.ts")))
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg HLS generation failed for {label}:\n"
+            f"{result.stderr}"
+        )
+
+    # ---------------------------------------------------------
+    # UPLOAD SEGMENTS
+    # ---------------------------------------------------------
+    segment_files = sorted(
+        glob.glob(
+            os.path.join(
+                raw_folder,
+                f"seg_{label}_*.ts"
+            )
+        )
+    )
+
+    if not segment_files:
+        raise RuntimeError(
+            f"No HLS segments were generated for {label}"
+        )
+
     segment_urls = []
+
     for segment_path in segment_files:
+
         upload_result = cloudinary.uploader.upload(
             segment_path,
             resource_type="video",
             folder=f"proscenium/{video_id}/{label}"
         )
-        segment_urls.append(upload_result["secure_url"])
 
+        segment_urls.append(
+            upload_result["secure_url"]
+        )
+
+    # ---------------------------------------------------------
+    # REWRITE PLAYLIST WITH CLOUDINARY URLs
+    # ---------------------------------------------------------
     with open(output_path, "r") as f:
         lines = f.readlines()
 
     i = 0
     new_lines = []
+
     for line in lines:
+
         if line.startswith("#"):
             new_lines.append(line)
+
         elif line.strip() == "":
             continue
+
         else:
-            new_lines.append(segment_urls[i] + "\n")
+            new_lines.append(
+                segment_urls[i] + "\n"
+            )
             i += 1
 
     with open(output_path, "w") as f:
         f.writelines(new_lines)
 
+    # ---------------------------------------------------------
+    # UPLOAD PLAYLIST
+    # ---------------------------------------------------------
     index_upload = cloudinary.uploader.upload(
         output_path,
         resource_type="raw",
@@ -224,7 +214,9 @@ def _transcode_and_upload_rendition(raw_path: str, raw_folder: str, video_id: st
         "segment_urls": segment_urls,
         "index_url": index_upload["secure_url"],
         "bandwidth": rendition["bandwidth"],
-        "resolution": f"{rendition['width']}x{rendition['height']}",
+        "resolution": (
+            f"{rendition['width']}x{rendition['height']}"
+        ),
     }
 
 @router.post("/upload-video")
@@ -296,8 +288,21 @@ async def upload_vid(
         shutil.copyfileobj(film.file, f)
 
     duration_sec = _get_video_duration_sec(raw_path)
-    source_width, source_height = _get_video_resolution(raw_path)
+    _, source_height = _get_video_resolution(raw_path)
     file_size_bytes = os.path.getsize(raw_path)
+
+    # ---------------------------------------------------------
+    # Generate only resolutions supported by the uploaded video
+    # ---------------------------------------------------------
+    #
+    # The uploaded video's resolution is the maximum quality.
+    # No AI upscaling is performed.
+    #
+    # Example:
+    #   720p upload -> 360p, 480p, 720p
+    #   1080p upload -> 360p, 480p, 720p, 1080p
+    #   2160p upload -> all renditions
+    # ---------------------------------------------------------
 
     available_renditions = [
         r for r in RESOLUTION_LADDER
@@ -309,7 +314,8 @@ async def upload_vid(
             raw_path,
             raw_folder,
             video_id,
-            r
+            r,
+            input_path=raw_path
         )
         for r in available_renditions
     ]
@@ -417,8 +423,21 @@ async def reupload_video(
         shutil.copyfileobj(film.file, f)
 
     duration_sec = _get_video_duration_sec(raw_path)
-    source_width, source_height = _get_video_resolution(raw_path)
+    _, source_height = _get_video_resolution(raw_path)
     file_size_bytes = os.path.getsize(raw_path)
+
+    # ---------------------------------------------------------
+    # Generate only resolutions supported by the uploaded video
+    # ---------------------------------------------------------
+    #
+    # The uploaded video's resolution is the maximum quality.
+    # No AI upscaling is performed.
+    #
+    # Example:
+    #   720p upload -> 360p, 480p, 720p
+    #   1080p upload -> 360p, 480p, 720p, 1080p
+    #   2160p upload -> all renditions
+    # ---------------------------------------------------------
 
     available_renditions = [
         r for r in RESOLUTION_LADDER
@@ -430,7 +449,8 @@ async def reupload_video(
             raw_path,
             raw_folder,
             video_id,
-            r
+            r,
+            input_path=raw_path
         )
         for r in available_renditions
     ]
