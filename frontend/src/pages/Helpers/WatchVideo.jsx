@@ -60,77 +60,116 @@ export default function WatchVideo() {
 
   useEffect(() => {
     if (!video?.hlsManifestUrl || !videoRef.current) return;
+
     const src = video.hlsManifestUrl;
     const el = videoRef.current;
-    let hls;
-    let player;
 
-    const plyrOptions = {
-      controls: [
-        "play-large",
-        "play",
-        "progress",
-        "current-time",
-        "mute",
-        "volume",
-        "settings",
-        "fullscreen",
-      ],
-      settings: ["quality", "speed"],
-    };
-
-    function buildPlyr(qualityConfig) {
-      player = new Plyr(el, qualityConfig ? { ...plyrOptions, quality: qualityConfig } : plyrOptions);
-      plyrRef.current = player;
-    }
+    let hls = null;
+    let player = null;
 
     if (Hls.isSupported()) {
       hls = new Hls();
       hlsRef.current = hls;
-      hls.loadSource(src);
+
       hls.attachMedia(el);
 
-      hls.on(Hls.Events.ERROR, (_evt, data) => {
-        if (data.fatal) setError("Playback error — the stream failed to load.");
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(src);
       });
 
-      // wait for hls.js to know the manifest's rendition list before
-      // building Plyr — this is what makes the quality menu real instead
-      // of just decorative
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        const heights = [...new Set(hls.levels.map((l) => l.height))].sort((a, b) => b - a);
-        const options = [0, ...heights]; // 0 = "Auto", then highest quality first
+        console.log("HLS levels:", hls.levels);
 
-        buildPlyr({
-          default: 0,
-          options,
-          forced: true,
-          onChange: (newHeight) => {
-            if (newHeight === 0) {
-              hls.currentLevel = -1; // hand control back to hls.js's ABR
-            } else {
-              const levelIndex = hls.levels.findIndex((l) => l.height === newHeight);
-              if (levelIndex !== -1) hls.currentLevel = levelIndex;
-            }
+        // Get the actual resolutions from master.m3u8
+        const qualities = hls.levels
+          .map((level) => level.height)
+          .filter((height) => height)
+          .sort((a, b) => a - b);
+
+        console.log("Available qualities:", qualities);
+
+        const plyrOptions = {
+          controls: [
+            "play-large",
+            "play",
+            "progress",
+            "current-time",
+            "mute",
+            "volume",
+            "settings",
+            "fullscreen",
+          ],
+
+          settings: ["quality", "speed"],
+
+          quality: {
+            default: qualities[qualities.length - 1],
+            options: qualities,
+
+            forced: true,
+
+            onChange: (quality) => {
+              const levelIndex = hls.levels.findIndex(
+                (level) => level.height === quality,
+              );
+
+              console.log(
+                `Changing quality to ${quality}p, HLS level: ${levelIndex}`,
+              );
+
+              if (levelIndex !== -1) {
+                hls.currentLevel = levelIndex;
+              }
+            },
           },
-        });
+        };
+
+        // Create Plyr AFTER we know the available HLS qualities
+        player = new Plyr(el, plyrOptions);
+        plyrRef.current = player;
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error("HLS error:", data);
+
+        if (data.fatal) {
+          setError("Playback error — the stream failed to load.");
+        }
       });
     } else if (el.canPlayType("application/vnd.apple.mpegurl")) {
-      // Safari's native HLS handles ABR itself — no hls.js levels to
-      // expose, so no manual quality switcher here, same as before
+      // Safari / native HLS
       el.src = src;
-      buildPlyr(null);
+
+      player = new Plyr(el, {
+        controls: [
+          "play-large",
+          "play",
+          "progress",
+          "current-time",
+          "mute",
+          "volume",
+          "settings",
+          "fullscreen",
+        ],
+        settings: ["speed"],
+      });
+
+      plyrRef.current = player;
     } else {
       setError("This browser doesn't support HLS playback.");
-      return;
     }
 
     return () => {
-      player?.destroy();
-      plyrRef.current = null;
       if (hls) {
         hls.destroy();
+        hls = null;
         hlsRef.current = null;
+      }
+
+      if (player) {
+        player.destroy();
+        player = null;
+        plyrRef.current = null;
       }
     };
   }, [video?.hlsManifestUrl]);
