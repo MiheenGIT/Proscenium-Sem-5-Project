@@ -10,12 +10,14 @@ import cloudinary
 import cloudinary.uploader
 from database import film_collection, directors_collection, cast_collection
 from models.schemas import BioUpdateRequest
+from utils.AIhelpers import ai_upscale_video_espcn, ai_upscale_video_espcn_4x
 
 from database import db
 from datetime import datetime
 import json 
 from typing import Any
 from bson.errors import InvalidId
+import asyncio
 
 from dotenv import load_dotenv
 
@@ -232,8 +234,10 @@ async def upload_vid(
     cast: str = Form("[]"),
     thumbnailUrl: str = Form(""),
     releaseYear: int | None = Form(None),
+    useUpscale: str = Form("true"),
     payload: dict = Depends(require_role("director", "admin"))
 ):
+    use_upscale = useUpscale.lower() == "true"
     director = directors_collection.find_one({"_id": ObjectId(payload["user_id"])})
     if not director:
         raise HTTPException(status_code=401, detail="Director not found")
@@ -292,21 +296,88 @@ async def upload_vid(
     file_size_bytes = os.path.getsize(raw_path)
 
     # ---------------------------------------------------------
-    # Generate only resolutions supported by the uploaded video
+    # AI UPSCALING
     # ---------------------------------------------------------
     #
-    # The uploaded video's resolution is the maximum quality.
-    # No AI upscaling is performed.
+    # Videos below 1080p can be AI-upscaled before the HLS
+    # ladder is generated.
     #
-    # Example:
-    #   720p upload -> 360p, 480p, 720p
-    #   1080p upload -> 360p, 480p, 720p, 1080p
-    #   2160p upload -> all renditions
+    # UPSCALE_ENGINE can be:
+    #   openvino
+    #   espcn
+    #
+    # If the source is already 1080p or higher, no AI
+    # upscaling is performed.
     # ---------------------------------------------------------
+
+    ai_path = os.path.join(
+        raw_folder,
+        "ai_upscaled.mp4"
+    )
+
+    upscale_engine = os.getenv(
+        "UPSCALE_ENGINE",
+        "espcn"
+    ).lower()
+
+    if source_height < 1080 and use_upscale:
+
+        print(
+            f"[AI] Source is {source_height}p. "
+            f"Using {upscale_engine} upscaling."
+        )
+
+        if upscale_engine == "espcn":
+
+            await asyncio.to_thread(
+                ai_upscale_video_espcn,
+                raw_path,
+                ai_path,
+                raw_folder
+            )
+
+        elif upscale_engine == "espcn_4x":
+
+            ai_upscale_video_espcn_4x(
+                raw_path,
+                ai_path,
+                raw_folder
+            )
+
+        else:
+
+            raise RuntimeError(
+                f"Unknown UPSCALE_ENGINE: {upscale_engine}. "
+                f"Currently only 'espcn' is enabled."
+            )
+
+        hls_input = ai_path
+
+    else:
+
+        reason = "source is already 1080p or higher" if source_height >= 1080 else "AI upscaling disabled by uploader"
+        print(f"[AI] Skipping AI upscaling — {reason}.")
+
+        hls_input = raw_path
+
+    # ---------------------------------------------------------
+    # Generate HLS renditions from the selected source
+    #
+    # UPSCALE_TOLERANCE allows one rung slightly above what the
+    # AI pass actually produced (e.g. AI output at 960p still
+    # allows the 1080p rung) via plain lanczos in
+    # _transcode_and_upload_rendition. This is a small, honest
+    # stretch on top of real AI-recovered detail — not the same
+    # as faking a whole extra rung from an untouched source.
+    # ---------------------------------------------------------
+
+    _, processing_height = _get_video_resolution(hls_input)
+
+    UPSCALE_TOLERANCE = 1.2
 
     available_renditions = [
         r for r in RESOLUTION_LADDER
-        if r["height"] <= source_height
+        if r["height"] <= processing_height * UPSCALE_TOLERANCE
     ]
 
     renditions = [
@@ -315,7 +386,7 @@ async def upload_vid(
             raw_folder,
             video_id,
             r,
-            input_path=raw_path
+            input_path=hls_input
         )
         for r in available_renditions
     ]
@@ -427,21 +498,88 @@ async def reupload_video(
     file_size_bytes = os.path.getsize(raw_path)
 
     # ---------------------------------------------------------
-    # Generate only resolutions supported by the uploaded video
+    # AI UPSCALING
     # ---------------------------------------------------------
     #
-    # The uploaded video's resolution is the maximum quality.
-    # No AI upscaling is performed.
+    # Videos below 1080p can be AI-upscaled before the HLS
+    # ladder is generated.
     #
-    # Example:
-    #   720p upload -> 360p, 480p, 720p
-    #   1080p upload -> 360p, 480p, 720p, 1080p
-    #   2160p upload -> all renditions
+    # UPSCALE_ENGINE can be:
+    #   openvino
+    #   espcn
+    #
+    # If the source is already 1080p or higher, no AI
+    # upscaling is performed.
     # ---------------------------------------------------------
+
+    ai_path = os.path.join(
+        raw_folder,
+        "ai_upscaled.mp4"
+    )
+
+    upscale_engine = os.getenv(
+        "UPSCALE_ENGINE",
+        "espcn"
+    ).lower()
+
+    if source_height < 1080:
+
+        print(
+            f"[AI] Source is {source_height}p. "
+            f"Using {upscale_engine} upscaling."
+        )
+
+        if upscale_engine == "espcn":
+
+            await asyncio.to_thread(
+                ai_upscale_video_espcn,
+                raw_path,
+                ai_path,
+                raw_folder
+            )
+
+        elif upscale_engine == "espcn_4x":
+
+            ai_upscale_video_espcn_4x(
+                raw_path,
+                ai_path,
+                raw_folder
+            )
+
+        else:
+
+            raise RuntimeError(
+                f"Unknown UPSCALE_ENGINE: {upscale_engine}. "
+                f"Currently only 'espcn' is enabled."
+        )
+
+        hls_input = ai_path
+
+    else:
+
+        reason = "source is already 1080p or higher" if source_height >= 1080 else "AI upscaling disabled by uploader"
+        print(f"[AI] Skipping AI upscaling — {reason}.")
+
+        hls_input = raw_path
+
+    # ---------------------------------------------------------
+    # Generate HLS renditions from the selected source
+    #
+    # UPSCALE_TOLERANCE allows one rung slightly above what the
+    # AI pass actually produced (e.g. AI output at 960p still
+    # allows the 1080p rung) via plain lanczos in
+    # _transcode_and_upload_rendition. This is a small, honest
+    # stretch on top of real AI-recovered detail — not the same
+    # as faking a whole extra rung from an untouched source.
+    # ---------------------------------------------------------
+
+    _, processing_height = _get_video_resolution(hls_input)
+
+    UPSCALE_TOLERANCE = 1.2
 
     available_renditions = [
         r for r in RESOLUTION_LADDER
-        if r["height"] <= source_height
+        if r["height"] <= processing_height * UPSCALE_TOLERANCE
     ]
 
     renditions = [
@@ -450,7 +588,7 @@ async def reupload_video(
             raw_folder,
             video_id,
             r,
-            input_path=raw_path
+            input_path=hls_input
         )
         for r in available_renditions
     ]

@@ -78,4 +78,9 @@ export function putJson(path, body) {
   return request({ url: path, method: "PUT", data: body });
 }
 
+/** Authenticated POST with no body — used for actions like resubmit. */
+export function postEmpty(path) {
+  return request({ url: path, method: "POST" });
+}
+
 export default API;

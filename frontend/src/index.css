@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 :root {
   --stage: #100d10;
   --velvet: #5c1220;
@@ -16,37 +17,53 @@
   --radius: 3px;
 }
 
-/* Plyr theme override — matches the ticket/theater palette */
+/* =========================================================
+   PLYR THEME
+   ========================================================= */
+
 :root {
   --plyr-color-main: var(--gold);
   --plyr-video-control-color: var(--parchment);
   --plyr-video-control-color-hover: var(--stage);
   --plyr-video-control-background-hover: var(--gold);
   --plyr-video-background: var(--stage);
+
   --plyr-menu-background: #17131a;
   --plyr-menu-color: var(--parchment);
   --plyr-menu-arrow-color: var(--mauve);
   --plyr-menu-background-hover: var(--velvet);
   --plyr-menu-color-hover: var(--gold-soft);
+
   --plyr-tooltip-background: #17131a;
   --plyr-tooltip-color: var(--parchment);
+
   --plyr-progress-loading-background: rgba(239, 231, 218, 0.15);
   --plyr-video-progress-buffered-background: rgba(239, 231, 218, 0.25);
   --plyr-video-range-track-background: rgba(239, 231, 218, 0.15);
   --plyr-audio-range-track-background: rgba(239, 231, 218, 0.15);
+
   --plyr-font-family: var(--font-body);
   --plyr-control-radius: 3px;
   --plyr-control-icon-size: 18px;
 }
 
+/* =========================================================
+   ANIMATIONS
+   ========================================================= */
+
 @keyframes indeterminate {
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(300%);
   }
 }
+
+/* =========================================================
+   GLOBAL
+   ========================================================= */
 
 * {
   box-sizing: border-box;
@@ -86,6 +103,10 @@ button {
   outline-offset: 2px;
 }
 
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;
@@ -94,7 +115,48 @@ button {
   }
 }
 
+/* =========================================================
+   PLYR VIDEO
+   ========================================================= */
+
 .plyr video {
   object-fit: contain;
 }
 
+/* =========================================================
+   CUSTOM NATIVE SCROLLBAR
+   ========================================================= */
+
+/* Firefox */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) var(--stage);
+}
+
+/* Chrome / Edge / Safari */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--stage);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-soft);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--gold-soft);
+}
+
+/* Corner where horizontal + vertical scrollbars meet */
+::-webkit-scrollbar-corner {
+  background: var(--stage);
+}

@@ -1,315 +1,118 @@
 import os
-import cv2
-import numpy as np
-import openvino as ov
 import subprocess
-import shutil
-
 
 # ---------------------------------------------------------
-# OpenVINO configuration
+# AI upscale video using TensorFlow ESPCN through Docker
 # ---------------------------------------------------------
 
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-MODEL_PATH = os.getenv(
-    "OPENVINO_SR_MODEL",
-    str(PROJECT_ROOT / "models" / "single-image-super-resolution-1032.xml")
-)
-
-DEVICE = os.getenv("OPENVINO_DEVICE", "GPU")
-
-
-# ---------------------------------------------------------
-# Load model once when backend starts
-# ---------------------------------------------------------
-
-print("[AI] Loading OpenVINO super-resolution model...")
-
-_core = ov.Core()
-
-print(f"[AI] Available devices: {_core.available_devices}")
-
-_model = _core.read_model(MODEL_PATH)
-_compiled_model = _core.compile_model(_model, DEVICE)
-
-# single-image-super-resolution-1032 requires TWO inputs, not one:
-#   input "0" -> the image at the model's native low-res size (270x480), BGR
-#   input "1" -> the SAME image bicubic-upsampled to the output size (1920x1080), BGR
-# Feeding only one input (the old code) is a spec violation, not just suboptimal.
-# Color order is BGR for both inputs and the output - do NOT convert to RGB.
-_input_low_res = _compiled_model.input(0)
-_input_bicubic = _compiled_model.input(1)
-_output_layer = _compiled_model.output(0)
-
-print(f"[AI] Model loaded on {DEVICE}.")
-print(f"[AI] Low-res input shape: {_input_low_res.shape}")
-print(f"[AI] Bicubic input shape: {_input_bicubic.shape}")
-print(f"[AI] Output shape: {_output_layer.shape}")
-
-
-# ---------------------------------------------------------
-# Upscale one frame
-# ---------------------------------------------------------
-
-def _compute_letterbox(src_w: int, src_h: int, dst_w: int, dst_h: int):
-    """
-    Returns (new_w, new_h, pad_x, pad_y): the size to resize a
-    src_w x src_h image into (preserving its aspect ratio) plus the
-    padding needed to center it inside a dst_w x dst_h canvas.
-
-    Used so non-16:9 sources get letterboxed instead of stretched,
-    since the model's inputs/output are fixed at 16:9.
-    """
-    scale = min(dst_w / src_w, dst_h / src_h)
-    new_w = max(1, round(src_w * scale))
-    new_h = max(1, round(src_h * scale))
-    pad_x = (dst_w - new_w) // 2
-    pad_y = (dst_h - new_h) // 2
-    return new_w, new_h, pad_x, pad_y
-
-
-def _letterbox_resize(frame: np.ndarray, dst_w: int, dst_h: int) -> np.ndarray:
-    src_h, src_w = frame.shape[:2]
-    new_w, new_h, pad_x, pad_y = _compute_letterbox(src_w, src_h, dst_w, dst_h)
-    resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-    canvas = np.zeros((dst_h, dst_w, 3), dtype=frame.dtype)
-    canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized
-    return canvas
-
-
-def _upscale_frame(frame: np.ndarray) -> np.ndarray:
-    """
-    Takes a raw BGR frame (any source resolution/aspect ratio) and
-    returns the model's raw BGR output at the model's fixed output
-    size (e.g. 1920x1080), letterboxed to preserve the source's
-    aspect ratio. Callers must crop out the padding themselves -
-    see the letterbox geometry computed once in ai_upscale_video().
-
-    IMPORTANT: this model takes TWO inputs (low-res + bicubic-upsampled
-    version of the same frame) and expects BGR, not RGB. Do not "simplify"
-    this back to a single RGB input - that is not what the model was
-    trained on and will silently produce wrong output.
-    """
-    low_h = int(_input_low_res.shape[2])
-    low_w = int(_input_low_res.shape[3])
-    bic_h = int(_input_bicubic.shape[2])
-    bic_w = int(_input_bicubic.shape[3])
-
-    low_res_input = _letterbox_resize(frame, low_w, low_h)
-    bicubic_input = _letterbox_resize(frame, bic_w, bic_h)
-
-    low_tensor = np.expand_dims(
-        low_res_input.transpose(2, 0, 1), axis=0
-    ).astype(np.float32)
-
-    bicubic_tensor = np.expand_dims(
-        bicubic_input.transpose(2, 0, 1), axis=0
-    ).astype(np.float32)
-
-    result = _compiled_model({
-        _input_low_res: low_tensor,
-        _input_bicubic: bicubic_tensor,
-    })
-
-    output = result[_output_layer]
-
-    # Remove batch dimension, CHW -> HWC
-    output = output[0].transpose(1, 2, 0)
-
-    # Clamp back to a valid uint8 BGR image (already BGR - no color convert)
-    output = np.clip(output, 0, 255).astype(np.uint8)
-
-    return output
-
-
-# ---------------------------------------------------------
-# AI upscale complete video
-# ---------------------------------------------------------
-
-def ai_upscale_video(
+def ai_upscale_video_espcn(
     input_path: str,
     output_path: str,
     work_folder: str
 ) -> None:
     """
-    AI-upscales a video using the OpenVINO super-resolution
-    model.
+    AI-upscale a video using the TensorFlow ESPCN model
+    through the miratmu/ffmpeg-tensorflow Docker image.
 
-    The input video is decoded frame-by-frame with OpenCV.
-    Every frame is passed through the OpenVINO model.
+    ESPCN performs 2x super-resolution on the luma (Y) plane.
+    This is the verified, working configuration — confirmed
+    against a real test clip. scale_factor values other than 2,
+    or swapping in a different model (e.g. vespcn.pb, which is
+    a temporal/multi-frame model and not a drop-in replacement
+    for single-image ESPCN), are unverified and should be tested
+    standalone via `docker run` before changing this function.
 
-    Audio is copied from the original video using FFmpeg.
+    For yuv420p:
+        Y -> 2x
+        U -> 2x
+        V -> 2x
+
+    This produces correctly sized yuv420p output — chroma must
+    scale by the same factor as luma relative to its own
+    original size, since chroma planes are already half the
+    resolution of luma in yuv420p.
     """
 
     os.makedirs(work_folder, exist_ok=True)
 
-    temp_video = os.path.join(
-        work_folder,
-        "ai_video_no_audio.mp4"
-    )
+    input_filename = os.path.basename(input_path)
+    output_filename = os.path.basename(output_path)
 
-    print(f"[AI] Opening video: {input_path}")
+    input_abs = os.path.abspath(input_path)
+    output_abs = os.path.abspath(output_path)
+    work_abs = os.path.abspath(work_folder)
 
-    cap = cv2.VideoCapture(input_path)
-
-    if not cap.isOpened():
+    if not os.path.exists(input_abs):
         raise RuntimeError(
-            f"[AI] Could not open video: {input_path}"
+            f"[AI-ESPCN] Input video does not exist: {input_abs}"
         )
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    if not fps or fps <= 0:
-        fps = 30.0
-
-    frame_width = int(
-        cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    )
-
-    frame_height = int(
-        cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    )
-
-    total_frames = int(
-        cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    )
-
     print(
-        f"[AI] Input: "
-        f"{frame_width}x{frame_height} "
-        f"@ {fps} FPS"
+        f"[AI-ESPCN] Starting ESPCN x2 upscaling: "
+        f"{input_abs}"
     )
 
-    print(f"[AI] Frames: {total_frames}")
+    filter_graph = (
+        "[0:v]"
+        "format=pix_fmts=yuv420p,"
+        "extractplanes=y+u+v"
+        "[y][u][v];"
 
-    # -----------------------------------------------------
-    # Determine model output size, and precompute letterbox
-    # crop geometry ONCE (it's constant for the whole video)
-    # so the final video keeps the source's real aspect ratio
-    # instead of the model's fixed 16:9 letterboxed canvas.
-    # -----------------------------------------------------
+        "[y]"
+        "sr="
+        "dnn_backend=tensorflow:"
+        "scale_factor=2:"
+        "model=/models/espcn.pb"
+        "[y_scaled];"
 
-    output_shape = _output_layer.shape
+        "[u]"
+        "scale=iw*2:ih*2:flags=lanczos"
+        "[u_scaled];"
 
-    output_height = int(output_shape[2])
-    output_width = int(output_shape[3])
+        "[v]"
+        "scale=iw*2:ih*2:flags=lanczos"
+        "[v_scaled];"
 
-    crop_w, crop_h, pad_x, pad_y = _compute_letterbox(
-        frame_width, frame_height, output_width, output_height
+        "[y_scaled][u_scaled][v_scaled]"
+        "mergeplanes=0x001020:yuv420p"
+        "[merged]"
     )
 
-    print(
-        f"[AI] Model output canvas: {output_width}x{output_height} "
-        f"(cropping to {crop_w}x{crop_h} to preserve source aspect ratio)"
-    )
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "-u",
+        "0",
 
-    # -----------------------------------------------------
-    # Create temporary video writer at the CROPPED size
-    # -----------------------------------------------------
+        "-v",
+        f"{work_abs}:/data",
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        "-w",
+        "/data",
 
-    writer = cv2.VideoWriter(
-        temp_video,
-        fourcc,
-        fps,
-        (crop_w, crop_h)
-    )
-
-    if not writer.isOpened():
-        cap.release()
-
-        raise RuntimeError(
-            "[AI] Could not create temporary output video."
-        )
-
-    processed = 0
-
-    try:
-
-        while True:
-
-            ret, frame = cap.read()
-
-            if not ret:
-                break
-
-            # -------------------------------------------------
-            # AI inference (handles its own letterboxed resize
-            # to the model's low-res + bicubic inputs internally)
-            # -------------------------------------------------
-
-            upscaled = _upscale_frame(frame)
-
-            # Crop off the letterbox padding so the frame matches
-            # the source's original aspect ratio.
-            cropped = upscaled[
-                pad_y:pad_y + crop_h,
-                pad_x:pad_x + crop_w
-            ]
-
-            writer.write(cropped)
-
-            processed += 1
-
-            if processed % 30 == 0:
-
-                if total_frames > 0:
-
-                    percent = (
-                        processed /
-                        total_frames *
-                        100
-                    )
-
-                    print(
-                        f"[AI] "
-                        f"{percent:6.2f}% "
-                        f"({processed}/{total_frames})"
-                    )
-
-                else:
-
-                    print(
-                        f"[AI] "
-                        f"Processed {processed} frames"
-                    )
-
-    finally:
-
-        cap.release()
-        writer.release()
-
-    print("[AI] Video frames processed.")
-
-    # ---------------------------------------------------------
-    # Add original audio
-    # ---------------------------------------------------------
-
-    merge_cmd = [
-        "ffmpeg",
-        "-y",
+        "miratmu/ffmpeg-tensorflow",
 
         "-i",
-        temp_video,
+        f"/data/{input_filename}",
 
-        "-i",
-        input_path,
-
-        "-map",
-        "0:v:0",
+        "-filter_complex",
+        filter_graph,
 
         "-map",
-        "1:a:0?",
+        "[merged]",
+
+        "-map",
+        "0:a?",
+
+        "-sws_flags",
+        "lanczos",
 
         "-c:v",
         "libx264",
 
         "-preset",
-        "medium",
+        "fast",
 
         "-crf",
         "18",
@@ -323,31 +126,73 @@ def ai_upscale_video(
         "-b:a",
         "128k",
 
-        "-shortest",
-
-        output_path
+        "-y",
+        f"/data/{output_filename}"
     ]
 
-    print("[AI] Encoding final video...")
+    print("[AI-ESPCN] Running Docker/FFmpeg...")
 
     result = subprocess.run(
-        merge_cmd,
+        cmd,
         capture_output=True,
         text=True
     )
 
     if result.returncode != 0:
-
         raise RuntimeError(
-            "[AI] FFmpeg failed while creating "
-            f"final video:\n{result.stderr}"
+            "[AI-ESPCN] Docker/FFmpeg failed:\n"
+            f"{result.stderr}"
         )
 
-    # ---------------------------------------------------------
-    # Cleanup
-    # ---------------------------------------------------------
+    if not os.path.exists(output_abs):
+        raise RuntimeError(
+            "[AI-ESPCN] FFmpeg completed but output was not created: "
+            f"{output_abs}"
+        )
 
-    if os.path.exists(temp_video):
-        os.remove(temp_video)
+    print(
+        f"[AI-ESPCN] Finished: {output_abs}"
+    )
 
-    print(f"[AI] Finished: {output_path}")
+
+def ai_upscale_video_espcn_4x(
+    input_path: str,
+    output_path: str,
+    work_folder: str
+) -> None:
+    """
+    Reaches ~4x total upscaling by running the verified 2x ESPCN
+    pass twice in sequence.
+
+    NOT the same as passing scale_factor=4 to a single pass —
+    ESPCN's sub-pixel convolution layer has its output channel
+    count fixed at training time, so a checkpoint trained for 2x
+    cannot correctly produce 4x just by changing the option value.
+    Chaining two confirmed-working 2x passes is the safe way to
+    reach a higher net factor without assuming untested model
+    behavior.
+
+    Trade-offs, stated plainly:
+      - Takes roughly 2x as long as a single pass (two full
+        Docker/FFmpeg runs instead of one).
+      - Each pass is a genuine learned reconstruction step, so
+        artifacts from the first pass can compound slightly in
+        the second rather than averaging out. Worth comparing
+        actual output quality against the single 2x version
+        before deciding this is worth shipping.
+    """
+
+    os.makedirs(work_folder, exist_ok=True)
+
+    intermediate_path = os.path.join(work_folder, "ai_upscaled_2x_intermediate.mp4")
+
+    print("[AI-ESPCN-4x] Pass 1 of 2 (2x)...")
+    ai_upscale_video_espcn(input_path, intermediate_path, work_folder)
+
+    print("[AI-ESPCN-4x] Pass 2 of 2 (2x again, net ~4x)...")
+    ai_upscale_video_espcn(intermediate_path, output_path, work_folder)
+
+    if os.path.exists(intermediate_path):
+        os.remove(intermediate_path)
+
+    print(f"[AI-ESPCN-4x] Finished: {os.path.abspath(output_path)}")

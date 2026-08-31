@@ -8,9 +8,15 @@ const navItems = [
   { to: "/director/profile", label: "Profile" },
 ];
 
-export default function DirectorNav() {
+export default function DirectorNav({ confirmBeforeLeave }) {
   const { auth, logout } = useAuth();
   const [open, setOpen] = useState(false);
+
+  function guardedNavigate(e, to, navigate) {
+    if (confirmBeforeLeave && !window.confirm("You have unsaved changes. Leave without saving?")) {
+      e.preventDefault();
+    }
+  }
 
   return (
     <header className="border-b border-[rgba(239,231,218,0.16)] bg-[var(--stage)]">
@@ -30,6 +36,7 @@ export default function DirectorNav() {
               key={item.to}
               to={item.to}
               end={item.end}
+              onClick={(e) => guardedNavigate(e, item.to)}
               className={({ isActive }) =>
                 [
                   "rounded-[3px] px-3 py-2 font-[var(--font-mono)] text-[0.72rem] uppercase tracking-[0.08em] transition-colors",

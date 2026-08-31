@@ -143,12 +143,6 @@ export default function DirectorHome() {
               Your Films
             </h1>
           </div>
-          <NavLink
-            to="/director/upload"
-            className="rounded-[3px] bg-[var(--gold)] px-4 py-2 font-[var(--font-body)] text-sm font-semibold text-[#1a1210] transition-colors hover:bg-[var(--gold-soft)]"
-          >
-            Upload Film
-          </NavLink>
         </div>
 
         {error && (

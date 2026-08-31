@@ -6,6 +6,7 @@ import DirectorHome from "./pages/Director-panel/DirectorHome.jsx";
 import RequireRole from "./components/RequireRole.jsx";
 import WatchVideo from "./pages/Helpers/WatchVideo.jsx";
 import UploadVideo from "./pages/Director-panel/UploadVideo.jsx";
+import EditVideo from "./pages/Director-panel/EditVideo.jsx";
 
 export default function App() {
   return (
@@ -39,6 +40,14 @@ export default function App() {
         element={
           <RequireRole roles={["director"]}>
             <WatchVideo />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/director/videos/:id/edit"
+        element={
+          <RequireRole roles={["director"]}>
+            <EditVideo />
           </RequireRole>
         }
       />
