@@ -1,0 +1,31 @@
+name: Pull request
+on:
+  pull_request:
+  workflow_dispatch:
+env:
+  DEBIAN_FRONTEND: noninteractive
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        env:
+          SHELLCHECK_OPTS: -x
+  latest:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ffmpeg_version: [latest]
+        cuda_version: ['10.0', '10.1', '11.0', '11.2']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Configure system
+        run: script/github-configure ${{ matrix.ffmpeg_version }}-cuda${{ matrix.cuda_version }}
+      - name: Build image
+        run: script/github-build ${{ matrix.ffmpeg_version }}-cuda${{ matrix.cuda_version }}

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -o errexit
+set -o pipefail
+set -o nounset
+set -o xtrace
+
+if [[ "$*" == *' python3.6 '* ]]
+then
+  apt-get -qy install software-properties-common
+  echo "deb https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu focal main" > /etc/apt/sources.list.d/deadsnakes.list
+apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776
+  apt-get -qy update
+fi
+
+if (( $# > 0 ))
+then
+  apt-get -qy install "$@"
+fi
