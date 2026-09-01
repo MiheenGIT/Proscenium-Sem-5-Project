@@ -224,6 +224,9 @@ def login(credentials: dict):
     if not verify_password(password, user["passwordHash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    if user.get("isBanned"):
+        raise HTTPException(status_code=403, detail=user.get("banReason") or "This account is banned")
+
     collection.update_one({"_id": user["_id"]}, {"$inc": {"loginCount": 1}})
 
     token = create_access_token(user_id=str(user["_id"]), role=role)

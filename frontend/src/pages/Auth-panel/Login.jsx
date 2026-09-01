@@ -21,8 +21,10 @@ export default function Login() {
       const data = await login(email, password);
       if (data.role === "director") {
         navigate("/director");
+      } else if (data.role === "viewer") {
+        navigate("/viewer");
       } else {
-        navigate("/");
+        navigate("/login");
       }
     } catch (err) {
       setError(err.message);
