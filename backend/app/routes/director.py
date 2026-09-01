@@ -797,6 +797,7 @@ async def get_my_video(
         raise HTTPException(status_code=403, detail="Not your video")
 
     video["_id"] = str(video["_id"])
+    video["id"] = video["_id"]  # alias matching the list endpoint's field name, so frontend code can use either consistently
     video["directorId"] = str(video["directorId"])
     if video.get("moderatedBy"):
         video["moderatedBy"] = str(video["moderatedBy"])

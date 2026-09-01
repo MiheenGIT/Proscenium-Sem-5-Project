@@ -2,7 +2,8 @@ import "@vidstack/react/player/styles/base.css";
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { getRequest, deleteRequest } from "../../api/client";
+import { getRequest } from "../../api/client";
+
 import DirectorNav from "../../components/DirectorNav.jsx";
 
 function formatDuration(sec) {  const s = Math.round(sec || 0);
@@ -31,20 +32,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function VideoCard({ video, onDelete }) {
-  const [deleting, setDeleting] = useState(false);
-
-  async function handleDelete() {
-    if (!window.confirm(`Delete "${video.title}"? This can't be undone.`)) return;
-    setDeleting(true);
-    try {
-      await onDelete(video.id);
-    } catch (err) {
-      alert(err.message || "Delete failed");
-      setDeleting(false);
-    }
-  }
-
+function VideoCard({ video }) {
   return (
     <div className="overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a]">
       <NavLink
@@ -85,21 +73,6 @@ function VideoCard({ video, onDelete }) {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <NavLink
-            to={`/director/videos/${video.id}/edit`}
-            className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-3 py-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.06em] text-[var(--parchment)] transition-colors hover:border-[var(--gold)]"
-          >
-            Edit
-          </NavLink>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="ml-auto rounded-[3px] border border-[rgba(224,138,107,0.4)] px-3 py-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.06em] text-[var(--error)] transition-colors hover:bg-[rgba(224,138,107,0.08)] disabled:opacity-50"
-          >
-            {deleting ? "…" : "Delete"}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -123,11 +96,6 @@ export default function DirectorHome() {
       cancelled = true;
     };
   }, [auth.token]);
-
-  async function handleDelete(id) {
-    await deleteRequest(`/directors/videos/${id}`);
-    setVideos((prev) => prev.filter((v) => v.id !== id));
-  }
 
   return (
     <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
@@ -170,7 +138,7 @@ export default function DirectorHome() {
         {videos && videos.length > 0 && (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {videos.map((v) => (
-              <VideoCard key={v.id} video={v} onDelete={handleDelete} />
+              <VideoCard key={v.id} video={v} />
             ))}
           </div>
         )}

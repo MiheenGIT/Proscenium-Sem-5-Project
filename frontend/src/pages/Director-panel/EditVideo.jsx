@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, NavLink } from "react-router-dom";
 import DirectorNav from "../../components/DirectorNav.jsx";
 import { getRequest, putForm, postForm, postEmpty } from "../../api/client";
 import {
@@ -17,6 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import Hls from "hls.js";
 
 const GENRE_OPTIONS = [
   "Drama", "Comedy", "Thriller", "Horror", "Documentary",
@@ -112,7 +113,7 @@ function CastSlider({ cast, setCast }) {
           type="button"
           onClick={() => setIndex((i) => Math.max(0, i - 1))}
           disabled={index === 0}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
+          className="flex h-8 w-8 ml-30 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
         >
           ‹
         </button>
@@ -123,7 +124,7 @@ function CastSlider({ cast, setCast }) {
           type="button"
           onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))}
           disabled={index === cast.length - 1}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
+          className="flex h-8 w-8 mr-30 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
         >
           ›
         </button>
@@ -219,6 +220,34 @@ export default function EditVideo() {
   const [reuploadProcessingPercent, setReuploadProcessingPercent] = useState(0);
   const [reuploadPhase, setReuploadPhase] = useState("idle");
   const reuploadTimerRef = useRef(null);
+  const bgVideoRef = useRef(null);
+  const bgHlsRef = useRef(null);
+
+  // muted looping background preview of the current video — only while
+  // no replacement file has been picked yet
+  useEffect(() => {
+    if (newFilmPreviewUrl || !video?.hlsManifestUrl || !bgVideoRef.current) return;
+
+    const el = bgVideoRef.current;
+    const src = video.hlsManifestUrl;
+    let hls = null;
+
+    if (Hls.isSupported()) {
+      hls = new Hls();
+      bgHlsRef.current = hls;
+      hls.loadSource(src);
+      hls.attachMedia(el);
+    } else if (el.canPlayType("application/vnd.apple.mpegurl")) {
+      el.src = src;
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+        bgHlsRef.current = null;
+      }
+    };
+  }, [video?.hlsManifestUrl, newFilmPreviewUrl]);
 
   const [resubmitting, setResubmitting] = useState(false);
   const [resubmitError, setResubmitError] = useState(null);
@@ -321,11 +350,13 @@ export default function EditVideo() {
     setCustomGenreInput("");
   }
 
-  async function handleMetaSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setMetaError(null);
+    setReuploadError(null);
     setMetaSaved(false);
 
+    // ---- step 1: metadata (title/description/genres/tags/cast/etc) ----
     const fd = new FormData();
     fd.append("title", title);
     fd.append("description", description);
@@ -346,7 +377,6 @@ export default function EditVideo() {
     setSavingMeta(true);
     try {
       await putForm(`/directors/videos/${id}`, fd);
-      setMetaSaved(true);
       initialSnapshotRef.current = JSON.stringify({
         title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl,
         cast: cast.map((c) => ({ name: c.name, characterName: c.characterName })),
@@ -354,23 +384,26 @@ export default function EditVideo() {
       setIsDirty(false);
     } catch (err) {
       setMetaError(err.message || "Failed to save changes");
-    } finally {
       setSavingMeta(false);
+      return; // don't attempt reupload if metadata itself failed
     }
-  }
+    setSavingMeta(false);
 
-  async function handleReupload() {
-    setReuploadError(null);
-    if (!newFilm) return;
-    const fd = new FormData();
-    fd.append("film", newFilm);
+    // ---- step 2: reupload, only if a new film file was actually chosen ----
+    if (!newFilm) {
+      setMetaSaved(true);
+      return;
+    }
+
+    const filmFd = new FormData();
+    filmFd.append("film", newFilm);
 
     setReuploading(true);
     setReuploadPhase("uploading");
     setReuploadPercent(0);
     setReuploadProcessingPercent(0);
     try {
-      await postForm(`/directors/videos/${id}/reupload`, fd, (pct) => {
+      await postForm(`/directors/videos/${id}/reupload`, filmFd, (pct) => {
         setReuploadPercent(pct);
         if (pct >= 100) setReuploadPhase("processing");
       });
@@ -436,11 +469,11 @@ export default function EditVideo() {
         )}
 
         <motion.form
-          onSubmit={handleMetaSubmit}
+          onSubmit={handleSubmit}
           initial="hidden"
           animate="visible"
           variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}
-          className="edit-orbit-grid -mt-8"
+          className="edit-orbit-grid mt-14"
         >
           {/* video / reupload */}
           <motion.div
@@ -468,33 +501,41 @@ export default function EditVideo() {
               </div>
 
               {!newFilmPreviewUrl && (
-                <div className="relative flex min-h-[260px] flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-8 py-10 text-center">
-                  {video.thumbnailUrl ? (
-                    <img src={video.thumbnailUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />
-                  ) : null}
+                <label className="group relative flex min-h-[260px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-black text-center transition-colors hover:border-[rgba(217,166,83,0.55)]">
+                  <video
+                    ref={bgVideoRef}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-[rgba(16,13,16,0.55)] transition-colors group-hover:bg-[rgba(16,13,16,0.7)]" />
+
                   <div className="relative">
-                    <h2 className="mb-1 font-[var(--font-display)] text-lg font-medium text-[var(--parchment)]">
+                    <h2 className="mb-1 font-[var(--font-display)] text-lg font-medium text-[var(--parchment)] drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
                       {video.title}
                     </h2>
                     <div className="mb-4 flex justify-center gap-2">
                       <StatusBadge status={video.moderationStatus} />
                     </div>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-2 text-xs font-medium text-[var(--parchment)] transition-colors hover:border-[var(--gold)] hover:text-[var(--gold-soft)]">
+                    <span className="inline-flex items-center gap-2 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-2 text-xs font-medium text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
                       <RefreshCw size={13} strokeWidth={1.5} />
                       Replace video file
-                      <input
-                        type="file"
-                        accept="video/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null;
-                          setNewFilm(f);
-                          setNewFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
-                        }}
-                      />
-                    </label>
+                    </span>
                   </div>
-                </div>
+
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setNewFilm(f);
+                      setNewFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
+                    }}
+                  />
+                </label>
               )}
 
               {newFilmPreviewUrl && (
@@ -510,14 +551,10 @@ export default function EditVideo() {
                   />
 
                   {!reuploading && (
-                    <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 bg-[rgba(16,13,16,0.55)] p-3">
-                      <button
-                        type="button"
-                        onClick={handleReupload}
-                        className="rounded-[3px] bg-[var(--gold)] px-4 py-1.5 text-xs font-semibold text-[#1a1210] hover:bg-[var(--gold-soft)]"
-                      >
-                        Upload replacement
-                      </button>
+                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[rgba(16,13,16,0.55)] p-3">
+                      <span className="font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--gold-soft)]">
+                        Queued — saves when you click Save Changes
+                      </span>
                       <button
                         type="button"
                         onClick={() => {
@@ -596,7 +633,7 @@ export default function EditVideo() {
           {/* title */}
           <motion.div
             variants={{ hidden: { opacity: 0, x: -18 }, visible: { opacity: 1, x: 0 } }}
-            className="group relative h-30 rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
+            className="group -mt-25 w-272 relative h-21 rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
           >
             <div className="mb-2 flex items-center gap-3">
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
@@ -610,13 +647,13 @@ export default function EditVideo() {
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 py-3 text-base text-[var(--parchment)] transition-all duration-300 focus:border-[var(--gold)] focus:bg-[rgba(217,166,83,0.025)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.15)]"
+              className="w-full h-8 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 py-3 text-base text-[var(--parchment)] transition-all duration-300 focus:border-[var(--gold)] focus:bg-[rgba(217,166,83,0.025)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.15)]"
             />
           </motion.div>
 
           {/* description */}
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+            <label className="mb-1.5 -mt-30 flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
               <AlignLeft size={12} strokeWidth={1.5} /> Description
             </label>
             <textarea
@@ -624,7 +661,7 @@ export default function EditVideo() {
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full resize-y rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+              className="w-full resize-y h-70 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
             />
           </div>
 
@@ -739,7 +776,7 @@ export default function EditVideo() {
 
           {/* cast */}
           <div className="relative z-10">
-            <label className={`${newFilm ? "-mt-30" : "-mt-48"} flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]`}>
+            <label className={`${newFilm ? "-mt-45" : "-mt-55"} flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]`}>
               <Users size={12} strokeWidth={1.5} /> Cast
             </label>
             <CastSlider cast={cast} setCast={setCast} />
@@ -748,10 +785,10 @@ export default function EditVideo() {
           <div className="relative z-10">
             <button
               type="submit"
-              disabled={savingMeta}
+              disabled={savingMeta || reuploading}
               className="mx-auto flex h-10 w-full max-w-[420px] items-center justify-center rounded-[3px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold leading-none text-[#1a1210] transition-colors hover:bg-[var(--gold-soft)] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {savingMeta ? "Saving…" : "Save Changes"}
+              {savingMeta ? "Saving…" : reuploading ? "Uploading film…" : "Save Changes"}
             </button>
           </div>
         </motion.form>
