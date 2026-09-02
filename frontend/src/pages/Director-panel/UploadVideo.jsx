@@ -556,7 +556,7 @@ export default function UploadVideo() {
               hidden: { opacity: 0, x: -18 },
               visible: { opacity: 1, x: 0 },
             }}
-            className="group h-21 w-272 relative rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
+            className="group h-21 w-272 -mt-25 relative rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
           >
             <div className="mb-2 flex items-center gap-3">
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
