@@ -210,7 +210,8 @@ export default function UploadVideo() {
   const [language, setLanguage] = useState("");
   const [productionCountry, setProductionCountry] = useState("");
   const [releaseYear, setReleaseYear] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [thumbnailPreviewUrl, setThumbnailPreviewUrl] = useState(null);
   const [film, setFilm] = useState(null);
   const [filmPreviewUrl, setFilmPreviewUrl] = useState(null);
   const [useUpscale, setUseUpscale] = useState(true);
@@ -232,6 +233,12 @@ export default function UploadVideo() {
       if (filmPreviewUrl) URL.revokeObjectURL(filmPreviewUrl);
     };
   }, [filmPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+    };
+  }, [thumbnailPreviewUrl]);
 
   // scroll just past the nav bar on first entering this page
   useEffect(() => {
@@ -293,6 +300,34 @@ export default function UploadVideo() {
     setCustomGenreInput("");
   }
 
+  function handleThumbnailChange(e) {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      setError("Thumbnail must be JPG, PNG, or WebP.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Thumbnail must be smaller than 10 MB.");
+      e.target.value = "";
+      return;
+    }
+
+    setError(null);
+    if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+    setThumbnailFile(file);
+    setThumbnailPreviewUrl(URL.createObjectURL(file));
+  }
+
+  function removeThumbnail() {
+    if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
+    setThumbnailFile(null);
+    setThumbnailPreviewUrl(null);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
@@ -310,7 +345,9 @@ export default function UploadVideo() {
     fd.append("tags", tags);
     fd.append("language", language);
     fd.append("productionCountry", productionCountry);
-    fd.append("thumbnailUrl", thumbnailUrl);
+    // Send the actual thumbnail file if one was chosen.
+    // If not, the backend generates one automatically from the video.
+    if (thumbnailFile) fd.append("thumbnail", thumbnailFile);
     fd.append("useUpscale", useUpscale ? "true" : "false");
     if (releaseYear) fd.append("releaseYear", releaseYear);
 
@@ -349,9 +386,9 @@ export default function UploadVideo() {
     <div className="min-h-[92vh] bg-[var(--stage)] text-[var(--parchment)]">
       <DirectorNav />
 
-      <main ref={mainRef} className="mx-auto max-w-6xl px-8 py-12">
+      <main ref={mainRef} className="mx-auto max-w-6xl px-8 py-6">
         {error && (
-          <div className="mb-6 rounded-[3px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
+          <div className="mb-4 rounded-[3px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
             {error}
           </div>
         )}
@@ -368,195 +405,15 @@ export default function UploadVideo() {
               },
             },
           }}
-          className="upload-orbit-grid mt-14 -mb-20"
+          className="mt-4"
         >
-          {/* film file */}
-          <motion.div
-            variants={{
-              hidden: { opacity: 0, scale: 0.92, y: 20 },
-              visible: {
-                opacity: 1,
-                scale: 1,
-                y: 0,
-                transition: {
-                  type: "spring",
-                  stiffness: 90,
-                  damping: 18,
-                },
-              },
-            }}
-            className="relative flex h-full min-h-[300px] flex-col"
-          >
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(217,166,83,0.035)] blur-3xl" />
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[380px] w-[380px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(217,166,83,0.06)]" />
-
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{
-                duration: 45,
-                repeat: Infinity,
-                ease: "linear",
-              }}
-              className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-[rgba(217,166,83,0.045)]"
-            />
-            <div className="relative flex h-full flex-1 flex-col">
-              <div className="mb-3 flex items-center justify-center gap-2">
-                <Film
-                  size={13}
-                  strokeWidth={1.5}
-                  className="text-[var(--gold)]"
-                />
-
-                <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[var(--mauve)]">
-                  Film
-                </label>
-              </div>
-
-              {!filmPreviewUrl && (
-                <label className="group relative flex min-h-[260px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-8 py-10 text-center shadow-[0_0_80px_rgba(217,166,83,0.025)] transition-all duration-500 hover:border-[rgba(217,166,83,0.55)] hover:shadow-[0_0_100px_rgba(217,166,83,0.08)]">
-                  <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-[rgba(217,166,83,0.3)] bg-[rgba(217,166,83,0.045)] text-[var(--gold)] shadow-[0_0_40px_rgba(217,166,83,0.06)] transition-all duration-500 group-hover:scale-105 group-hover:border-[rgba(217,166,83,0.65)] group-hover:bg-[rgba(217,166,83,0.08)]">
-                    <Upload
-                      size={28}
-                      strokeWidth={1.3}
-                      className="transition-transform duration-500 group-hover:-translate-y-1"
-                    />
-                  </div>
-
-                  <span className="font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.12em] text-[var(--parchment)]">
-                    Select your film
-                  </span>
-
-                  <span className="mt-1 text-xs text-[var(--mauve)]">
-                    MP4, MOV, WebM or another video file
-                  </span>
-
-                  <span className="mt-4 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-2 text-xs font-medium text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
-                    Choose video
-                  </span>
-
-                  <input
-                    type="file"
-                    accept="video/*"
-                    required
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      if (filmPreviewUrl) URL.revokeObjectURL(filmPreviewUrl);
-                      setFilm(f);
-                      setFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
-                    }}
-                    className="hidden"
-                  />
-                </label>
-              )}
-
-              {filmPreviewUrl && (
-                <label className="group relative mt-3 block cursor-pointer overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-black">
-                  <video
-                    src={filmPreviewUrl}
-                    muted
-                    playsInline
-                    className="aspect-video w-full object-contain"
-                    onLoadedData={(e) => {
-                      e.currentTarget.currentTime = 1;
-                    }}
-                  />
-
-                  {!submitting && (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[rgba(16,13,16,0)] opacity-0 transition-all group-hover:bg-[rgba(16,13,16,0.45)] group-hover:opacity-100">
-                      <span className="rounded-[3px] px-4 py-2 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
-                        Choose another video
-                      </span>
-                    </div>
-                  )}
-
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      if (filmPreviewUrl) URL.revokeObjectURL(filmPreviewUrl);
-                      setFilm(f);
-                      setFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
-                    }}
-                    className="hidden"
-                  />
-
-                  {submitting && (
-                    <div className="absolute inset-0 flex flex-col justify-end bg-[rgba(16,13,16,0.55)] p-4">
-                      {phase === "uploading" && (
-                        <>
-                          <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                            <span>Uploading</span>
-                            <span>{uploadPercent}%</span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
-                            <div
-                              className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-150 ease-out"
-                              style={{ width: `${uploadPercent}%` }}
-                            />
-                          </div>
-                        </>
-                      )}
-
-                      {phase === "processing" && (
-                        <>
-                          <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                            <span>Processing (estimated)</span>
-                            <span>{processingPercent}%</span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
-                            <div
-                              className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-500 ease-out"
-                              style={{ width: `${processingPercent}%` }}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </label>
-              )}
-            </div>
-          </motion.div>
-
-          {/* AI upscale toggle */}
-          <label className="flex cursor-pointer select-none flex-col justify-between rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.55)] p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Sparkles
-                  size={13}
-                  strokeWidth={1.5}
-                  className="text-[var(--gold)]"
-                />
-                <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">
-                  AI quality upscaling
-                </p>
-              </div>
-              <div className="relative h-6 w-11 shrink-0">
-                <input
-                  type="checkbox"
-                  checked={useUpscale}
-                  onChange={() => setUseUpscale((v) => !v)}
-                  className="peer sr-only"
-                />
-                <div className="absolute inset-0 rounded-full bg-[rgba(239,231,218,0.2)] transition-colors peer-checked:bg-[var(--gold)]" />
-                <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-[#1a1210] transition-transform peer-checked:translate-x-5" />
-              </div>
-            </div>
-            <p className="mt-4 text-xs leading-relaxed text-[var(--mauve)]">
-              If your footage is below 1080p, AI upscaling fills out the higher
-              quality options. Leave off to only generate renditions at or below
-              your upload's actual resolution.
-            </p>
-          </label>
-
-          {/* title */}
+          {/* title — full width, above the three columns */}
           <motion.div
             variants={{
               hidden: { opacity: 0, x: -18 },
               visible: { opacity: 1, x: 0 },
             }}
-            className="group h-21 w-272 -mt-25 relative rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
+            className="group relative mb-6 rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
           >
             <div className="mb-2 flex items-center gap-3">
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
@@ -576,268 +433,439 @@ export default function UploadVideo() {
             />
           </motion.div>
 
-          {/* description */}
-          <div>
-            <label className="-mt-48 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              Description
-            </label>
-            <textarea
-              required
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="w-full h-60 resize-y rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-            />
-          </div>
+          {/* three independent columns — each one just stacks its own
+              fields top to bottom with a normal gap. No shared rows, no
+              margin tricks, so nothing can drift into a neighbor no
+              matter how any one box's height changes later. */}
+          <div className="upload-columns">
+            {/* LEFT COLUMN */}
+            <div className="flex flex-col gap-4">
+              {/* description */}
+              <div>
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Description
+                </label>
+                <textarea
+                  required
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="w-full h-32 resize-y rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
 
-          {/* genres */}
-          <div>
-            <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              Genres
-            </label>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {allGenreOptions.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => toggleGenre(g)}
-                  aria-pressed={genres.includes(g)}
-                  className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                    genres.includes(g)
-                      ? "border-[var(--gold)] bg-[rgba(217,166,83,0.08)] text-[var(--gold-soft)]"
-                      : "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] hover:border-[var(--gold)]"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
+              {/* tags */}
+              <div>
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Tags{" "}
+                  <span className="normal-case text-[var(--mauve)]">
+                    (comma-separated)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="noir, single-take, festival-cut"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
+
+              {/* thumbnail */}
+              <div>
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Thumbnail
+                </label>
+
+                {!thumbnailPreviewUrl ? (
+                  <label className="group flex h-[90px] w-full cursor-pointer flex-col items-center justify-center rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-3 text-center transition-colors hover:border-[var(--gold)]">
+                    <Image
+                      size={19}
+                      strokeWidth={1.5}
+                      className="mb-1 text-[var(--gold)]"
+                    />
+                    <span className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
+                      Choose thumbnail
+                    </span>
+                    <span className="mt-0.5 text-[0.65rem] text-[var(--mauve)]">
+                      JPG, PNG or WebP · Max 10 MB
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleThumbnailChange}
+                      className="hidden"
+                      disabled={submitting}
+                    />
+                  </label>
+                ) : (
+                  <div className="w-full overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11]">
+                    <div className="relative">
+                      <img
+                        src={thumbnailPreviewUrl}
+                        alt="Thumbnail preview"
+                        className="h-[90px] w-full object-cover"
+                      />
+                      {!submitting && (
+                        <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between">
+                          <label className="cursor-pointer rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11]/90 px-2.5 py-1 text-[0.65rem] text-[var(--parchment)] hover:border-[var(--gold)]">
+                            Change
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              onChange={handleThumbnailChange}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={removeThumbnail}
+                            className="flex items-center gap-1 rounded-[3px] border border-[rgba(224,138,107,0.35)] bg-[#0f0c11]/90 px-2.5 py-1 text-[0.65rem] text-[var(--error)] hover:border-[var(--error)]"
+                          >
+                            <X size={11} />
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="border-t border-[rgba(239,231,218,0.1)] px-2.5 py-1.5">
+                      <p className="truncate text-[0.65rem] text-[var(--mauve)]">
+                        {thumbnailFile?.name}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* language */}
+              <div>
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Language
+                </label>
+                <input
+                  type="text"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  placeholder="Enter language"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={customGenreInput}
-                onChange={(e) => setCustomGenreInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addCustomGenre();
-                  }
+
+            {/* CENTER COLUMN */}
+            <div className="flex flex-col gap-4">
+              {/* film file */}
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, scale: 0.92, y: 20 },
+                  visible: {
+                    opacity: 1,
+                    scale: 1,
+                    y: 0,
+                    transition: {
+                      type: "spring",
+                      stiffness: 90,
+                      damping: 18,
+                    },
+                  },
                 }}
-                placeholder="Add a genre not listed above"
-                className="flex-1 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={addCustomGenre}
-                className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-4 text-sm text-[var(--parchment)] hover:border-[var(--gold)]"
+                className="relative flex flex-col"
               >
-                Add
-              </button>
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[200px] w-[200px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(217,166,83,0.035)] blur-3xl" />
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(217,166,83,0.06)]" />
+
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{
+                    duration: 45,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
+                  className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-[rgba(217,166,83,0.045)]"
+                />
+                <div className="relative flex flex-1 flex-col">
+                  <div className="mb-3 flex items-center justify-center gap-2">
+                    <Film
+                      size={13}
+                      strokeWidth={1.5}
+                      className="text-[var(--gold)]"
+                    />
+
+                    <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[var(--mauve)]">
+                      Film
+                    </label>
+                  </div>
+
+                  {!filmPreviewUrl && (
+                    <label className="group relative flex min-h-[190px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-8 py-6 text-center shadow-[0_0_80px_rgba(217,166,83,0.025)] transition-all duration-500 hover:border-[rgba(217,166,83,0.55)] hover:shadow-[0_0_100px_rgba(217,166,83,0.08)]">
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[rgba(217,166,83,0.3)] bg-[rgba(217,166,83,0.045)] text-[var(--gold)] shadow-[0_0_40px_rgba(217,166,83,0.06)] transition-all duration-500 group-hover:scale-105 group-hover:border-[rgba(217,166,83,0.65)] group-hover:bg-[rgba(217,166,83,0.08)]">
+                        <Upload
+                          size={22}
+                          strokeWidth={1.3}
+                          className="transition-transform duration-500 group-hover:-translate-y-1"
+                        />
+                      </div>
+
+                      <span className="font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.12em] text-[var(--parchment)]">
+                        Select your film
+                      </span>
+
+                      <span className="mt-1 text-xs text-[var(--mauve)]">
+                        MP4, MOV, WebM or another video file
+                      </span>
+
+                      <span className="mt-3 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-2 text-xs font-medium text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
+                        Choose video
+                      </span>
+
+                      <input
+                        type="file"
+                        accept="video/*"
+                        required
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (filmPreviewUrl) URL.revokeObjectURL(filmPreviewUrl);
+                          setFilm(f);
+                          setFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+
+                  {filmPreviewUrl && (
+                    <label className="group relative block cursor-pointer overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-black">
+                      <video
+                        src={filmPreviewUrl}
+                        muted
+                        playsInline
+                        className="aspect-video w-full object-contain"
+                        onLoadedData={(e) => {
+                          e.currentTarget.currentTime = 1;
+                        }}
+                      />
+
+                      {!submitting && (
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[rgba(16,13,16,0)] opacity-0 transition-all group-hover:bg-[rgba(16,13,16,0.45)] group-hover:opacity-100">
+                          <span className="rounded-[3px] px-4 py-2 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
+                            Choose another video
+                          </span>
+                        </div>
+                      )}
+
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (filmPreviewUrl) URL.revokeObjectURL(filmPreviewUrl);
+                          setFilm(f);
+                          setFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
+                        }}
+                        className="hidden"
+                      />
+
+                      {submitting && (
+                        <div className="absolute inset-0 flex flex-col justify-end bg-[rgba(16,13,16,0.55)] p-4">
+                          {phase === "uploading" && (
+                            <>
+                              <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
+                                <span>Uploading</span>
+                                <span>{uploadPercent}%</span>
+                              </div>
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
+                                <div
+                                  className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-150 ease-out"
+                                  style={{ width: `${uploadPercent}%` }}
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          {phase === "processing" && (
+                            <>
+                              <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
+                                <span>Processing (estimated)</span>
+                                <span>{processingPercent}%</span>
+                              </div>
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
+                                <div
+                                  className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-500 ease-out"
+                                  style={{ width: `${processingPercent}%` }}
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </label>
+                  )}
+                </div>
+              </motion.div>
+
+              {/* cast */}
+              <div ref={castSectionRef} className="relative z-10">
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Cast
+                </label>
+                <CastSlider cast={cast} setCast={setCast} />
+              </div>
+
+              {/* submit */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={cast.length > 0 ? "cast-open" : "cast-closed"}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 120, damping: 16 }}
+                  className="relative z-10"
+                >
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex h-10 w-full items-center justify-center rounded-[3px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold leading-none text-[#1a1210] transition-colors duration-300 ease-in-out hover:bg-[var(--gold-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {submitting ? "Working…" : "Upload Film"}
+                  </button>
+                </motion.div>
+              </AnimatePresence>
             </div>
-          </div>
 
-          {/* tags */}
-          <div>
-            <label className="-mt-33 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              Tags{" "}
-              <span className="normal-case text-[var(--mauve)]">
-                (comma-separated)
-              </span>
-            </label>
-            <input
-              type="text"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="noir, single-take, festival-cut"
-              className="w-full rounded-[3px] border mt-1 border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-            />
-          </div>
+            {/* RIGHT COLUMN */}
+            <div className="flex flex-col gap-4">
+              {/* genres */}
+              <div>
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Genres
+                </label>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {allGenreOptions.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => toggleGenre(g)}
+                      aria-pressed={genres.includes(g)}
+                      className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                        genres.includes(g)
+                          ? "border-[var(--gold)] bg-[rgba(217,166,83,0.08)] text-[var(--gold-soft)]"
+                          : "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] hover:border-[var(--gold)]"
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customGenreInput}
+                    onChange={(e) => setCustomGenreInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustomGenre();
+                      }
+                    }}
+                    placeholder="Add a genre not listed above"
+                    className="flex-1 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomGenre}
+                    className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-4 text-sm text-[var(--parchment)] hover:border-[var(--gold)]"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
 
-          {/* language / country / year row */}
-          <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
-            <div>
-              <label className="mb-1.5 no-wrap whitespace-nowrap block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                Production Country
+              {/* AI upscale toggle */}
+              <label className="flex cursor-pointer select-none flex-col justify-between rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.55)] p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles
+                      size={13}
+                      strokeWidth={1.5}
+                      className="text-[var(--gold)]"
+                    />
+                    <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">
+                      AI quality upscaling
+                    </p>
+                  </div>
+                  <div className="relative h-6 w-11 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={useUpscale}
+                      onChange={() => setUseUpscale((v) => !v)}
+                      className="peer sr-only"
+                    />
+                    <div className="absolute inset-0 rounded-full bg-[rgba(239,231,218,0.2)] transition-colors peer-checked:bg-[var(--gold)]" />
+                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-[#1a1210] transition-transform peer-checked:translate-x-5" />
+                  </div>
+                </div>
+                <p className="mt-4 text-xs leading-relaxed text-[var(--mauve)]">
+                  If your footage is below 1080p, AI upscaling fills out the
+                  higher quality options. Leave off to only generate
+                  renditions at or below your upload's actual resolution.
+                </p>
               </label>
-              <input
-                type="text"
-                value={productionCountry}
-                onChange={(e) => setProductionCountry(e.target.value)}
-                className="w-35 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 ml-19 block whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                Release Year
-              </label>
-              <input
-                type="number"
-                value={releaseYear}
-                onChange={(e) => setReleaseYear(e.target.value)}
-                className="w-25 rounded-[3px] ml-19 border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-              />
-            </div>
-          </div>
 
-          {/* thumbnail url */}
-          <div>
-            <label className="-mt-36 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              Thumbnail URL
-            </label>
-            <input
-              type="text"
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full rounded-[3px] mt-1 border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-            />
-          </div>
-
-          <div className="-ml-71 -mt-18 grid grid-cols-1 gap-1 sm:grid-cols-3">
-            <div>
-                           {" "}
-              <label className="mb-1.5 ml-0.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                                Language              {" "}
-              </label>
-                           {" "}
-              <input
-                type="text"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-60.5 rounded-[3px] ml-0.5 border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-              />
-                         {" "}
+              {/* production country / release year */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1.5 block whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={productionCountry}
+                    onChange={(e) => setProductionCountry(e.target.value)}
+                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                    Release Year
+                  </label>
+                  <input
+                    type="number"
+                    value={releaseYear}
+                    onChange={(e) => setReleaseYear(e.target.value)}
+                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* cast */}
-          <div ref={castSectionRef} className="relative z-10">
-            <label
-              className={`${film ? "-mt-43" : "-mt-50"} block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]`}
-            >
-              Cast
-            </label>
-            <CastSlider cast={cast} setCast={setCast} />
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={cast.length > 0 ? "cast-open" : "cast-closed"}
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 120, damping: 16 }}
-              className="relative z-10"
-            >
-              <button
-                type="submit"
-                disabled={submitting}
-                className={`flex h-10 max-w-[420px] items-center justify-center rounded-[3px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold leading-none text-[#1a1210] transition-[margin,width,background-color] duration-500 ease-in-out hover:bg-[var(--gold-soft)] disabled:cursor-not-allowed disabled:opacity-60 ${
-                  cast.length > 0
-                    ? `ml-143 w-60`
-                    : "mx-auto w-full -mt-17"
-                }`}
-              >
-                {submitting ? "Working…" : "Upload Film"}
-              </button>
-            </motion.div>
-          </AnimatePresence>
         </motion.form>
 
         <style>{`
-          .upload-orbit-grid {
-            position: relative;
+          .upload-columns {
             display: grid;
             grid-template-columns: repeat(12, minmax(0, 1fr));
             column-gap: 2.5rem;
-            row-gap: 1.1rem;
-            padding: 1.25rem 0 1rem;
-          }
- 
-          .upload-orbit-grid > * {
-            min-width: 0;
-          }
- 
-          .upload-orbit-grid > :nth-child(1) {
-            grid-column: 4 / span 6;
-            grid-row: 1 / span 3;
-          }
- 
-          .upload-orbit-grid > :nth-child(2) {
-            grid-column: 10 / span 3;
-            grid-row: 2;
-          }
- 
-          .upload-orbit-grid > :nth-child(3) {
-            grid-column: 1 / span 3;
-            grid-row: 1;
-          }
- 
-          .upload-orbit-grid > :nth-child(4) {
-            grid-column: 1 / span 3;
-            grid-row: 2;
-          }
- 
-          .upload-orbit-grid > :nth-child(5) {
-            grid-column: 10 / span 3;
-            grid-row: 1;
-          }
- 
-          .upload-orbit-grid > :nth-child(6) {
-            grid-column: 1 / span 3;
-            grid-row: 3;
-          }
- 
-          .upload-orbit-grid > :nth-child(7) {
-            grid-column: 10 / span 3;
-            grid-row: 3;
-          }
- 
-          .upload-orbit-grid > :nth-child(8) {
-            grid-column: 1 / span 3;
-            grid-row: 4;
-          }
- 
-          .upload-orbit-grid > :nth-child(9) {
-            grid-column: 4 / span 6;
-            grid-row: 4 / span 2;
-          }
- 
-          .upload-orbit-grid > :nth-child(10) {
-            grid-column: 4 / span 6;
-            grid-row: 6;
           }
 
-          .upload-orbit-grid > :nth-child(11) {
+          .upload-columns > :nth-child(1) {
+            grid-column: 1 / span 3;
+          }
+
+          .upload-columns > :nth-child(2) {
             grid-column: 4 / span 6;
-            grid-row: 7;
           }
- 
+
+          .upload-columns > :nth-child(3) {
+            grid-column: 10 / span 3;
+          }
+
           @media (max-width: 900px) {
-            .upload-orbit-grid {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
+            .upload-columns {
+              grid-template-columns: 1fr;
+              row-gap: 1.5rem;
             }
- 
-            .upload-orbit-grid > * {
-              grid-column: auto !important;
-              grid-row: auto !important;
-            }
- 
-            .upload-orbit-grid > :nth-child(1) {
-              grid-column: 1 / -1 !important;
-              grid-row: 1 !important;
-              order: -10;
-            }
-          }
- 
-          @media (max-width: 640px) {
-            .upload-orbit-grid {
-              display: flex;
-              flex-direction: column;
-              gap: 1rem;
-            }
- 
-            .upload-orbit-grid > :nth-child(1) {
-              order: -10;
+
+            .upload-columns > * {
+              grid-column: 1 !important;
             }
           }
         `}</style>
