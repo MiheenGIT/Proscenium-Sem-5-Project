@@ -9,109 +9,384 @@ import Register from "./pages/Auth-panel/Register.jsx";
 import DirectorHome from "./pages/Director-panel/DirectorHome.jsx";
 import EditVideo from "./pages/Director-panel/EditVideo.jsx";
 import UploadVideo from "./pages/Director-panel/UploadVideo.jsx";
+import DirectorWatchVideo from "./pages/Helpers/WatchVideo.jsx";
 
-import ViewerHistory from "./pages/Viewer-panel/ViewerHistory.jsx";
-import ViewerHome from "./pages/Viewer-panel/ViewerHome.jsx";
-import ViewerProfile from "./pages/Viewer-panel/ViewerProfile.jsx";
-import ViewerWatchVideo from "./pages/Viewer-panel/ViewerWatchVideo.jsx";
-import ViewerWatchlist from "./pages/Viewer-panel/ViewerWatchlist.jsx";
+import Dashboard from "./pages/Viewer-panel/Dashboard.jsx";
+import History from "./pages/Viewer-panel/History.jsx";
+import LibraryPage from "./pages/Viewer-panel/LibraryPage.jsx";
+import MovieDetail from "./pages/Viewer-panel/MovieDetail.jsx";
+import Profile from "./pages/Viewer-panel/Profile.jsx";
+import Reviews from "./pages/Viewer-panel/Reviews.jsx";
+import WatchVideo from "./pages/Viewer-panel/WatchVideo.jsx";
+import AccountPages from "./pages/Viewer-panel/AccountPages.jsx";
 
-import WatchVideo from "./pages/Helpers/WatchVideo.jsx";
+function ViewerOnly({ children }) {
+  return (
+    <RequireRole roles={["viewer"]}>
+      {children}
+    </RequireRole>
+  );
+}
+
+function DirectorOnly({ children }) {
+  return (
+    <RequireRole roles={["director"]}>
+      {children}
+    </RequireRole>
+  );
+}
 
 export default function App() {
   return (
     <Routes>
-      {/* Authentication */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* Director */}
       <Route
         path="/director"
         element={
-          <RequireRole roles={["director"]}>
+          <DirectorOnly>
             <DirectorHome />
-          </RequireRole>
+          </DirectorOnly>
         }
       />
 
       <Route
         path="/director/upload"
         element={
-          <RequireRole roles={["director"]}>
+          <DirectorOnly>
             <UploadVideo />
-          </RequireRole>
+          </DirectorOnly>
         }
       />
 
       <Route
         path="/director/videos/:id/watch"
         element={
-          <RequireRole roles={["director"]}>
-            <WatchVideo />
-          </RequireRole>
+          <DirectorOnly>
+            <DirectorWatchVideo />
+          </DirectorOnly>
         }
       />
 
       <Route
         path="/director/videos/:id/edit"
         element={
-          <RequireRole roles={["director"]}>
+          <DirectorOnly>
             <EditVideo />
-          </RequireRole>
+          </DirectorOnly>
         }
       />
 
-      {/* Viewer */}
+      <Route
+        path="/"
+        element={<Navigate to="/viewer" replace />}
+      />
+
       <Route
         path="/viewer"
         element={
-          <RequireRole roles={["viewer"]}>
-            <ViewerHome />
-          </RequireRole>
+          <ViewerOnly>
+            <Dashboard />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/dashboard"
+        element={
+          <ViewerOnly>
+            <Dashboard />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/dashboard"
+        element={
+          <ViewerOnly>
+            <Dashboard />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/movie/:id"
+        element={
+          <ViewerOnly>
+            <MovieDetail />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/movie/:id"
+        element={
+          <ViewerOnly>
+            <MovieDetail />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/watch/:id"
+        element={
+          <ViewerOnly>
+            <WatchVideo />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/watch/:id"
+        element={
+          <ViewerOnly>
+            <WatchVideo />
+          </ViewerOnly>
         }
       />
 
       <Route
         path="/viewer/videos/:id"
         element={
-          <RequireRole roles={["viewer"]}>
-            <ViewerWatchVideo />
-          </RequireRole>
+          <ViewerOnly>
+            <WatchVideo />
+          </ViewerOnly>
         }
       />
 
       <Route
-        path="/viewer/history"
+        path="/explore"
         element={
-          <RequireRole roles={["viewer"]}>
-            <ViewerHistory />
-          </RequireRole>
+          <ViewerOnly>
+            <LibraryPage mode="explore" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/explore"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="explore" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/trending"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="trending" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/trending"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="trending" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/for-you"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="for-you" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/for-you"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="for-you" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/watchlist"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="watchlist" />
+          </ViewerOnly>
         }
       />
 
       <Route
         path="/viewer/watchlist"
         element={
-          <RequireRole roles={["viewer"]}>
-            <ViewerWatchlist />
-          </RequireRole>
+          <ViewerOnly>
+            <LibraryPage mode="watchlist" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/history"
+        element={
+          <ViewerOnly>
+            <History />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/history"
+        element={
+          <ViewerOnly>
+            <History />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/liked"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="liked" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/liked"
+        element={
+          <ViewerOnly>
+            <LibraryPage mode="liked" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/reviews"
+        element={
+          <ViewerOnly>
+            <Reviews />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/reviews"
+        element={
+          <ViewerOnly>
+            <Reviews />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <ViewerOnly>
+            <Profile />
+          </ViewerOnly>
         }
       />
 
       <Route
         path="/viewer/profile"
         element={
-          <RequireRole roles={["viewer"]}>
-            <ViewerProfile />
-          </RequireRole>
+          <ViewerOnly>
+            <Profile />
+          </ViewerOnly>
         }
       />
 
-      {/* Fallback */}
       <Route
-        path="/"
-        element={<Navigate to="/login" replace />}
+        path="/settings"
+        element={
+          <ViewerOnly>
+            <AccountPages section="settings" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/settings"
+        element={
+          <ViewerOnly>
+            <AccountPages section="settings" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <ViewerOnly>
+            <AccountPages section="notifications" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/notifications"
+        element={
+          <ViewerOnly>
+            <AccountPages section="notifications" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/preferences/genres"
+        element={
+          <ViewerOnly>
+            <AccountPages section="genres" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/preferences/genres"
+        element={
+          <ViewerOnly>
+            <AccountPages section="genres" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/preferences/languages"
+        element={
+          <ViewerOnly>
+            <AccountPages section="languages" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/preferences/languages"
+        element={
+          <ViewerOnly>
+            <AccountPages section="languages" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/help"
+        element={
+          <ViewerOnly>
+            <AccountPages section="help" />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/viewer/help"
+        element={
+          <ViewerOnly>
+            <AccountPages section="help" />
+          </ViewerOnly>
+        }
       />
 
       <Route

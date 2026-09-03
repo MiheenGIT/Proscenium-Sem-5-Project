@@ -1,16 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import {
-  Bookmark,
-  Film,
-  History,
-  LogOut,
-  Menu,
-  Search,
-  User,
-  X,
-} from "lucide-react";
-
+import {Bookmark,Film,History,LogOut,Menu,Search,User,X,} from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function ViewerNav() {

@@ -4,10 +4,7 @@ from bson.errors import InvalidId
 from datetime import datetime
 
 from utils.security import require_role
-from database import film_collection
-from models.schemas import RejectVideoRequest, ApproveVideoRequest
-
-from database import film_collection, comments_collection
+from database import film_collection, comments_collection, notifications_collection, viewers_collection
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -121,6 +118,8 @@ def approve_video(
             "$push": {"moderationHistory": history_entry},
         }
     )
+    for viewer in viewers_collection.find({"newReleaseNotifications": {"$ne": False}}, {"_id": 1}):
+        notifications_collection.insert_one({"viewerId": viewer["_id"], "type": "new_release", "title": "New film on Proscenium", "message": f"{video.get('title', 'A new film')} is now available to watch.", "videoId": oid, "read": False, "createdAt": now})
     return {"message": "Video approved", "videoId": video_id, "comment": body.comment}
 
 
