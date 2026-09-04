@@ -165,7 +165,7 @@ class ReactionRequest(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    rating: int = Field(..., ge=1, le=5)
+    rating: float = Field(..., ge=1, le=5)
     text: str = Field(min_length=1, max_length=1000)
 
     @field_validator("text")

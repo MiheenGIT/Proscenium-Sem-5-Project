@@ -14,6 +14,7 @@ from database import (
     viewers_collection,
     video_reactions_collection,
     video_reviews_collection,
+    review_reactions_collection,
     video_views_collection,
     cast_collection,
     watch_history_collection,
@@ -52,6 +53,9 @@ try:
     )
     video_reviews_collection.create_index(
         [("viewerId", 1), ("videoId", 1)], unique=True
+    )
+    review_reactions_collection.create_index(
+        [("viewerId", 1), ("reviewId", 1)], unique=True
     )
 except Exception:
     pass
@@ -313,6 +317,45 @@ def get_video_detail(
         is not None
     )
 
+    has_watched = video_views_collection.find_one({
+        "videoId": oid,
+        "viewerId": viewer["_id"],
+    }) is not None
+
+    watch_stats = None
+    my_review = None
+
+    if has_watched:
+        history = watch_history_collection.find_one({
+            "videoId": oid,
+            "viewerId": viewer["_id"],
+        })
+        watch_stats = {
+            "firstWatchedAt": history.get("startedAt") if history else None,
+            "lastWatchedAt": history.get("lastWatchedAt") if history else None,
+            "timesWatched": history.get("timesWatched", 1) if history else 1,
+        }
+
+        review = video_reviews_collection.find_one({
+            "videoId": oid,
+            "viewerId": viewer["_id"],
+        })
+
+        if review:
+            review_likes = review_reactions_collection.count_documents({
+                "reviewId": review["_id"], "type": "like",
+            })
+            review_liked = review_reactions_collection.find_one({
+                "reviewId": review["_id"], "viewerId": viewer["_id"],
+            }) is not None
+            my_review = {
+                "rating": float(review.get("rating", 0)),
+                "text": review.get("text", ""),
+                "updatedAt": review.get("updatedAt"),
+                "likes": review_likes,
+                "liked": review_liked,
+            }
+
     return {
         "id": str(video["_id"]),
         "title": video.get("title"),
@@ -345,6 +388,9 @@ def get_video_detail(
         "publishedAt": video.get("publishedAt"),
         "reaction": reaction.get("type") if reaction else None,
         "saved": saved,
+        "hasWatched": has_watched,
+        "watchStats": watch_stats,
+        "myReview": my_review,
     }
 
 
@@ -557,6 +603,11 @@ def watch_heartbeat(
                 {"_id": oid},
                 {"$inc": {"views": 1}},
             )
+
+        watch_history_collection.update_one(
+            {"viewerId": viewer["_id"], "videoId": oid},
+            {"$inc": {"timesWatched": 1}},
+        )
 
         already_in_history = any(
             entry.get("videoId") == oid
@@ -1119,11 +1170,20 @@ def react_to_video(
 
 
 
-def _serialize_review(review: dict) -> dict:
+def _serialize_review(review: dict, viewer_id=None) -> dict:
     viewer = viewers_collection.find_one(
         {"_id": review["viewerId"]}, {"username": 1, "avatarUrl": 1}
     )
     video = film_collection.find_one({"_id": review["videoId"]}, {"title": 1, "thumbnailUrl": 1})
+
+    liked = None
+    if viewer_id:
+        liked = review_reactions_collection.find_one({
+            "viewerId": viewer_id, "reviewId": review["_id"],
+        }) is not None
+
+    likes = review_reactions_collection.count_documents({"reviewId": review["_id"], "type": "like"})
+
     return {
         "id": str(review["_id"]),
         "videoId": str(review["videoId"]),
@@ -1132,8 +1192,10 @@ def _serialize_review(review: dict) -> dict:
         "viewerAvatarUrl": viewer.get("avatarUrl") if viewer else None,
         "title": video.get("title", "Untitled") if video else "Untitled",
         "thumbnailUrl": video.get("thumbnailUrl") if video else None,
-        "rating": int(review.get("rating", 0)),
+        "rating": float(review.get("rating", 0)),
         "text": review.get("text", ""),
+        "likes": likes,
+        "liked": liked,
         "createdAt": review.get("createdAt"),
         "updatedAt": review.get("updatedAt"),
     }
@@ -1145,7 +1207,7 @@ def list_my_reviews(
 ):
     viewer = _viewer_or_404(payload)
     rows = video_reviews_collection.find({"viewerId": viewer["_id"]}).sort("updatedAt", -1)
-    return {"count": video_reviews_collection.count_documents({"viewerId": viewer["_id"]}), "reviews": [_serialize_review(r) for r in rows]}
+    return {"count": video_reviews_collection.count_documents({"viewerId": viewer["_id"]}), "reviews": [_serialize_review(r, viewer["_id"]) for r in rows]}
 
 
 @router.get("/videos/{video_id}/reviews")
@@ -1154,9 +1216,9 @@ def list_video_reviews(
     payload: dict = Depends(require_role("viewer")),
 ):
     oid, _ = _get_public_video_or_404(video_id)
-    _viewer_or_404(payload)
+    viewer = _viewer_or_404(payload)
     rows = video_reviews_collection.find({"videoId": oid}).sort("updatedAt", -1).limit(100)
-    return {"count": video_reviews_collection.count_documents({"videoId": oid}), "reviews": [_serialize_review(r) for r in rows]}
+    return {"count": video_reviews_collection.count_documents({"videoId": oid}), "reviews": [_serialize_review(r, viewer["_id"]) for r in rows]}
 
 
 @router.post("/videos/{video_id}/reviews")
@@ -1167,6 +1229,16 @@ def upsert_review(
 ):
     oid, _ = _get_public_video_or_404(video_id)
     viewer = _viewer_or_404(payload)
+
+    has_watched = video_views_collection.find_one({
+        "videoId": oid, "viewerId": viewer["_id"],
+    }) is not None
+    if not has_watched:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only review a video after watching at least 75% of it",
+        )
+
     now = datetime.utcnow()
     existing = video_reviews_collection.find_one({"viewerId": viewer["_id"], "videoId": oid})
     doc = {"viewerId": viewer["_id"], "videoId": oid, "rating": body.rating, "text": body.text.strip(), "updatedAt": now}
@@ -1184,7 +1256,7 @@ def upsert_review(
     avg = round(float(stats[0]["avg"]), 1) if stats else 0
     count = int(stats[0]["count"]) if stats else 0
     film_collection.update_one({"_id": oid}, {"$set": {"avgRating": avg, "reviewCount": count}})
-    result = _serialize_review(review)
+    result = _serialize_review(review, viewer["_id"])
     result.update({"avgRating": avg, "reviewCount": count})
     return result
 
@@ -1208,6 +1280,43 @@ def delete_my_review(
     film_collection.update_one({"_id": oid}, {"$set": {"avgRating": avg, "reviewCount": count}})
     return {"message": "Review deleted", "reviewCount": count, "avgRating": avg}
 
+@router.post("/videos/{video_id}/reviews/{review_id}/like")
+def toggle_review_like(
+    video_id: str,
+    review_id: str,
+    payload: dict = Depends(require_role("viewer")),
+):
+    try:
+        review_oid = ObjectId(review_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid review id")
+
+    _get_public_video_or_404(video_id)
+    viewer = _viewer_or_404(payload)
+
+    review = video_reviews_collection.find_one({"_id": review_oid})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    existing = review_reactions_collection.find_one({
+        "viewerId": viewer["_id"],
+        "reviewId": review_oid,
+    })
+
+    if existing:
+        review_reactions_collection.delete_one({"_id": existing["_id"]})
+        liked = False
+    else:
+        review_reactions_collection.insert_one({
+            "viewerId": viewer["_id"],
+            "reviewId": review_oid,
+            "type": "like",
+        })
+        liked = True
+
+    likes = review_reactions_collection.count_documents({"reviewId": review_oid, "type": "like"})
+
+    return {"liked": liked, "likes": likes}
 
 @router.get("/liked")
 def list_liked_videos(

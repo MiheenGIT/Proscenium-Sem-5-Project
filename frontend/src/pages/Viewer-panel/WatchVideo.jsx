@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState,} from "react";
 import { useNavigate,useParams,} from "react-router-dom";
 import Plyr from "plyr";
 import Hls from "hls.js";
-import { ArrowLeft, Bookmark, Check, Edit3, MessageCircle, Send, Star, ThumbsDown, ThumbsUp, Trash2, X,} from "lucide-react";
+import {ArrowLeft,Bookmark,Check,Edit3, Heart, MessageCircle, Send, Star, ThumbsDown, ThumbsUp, Trash2, X,} from "lucide-react";
 
+import WatchSidePanel from "./Watch/WatchSidePanel.jsx";
 import "plyr/dist/plyr.css";
 import "./WatchVideo.css";
 
-import {deleteRequest,getRequest,postJson,putJson,} from "../../api/client.js";
+import { deleteRequest, getRequest, postJson, putJson } from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 
 const duration = (seconds) => {
@@ -404,15 +405,6 @@ export default function ViewerWatchVideo() {
   const [comment, setComment] =
     useState("");
 
-  const [reviewText, setReviewText] =
-    useState("");
-
-  const [reviewRating, setReviewRating] =
-    useState(0);
-
-  const [myReview, setMyReview] =
-    useState(null);
-
   const [error, setError] =
     useState("");
 
@@ -420,9 +412,6 @@ export default function ViewerWatchVideo() {
     useState(true);
 
   const [posting, setPosting] =
-    useState(false);
-
-  const [reviewing, setReviewing] =
     useState(false);
 
   const [watching, setWatching] =
@@ -467,18 +456,7 @@ export default function ViewerWatchVideo() {
           `/viewer/videos/${id}/reviews`
         );
 
-      const rows =
-        data.reviews || [];
-
-      setReviews(rows);
-
-      setMyReview(
-        rows.find(
-          (review) =>
-            review.viewerId ===
-            viewerId
-        ) || null
-      );
+      setReviews(data.reviews || []);
     } catch (err) {
       setError(
         err.message ||
@@ -524,23 +502,7 @@ export default function ViewerWatchVideo() {
 
       setStream(watchData);
 
-      const rows =
-        reviewsData.reviews || [];
-
-      setReviews(rows);
-
-      const mine = rows.find(
-        (item) =>
-          item.viewerId === viewerId
-      );
-
-      setMyReview(mine);
-      setReviewRating(
-        mine?.rating || 0
-      );
-      setReviewText(
-        mine?.text || ""
-      );
+      setReviews(reviewsData.reviews || []);
     } catch (err) {
       setError(
         err.message ||
@@ -876,89 +838,22 @@ export default function ViewerWatchVideo() {
     }
   }
 
-  async function saveReview() {
-    if (
-      !reviewRating ||
-      !reviewText.trim()
-    ) {
-      return;
-    }
-
-    setReviewing(true);
-
+  async function toggleReviewLike(reviewId) {
     try {
-      const review =
-        await postJson(
-          `/viewer/videos/${id}/reviews`,
-          {
-            rating: reviewRating,
-            text: reviewText.trim(),
-          }
-        );
-
-      setMyReview(review);
-
-      setReviews((current) => [
-        review,
-        ...current.filter(
-          (item) =>
-            item.viewerId !==
-            viewerId
-        ),
-      ]);
-
-      setVideo((current) => ({
-        ...current,
-        avgRating:
-          review.avgRating ??
-          current.avgRating,
-        reviewCount:
-          review.reviewCount ??
-          current.reviewCount,
-      }));
-
-      await load();
-    } catch (err) {
-      setError(
-        err.message ||
-          "Unable to save review."
+      const data = await postJson(
+        `/viewer/videos/${id}/reviews/${reviewId}/like`,
+        {}
       );
-    } finally {
-      setReviewing(false);
-    }
-  }
-
-  async function deleteReview() {
-    try {
-      const data =
-        await deleteRequest(
-          `/viewer/videos/${id}/reviews`
-        );
-
-      setMyReview(null);
-      setReviewText("");
-      setReviewRating(0);
 
       setReviews((current) =>
-        current.filter(
-          (item) =>
-            item.viewerId !==
-            viewerId
+        current.map((item) =>
+          item.id === reviewId
+            ? { ...item, likes: data.likes, liked: data.liked }
+            : item
         )
       );
-
-      setVideo((current) => ({
-        ...current,
-        avgRating:
-          data.avgRating,
-        reviewCount:
-          data.reviewCount,
-      }));
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to delete review."
-      );
+      setError(err.message || "Unable to update like.");
     }
   }
 
@@ -1016,15 +911,17 @@ export default function ViewerWatchVideo() {
           )}
 
           <section className="watch-hero">
-            <div className="watch-player">
-              <video
-                ref={videoRef}
-                title={video.title}
-                playsInline
-              />
-            </div>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="min-w-0">
+                <div className="watch-player">
+                  <video
+                    ref={videoRef}
+                    title={video.title}
+                    playsInline
+                  />
+                </div>
 
-            <div className="watch-title">
+                <div className="watch-title">
               <div>
                 <span className="eyebrow">
                   PROSCENIUM / NOW PLAYING
@@ -1119,19 +1016,37 @@ export default function ViewerWatchVideo() {
               </button>
             </div>
 
-            <p className="watch-description">
-              {video.description ||
-                "No description available."}
-            </p>
+              </div>
 
-            <div className="tag-row">
-              {(video.genres || []).map(
-                (item) => (
-                  <span key={item}>
-                    {item}
-                  </span>
-                )
-              )}
+              <WatchSidePanel
+                video={video}
+                videoId={id}
+                onReviewSaved={(review) => {
+                  setReviews((current) => [
+                    review,
+                    ...current.filter((item) => item.viewerId !== viewerId),
+                  ]);
+
+                  setVideo((current) => ({
+                    ...current,
+                    avgRating: review.avgRating ?? current.avgRating,
+                    reviewCount: review.reviewCount ?? current.reviewCount,
+                    myReview: review,
+                  }));
+                }}
+                onReviewDeleted={(data) => {
+                  setReviews((current) =>
+                    current.filter((item) => item.viewerId !== viewerId)
+                  );
+
+                  setVideo((current) => ({
+                    ...current,
+                    avgRating: data.avgRating,
+                    reviewCount: data.reviewCount,
+                    myReview: null,
+                  }));
+                }}
+              />
             </div>
           </section>
 
@@ -1312,7 +1227,7 @@ export default function ViewerWatchVideo() {
               </span>
             </div>
 
-            <div className="review-layout">
+            <div className="flex items-center gap-6 border-b border-white/[0.07] pb-[18px]">
               <div className="review-score">
                 <strong>
                   {Number(
@@ -1347,76 +1262,6 @@ export default function ViewerWatchVideo() {
                   )}
                 </div>
               </div>
-
-              <div className="review-form">
-                <div className="star-input">
-                  {[1, 2, 3, 4, 5].map(
-                    (value) => (
-                      <button
-                        key={value}
-                        onClick={() =>
-                          setReviewRating(
-                            value
-                          )
-                        }
-                        className={
-                          value <=
-                          reviewRating
-                            ? "active"
-                            : ""
-                        }
-                      >
-                        <Star
-                          size={22}
-                          fill="currentColor"
-                        />
-                      </button>
-                    )
-                  )}
-                </div>
-
-                <textarea
-                  value={reviewText}
-                  onChange={(event) =>
-                    setReviewText(
-                      event.target.value
-                    )
-                  }
-                  maxLength={1000}
-                  placeholder="Write your review…"
-                />
-
-                <div>
-                  <button
-                    className="primary-review"
-                    onClick={
-                      saveReview
-                    }
-                    disabled={
-                      reviewing ||
-                      !reviewRating ||
-                      !reviewText.trim()
-                    }
-                  >
-                    {reviewing
-                      ? "Saving…"
-                      : myReview
-                      ? "Update Review"
-                      : "Publish Review"}
-                  </button>
-
-                  {myReview && (
-                    <button
-                      className="delete-review"
-                      onClick={
-                        deleteReview
-                      }
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
 
             <div className="review-list">
@@ -1438,21 +1283,26 @@ export default function ViewerWatchVideo() {
                   </div>
 
                   <div>
-                    <b>
-                      {
-                        review.viewerUsername
-                      }
-                    </b>
+                    <div className="flex items-center justify-between gap-3">
+                      <b>{review.viewerUsername}</b>
+
+                      <button
+                        onClick={() => toggleReviewLike(review.id)}
+                        className={`flex items-center gap-1 text-[10px] ${
+                          review.liked ? "text-[#d9a653]" : "text-[#8b7c82]"
+                        }`}
+                      >
+                        <Heart size={12} fill={review.liked ? "currentColor" : "none"} />
+                        {review.likes || 0}
+                      </button>
+                    </div>
 
                     <div className="stars">
-                      {"★".repeat(
-                        review.rating
-                      )}
-
-                      {"☆".repeat(
-                        5 -
-                          review.rating
-                      )}
+                      {"★".repeat(Math.round(review.rating))}
+                      {"☆".repeat(5 - Math.round(review.rating))}
+                      <span className="ml-1 text-[9px] text-[#8b7c82]">
+                        {Number(review.rating).toFixed(2)}
+                      </span>
                     </div>
 
                     <p>
