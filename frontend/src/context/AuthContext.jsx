@@ -1,4 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { postJson } from "../api/client";
 
 const STORAGE_KEY = "proscenium_auth";
@@ -25,7 +30,11 @@ export function AuthProvider({ children }) {
   }, [auth]);
 
   async function login(email, password) {
-    const data = await postJson("/auth/login", { email, password });
+    const data = await postJson("/auth/login", {
+      email,
+      password,
+    });
+
     setAuth(data);
     return data;
   }
@@ -35,14 +44,26 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ auth, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        auth,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error(
+      "useAuth must be used inside AuthProvider"
+    );
+  }
+
+  return context;
 }

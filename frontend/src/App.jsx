@@ -1,5 +1,9 @@
 import React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
 
 import RequireRole from "./components/RequireRole.jsx";
 
@@ -20,6 +24,12 @@ import Reviews from "./pages/Viewer-panel/Reviews.jsx";
 import WatchVideo from "./pages/Viewer-panel/WatchVideo.jsx";
 import AccountPages from "./pages/Viewer-panel/AccountPages.jsx";
 
+import AdminLayout from "./layouts/AdminLayout.jsx";
+import AdminDashboard from "./pages/Admin-panel/Dashboard.jsx";
+import AdminContent from "./pages/Admin-panel/Content.jsx";
+import AdminReview from "./pages/Admin-panel/Review.jsx";
+import AdminComments from "./pages/Admin-panel/Comments.jsx";
+
 function ViewerOnly({ children }) {
   return (
     <RequireRole roles={["viewer"]}>
@@ -36,11 +46,68 @@ function DirectorOnly({ children }) {
   );
 }
 
+function AdminOnly({ children }) {
+  return (
+    <RequireRole roles={["admin"]}>
+      <AdminLayout>
+        {children}
+      </AdminLayout>
+    </RequireRole>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route
+        path="/login"
+        element={<Login />}
+      />
+
+      <Route
+        path="/register"
+        element={<Register />}
+      />
+
+      {/* ================= ADMIN ================= */}
+
+      <Route
+        path="/admin"
+        element={
+          <AdminOnly>
+            <AdminDashboard />
+          </AdminOnly>
+        }
+      />
+
+      <Route
+        path="/admin/content"
+        element={
+          <AdminOnly>
+            <AdminContent />
+          </AdminOnly>
+        }
+      />
+
+      <Route
+        path="/admin/review"
+        element={
+          <AdminOnly>
+            <AdminReview />
+          </AdminOnly>
+        }
+      />
+
+      <Route
+        path="/admin/comments"
+        element={
+          <AdminOnly>
+            <AdminComments />
+          </AdminOnly>
+        }
+      />
+
+      {/* ================= DIRECTOR ================= */}
 
       <Route
         path="/director"
@@ -78,9 +145,16 @@ export default function App() {
         }
       />
 
+      {/* ================= VIEWER ================= */}
+
       <Route
         path="/"
-        element={<Navigate to="/viewer" replace />}
+        element={
+          <Navigate
+            to="/viewer"
+            replace
+          />
+        }
       />
 
       <Route
@@ -165,25 +239,7 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/explore"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="explore" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="/trending"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="trending" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
-        path="/viewer/trending"
         element={
           <ViewerOnly>
             <LibraryPage mode="trending" />
@@ -201,25 +257,7 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/for-you"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="for-you" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="/watchlist"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="watchlist" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
-        path="/viewer/watchlist"
         element={
           <ViewerOnly>
             <LibraryPage mode="watchlist" />
@@ -237,25 +275,7 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/history"
-        element={
-          <ViewerOnly>
-            <History />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="/liked"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="liked" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
-        path="/viewer/liked"
         element={
           <ViewerOnly>
             <LibraryPage mode="liked" />
@@ -273,25 +293,7 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/reviews"
-        element={
-          <ViewerOnly>
-            <Reviews />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="/profile"
-        element={
-          <ViewerOnly>
-            <Profile />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
-        path="/viewer/profile"
         element={
           <ViewerOnly>
             <Profile />
@@ -309,25 +311,7 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/settings"
-        element={
-          <ViewerOnly>
-            <AccountPages section="settings" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="/notifications"
-        element={
-          <ViewerOnly>
-            <AccountPages section="notifications" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
-        path="/viewer/notifications"
         element={
           <ViewerOnly>
             <AccountPages section="notifications" />
@@ -345,25 +329,7 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/preferences/genres"
-        element={
-          <ViewerOnly>
-            <AccountPages section="genres" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="/preferences/languages"
-        element={
-          <ViewerOnly>
-            <AccountPages section="languages" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
-        path="/viewer/preferences/languages"
         element={
           <ViewerOnly>
             <AccountPages section="languages" />
@@ -381,17 +347,13 @@ export default function App() {
       />
 
       <Route
-        path="/viewer/help"
-        element={
-          <ViewerOnly>
-            <AccountPages section="help" />
-          </ViewerOnly>
-        }
-      />
-
-      <Route
         path="*"
-        element={<Navigate to="/login" replace />}
+        element={
+          <Navigate
+            to="/login"
+            replace
+          />
+        }
       />
     </Routes>
   );

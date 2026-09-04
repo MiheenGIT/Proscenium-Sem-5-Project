@@ -19,13 +19,15 @@ export default function Login() {
     setSubmitting(true);
     try {
       const data = await login(email, password);
-      if (data.role === "director") {
-        navigate("/director");
-      } else if (data.role === "viewer") {
-        navigate("/viewer");
-      } else {
-        navigate("/login");
-      }
+      if (data.role === "admin") {
+  navigate("/admin");
+} else if (data.role === "director") {
+  navigate("/director");
+} else if (data.role === "viewer") {
+  navigate("/viewer");
+} else {
+  navigate("/login");
+}
     } catch (err) {
       setError(err.message);
     } finally {

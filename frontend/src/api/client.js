@@ -1,9 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_BASE_URL ||
-    "http://localhost:8000",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
   timeout: 30000,
 });
 
@@ -17,39 +15,62 @@ API.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${auth.token}`;
     }
   } catch {
-    // Ignore invalid local auth data.
+    // Ignore invalid stored auth.
   }
 
   return config;
 });
 
-function extractErrorMessage(err, fallback = "Request failed") {
-  const data = err?.response?.data;
+function getErrorMessage(error) {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+
+  if (!error?.response) {
+    return "Unable to connect to the server. Check that the backend is running.";
+  }
+
+  if (status === 401) {
+    return "Your admin session has expired. Please sign in again.";
+  }
+
+  if (status === 403) {
+    return "Access denied. Admin permission is required.";
+  }
+
+  if (status === 404) {
+    return "The requested resource was not found.";
+  }
+
+  if (status === 422) {
+    if (Array.isArray(data?.detail)) {
+      return data.detail
+        .map((item) => {
+          const field =
+            Array.isArray(item?.loc) && item.loc.length
+              ? item.loc[item.loc.length - 1]
+              : "field";
+
+          return `${field}: ${item.msg}`;
+        })
+        .join(" — ");
+    }
+
+    return data?.detail || "Validation failed.";
+  }
+
+  if (status >= 500) {
+    return "The server encountered an error. Check the backend terminal.";
+  }
 
   if (typeof data === "string" && data.trim()) {
     return data;
   }
 
-  if (data?.detail) {
-    if (typeof data.detail === "string") {
-      return data.detail;
-    }
-
-    if (Array.isArray(data.detail)) {
-      return data.detail
-        .map((e) => {
-          const field =
-            Array.isArray(e?.loc) && e.loc.length
-              ? e.loc[e.loc.length - 1]
-              : "field";
-
-          return `${field}: ${e.msg}`;
-        })
-        .join(" — ");
-    }
+  if (typeof data?.detail === "string") {
+    return data.detail;
   }
 
-  return fallback;
+  return error?.message || `Request failed (${status || "unknown error"})`;
 }
 
 async function request({
@@ -57,90 +78,84 @@ async function request({
   ...config
 }) {
   try {
-    const res = await API.request({
+    const response = await API.request({
       ...config,
       onUploadProgress: onUploadProgress
-        ? (evt) =>
+        ? (event) => {
+            const total = event.total || event.loaded || 1;
             onUploadProgress(
-              Math.round(
-                (evt.loaded * 100) /
-                  (evt.total || evt.loaded)
-              )
-            )
+              Math.round((event.loaded * 100) / total)
+            );
+          }
         : undefined,
     });
 
-    return res.data;
-  } catch (err) {
-    throw new Error(
-      extractErrorMessage(
-        err,
-        `Request failed (${err?.response?.status ?? "network error"})`
-      )
-    );
+    return response.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
   }
 }
 
 export function getRequest(path) {
   return request({
-    url: path,
     method: "GET",
+    url: path,
   });
 }
 
 export function postJson(path, body) {
   return request({
-    url: path,
     method: "POST",
+    url: path,
     data: body,
   });
 }
 
-export function postForm(path, formData, onUploadProgress) {
+export function postEmpty(path) {
   return request({
-    url: path,
     method: "POST",
-    data: formData,
-    onUploadProgress,
-    timeout: 0, 
+    url: path,
   });
 }
 
 export function putJson(path, body) {
   return request({
-    url: path,
     method: "PUT",
+    url: path,
     data: body,
-  });
-}
-
-export function putForm(path, formData) {
-  return request({
-    url: path,
-    method: "PUT",
-    data: formData,
   });
 }
 
 export function patchJson(path, body) {
   return request({
-    url: path,
     method: "PATCH",
+    url: path,
     data: body,
   });
 }
 
 export function deleteRequest(path) {
   return request({
-    url: path,
     method: "DELETE",
+    url: path,
   });
 }
 
-export function postEmpty(path) {
+export function postForm(path, formData, onUploadProgress) {
   return request({
-    url: path,
     method: "POST",
+    url: path,
+    data: formData,
+    timeout: 0,
+    onUploadProgress,
+  });
+}
+
+export function putForm(path, formData) {
+  return request({
+    method: "PUT",
+    url: path,
+    data: formData,
   });
 }
 
