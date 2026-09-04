@@ -96,16 +96,13 @@ export function postJson(path, body) {
   });
 }
 
-export function postForm(
-  path,
-  formData,
-  onUploadProgress
-) {
+export function postForm(path, formData, onUploadProgress) {
   return request({
     url: path,
     method: "POST",
     data: formData,
     onUploadProgress,
+    timeout: 0, 
   });
 }
 

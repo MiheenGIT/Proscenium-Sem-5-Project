@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
 from bson.errors import InvalidId
 from datetime import datetime
+from models.schemas import ApproveVideoRequest, RejectVideoRequest
 
 from utils.security import require_role
 from database import film_collection, comments_collection, notifications_collection, viewers_collection

@@ -1061,59 +1061,45 @@ async def upload_vid(
     )
 
     if source_width <= 0 or source_height <= 0:
-        shutil.rmtree(
-            video_media_folder,
-            ignore_errors=True,
-        )
-
         raise HTTPException(
             status_code=400,
             detail="Could not determine uploaded video resolution.",
         )
 
     # ========================================================
-    # THUMBNAIL
+    # THUMBNAIL, AI UPSCALING, HLS
     # ========================================================
+    # Wrapped together so media/<video_id> is always removed on
+    # the way out — success or exception. Previously cleanup only
+    # ran on the happy path, so any failed upscale/transcode left
+    # original.mp4 + ai_upscaled.mp4 on disk permanently.
 
-    thumbnail_url = _prepare_thumbnail(
-        thumbnail_file=thumbnail,
-        raw_path=raw_path,
-        video_id=video_id,
-        media_folder=video_media_folder,
-        duration_sec=duration_sec,
-    )
+    try:
+        thumbnail_url = _prepare_thumbnail(
+            thumbnail_file=thumbnail,
+            raw_path=raw_path,
+            video_id=video_id,
+            media_folder=video_media_folder,
+            duration_sec=duration_sec,
+        )
 
-    # ========================================================
-    # AI UPSCALING
-    # ========================================================
+        hls_input = await _prepare_hls_input(
+            raw_path=raw_path,
+            raw_folder=raw_folder,
+            source_height=source_height,
+            use_upscale=use_upscale,
+        )
 
-    hls_input = await _prepare_hls_input(
-        raw_path=raw_path,
-        raw_folder=raw_folder,
-        source_height=source_height,
-        use_upscale=use_upscale,
-    )
-
-    # ========================================================
-    # HLS
-    # ========================================================
-
-    renditions, master_url = _build_hls(
-        raw_path=raw_path,
-        raw_folder=raw_folder,
-        video_id=video_id,
-        hls_input=hls_input,
-    )
-
-    # ========================================================
-    # CLEAN LOCAL MEDIA
-    # ========================================================
-
-    if os.path.exists(
-        video_media_folder
-    ):
+        renditions, master_url = _build_hls(
+            raw_path=raw_path,
+            raw_folder=raw_folder,
+            video_id=video_id,
+            hls_input=hls_input,
+        )
+    finally:
         shutil.rmtree(
-            video_media_folder
+            video_media_folder,
+            ignore_errors=True,
         )
 
     # ========================================================
@@ -1414,59 +1400,46 @@ async def reupload_video(
         )
 
     # ========================================================
-    # THUMBNAIL
+    # THUMBNAIL, AI UPSCALING, HLS
     # ========================================================
 
-    new_thumbnail_url = None
+    try:
+        new_thumbnail_url = None
 
-    if (
-        thumbnail is not None
-        and getattr(
-            thumbnail,
-            "filename",
-            "",
-        )
-    ):
+        if (
+            thumbnail is not None
+            and getattr(
+                thumbnail,
+                "filename",
+                "",
+            )
+        ):
 
-        new_thumbnail_url = _prepare_thumbnail(
-            thumbnail_file=thumbnail,
+            new_thumbnail_url = _prepare_thumbnail(
+                thumbnail_file=thumbnail,
+                raw_path=raw_path,
+                video_id=video_id,
+                media_folder=video_media_folder,
+                duration_sec=duration_sec,
+            )
+
+        hls_input = await _prepare_hls_input(
             raw_path=raw_path,
-            video_id=video_id,
-            media_folder=video_media_folder,
-            duration_sec=duration_sec,
+            raw_folder=raw_folder,
+            source_height=source_height,
+            use_upscale=True,
         )
 
-    # ========================================================
-    # AI UPSCALING
-    # ========================================================
-
-    hls_input = await _prepare_hls_input(
-        raw_path=raw_path,
-        raw_folder=raw_folder,
-        source_height=source_height,
-        use_upscale=True,
-    )
-
-    # ========================================================
-    # HLS
-    # ========================================================
-
-    renditions, master_url = _build_hls(
-        raw_path=raw_path,
-        raw_folder=raw_folder,
-        video_id=video_id,
-        hls_input=hls_input,
-    )
-
-    # ========================================================
-    # CLEAN LOCAL FILES
-    # ========================================================
-
-    if os.path.exists(
-        video_media_folder
-    ):
+        renditions, master_url = _build_hls(
+            raw_path=raw_path,
+            raw_folder=raw_folder,
+            video_id=video_id,
+            hls_input=hls_input,
+        )
+    finally:
         shutil.rmtree(
-            video_media_folder
+            video_media_folder,
+            ignore_errors=True,
         )
 
     # ========================================================
