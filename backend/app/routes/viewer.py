@@ -171,6 +171,13 @@ def _get_unique_views(video_id: ObjectId) -> int:
     return video_views_collection.count_documents({"videoId": video_id})
 
 
+def _score_by_history(video: dict, history_tags_genres: set) -> int:
+    video_tags_genres = set(video.get("tags", [])) | set(video.get("genres", []))
+    return len(video_tags_genres & history_tags_genres)
+
+
+# ---------------- Browse / search ----------------
+
 @router.get("/videos")
 def browse_videos(
     page: int = Query(1, ge=1),
@@ -178,34 +185,37 @@ def browse_videos(
     genre: Optional[str] = Query(None),
     payload: dict = Depends(require_role("viewer")),
 ):
-    query = {
-        "moderationStatus": "approved",
-        "visibility": "public",
-    }
-    query.update(_maturity_filter(payload))
-
+    viewer = _viewer_or_404(payload)
+    query = {"moderationStatus": "approved", "visibility": "public"}
+    if viewer.get("maturitySetting", "all") != "mature":
+        query["ageRestricted"] = {"$ne": True}
     if genre:
         query["genres"] = {
             "$regex": f"^{genre.strip()}$",
             "$options": "i",
         }
 
-    skip = (page - 1) * limit
     total = film_collection.count_documents(query)
+    skip = (page - 1) * limit
 
-    videos = list(
-        film_collection.find(query)
-        .sort("publishedAt", -1)
-        .skip(skip)
-        .limit(limit)
-    )
+    history_tags_genres = set()
+    for entry in viewer.get("recentWatched", []):
+        history_tags_genres.update(entry.get("tags", []))
+        history_tags_genres.update(entry.get("genres", []))
 
-    return {
-        "count": total,
-        "page": page,
-        "limit": limit,
-        "videos": [_serialize_summary(v) for v in videos],
-    }
+    if not history_tags_genres:
+        videos = list(
+            film_collection.find(query)
+            .sort("publishedAt", -1)
+            .skip(skip)
+            .limit(limit)
+        )
+        return {"count": total, "page": page, "limit": limit, "videos": [_serialize_summary(v) for v in videos]}
+
+    candidates = list(film_collection.find(query).sort("publishedAt", -1).limit(500))
+    candidates.sort(key=lambda v: _score_by_history(v, history_tags_genres), reverse=True)
+    page_videos = candidates[skip: skip + limit]
+    return {"count": total, "page": page, "limit": limit, "videos": [_serialize_summary(v) for v in page_videos]}
 
 
 @router.get("/genres")
@@ -394,6 +404,7 @@ def watch_video(
 HEARTBEAT_MAX_GAP_SECONDS = 15
 VIEW_THRESHOLD_FRACTION = 0.75
 PLAYBACK_DRIFT_TOLERANCE = 5
+RECOMMENDATION_HISTORY_CAP = 30
 
 
 @router.post("/videos/{video_id}/heartbeat")
@@ -545,6 +556,26 @@ def watch_heartbeat(
             film_collection.update_one(
                 {"_id": oid},
                 {"$inc": {"views": 1}},
+            )
+
+        already_in_history = any(
+            entry.get("videoId") == oid
+            for entry in viewer.get("recentWatched", [])
+        )
+
+        if not already_in_history:
+            viewers_collection.update_one(
+                {"_id": viewer["_id"]},
+                {"$push": {
+                    "recentWatched": {
+                        "$each": [{
+                            "videoId": oid,
+                            "tags": video.get("tags", []),
+                            "genres": video.get("genres", [])
+                        }],
+                        "$slice": -RECOMMENDATION_HISTORY_CAP
+                    }
+                }},
             )
 
     return {
