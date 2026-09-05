@@ -7,6 +7,45 @@ import {
 
 import RequireRole from "./components/RequireRole.jsx";
 
+function getStoredRole() {
+  try {
+    const raw = localStorage.getItem("proscenium_auth");
+    const auth = raw ? JSON.parse(raw) : null;
+
+    if (!auth?.token) return null;
+
+    const payload = JSON.parse(
+      atob(auth.token.split(".")[1])
+    );
+
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return null;
+    }
+
+    return payload.role || null;
+  } catch {
+    return null;
+  }
+}
+
+function RootRedirect() {
+  const role = getStoredRole();
+
+  if (role === "admin") {
+    return <Navigate to="/admin" replace />;
+  }
+
+  if (role === "director") {
+    return <Navigate to="/director" replace />;
+  }
+
+  if (role === "viewer") {
+    return <Navigate to="/viewer" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
+
 import Login from "./pages/Auth-panel/Login.jsx";
 import Register from "./pages/Auth-panel/Register.jsx";
 
@@ -149,12 +188,7 @@ export default function App() {
 
       <Route
         path="/"
-        element={
-          <Navigate
-            to="/viewer"
-            replace
-          />
-        }
+        element={<RootRedirect />}
       />
 
       <Route

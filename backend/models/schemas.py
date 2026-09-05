@@ -200,3 +200,30 @@ class CastMember(BaseModel):
     name: str
     characterName: str
     photoUrl: Optional[str] = None
+
+class ContentWarningsRequest(BaseModel):
+    contentWarnings: list[str] = Field(default_factory=list)
+
+
+class AgeRestrictionRequest(BaseModel):
+    ageRestricted: bool
+
+
+class FeaturedRequest(BaseModel):
+    isFeatured: bool
+
+
+class AdminNoteRequest(BaseModel):
+    note: str = Field(min_length=1, max_length=2000)
+
+
+class DirectorSuspendRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class BulkApproveRequest(ApproveVideoRequest):
+    videoIds: list[str] = Field(min_length=1, max_length=200)
+
+
+class BulkRejectRequest(RejectVideoRequest):
+    videoIds: list[str] = Field(min_length=1, max_length=200)

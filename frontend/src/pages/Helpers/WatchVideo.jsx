@@ -3,7 +3,7 @@ import { useParams, useNavigate, NavLink } from "react-router-dom";
 import Plyr from "plyr";
 import Hls from "hls.js";
 import "plyr/dist/plyr.css";
-import { getRequest, deleteRequest } from "../../api/client";
+import { getRequest, deleteRequest, postEmpty } from "../../api/client";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 function StatusBadge({ status }) {
@@ -81,6 +81,9 @@ export default function WatchVideo() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showModerationNotice, setShowModerationNotice] = useState(false);
+  const [resubmitting, setResubmitting] = useState(false);
+  const [resubmitError, setResubmitError] = useState(null);
 
   async function handleDelete() {
     setConfirmingDelete(false);
@@ -102,7 +105,12 @@ export default function WatchVideo() {
     let cancelled = false;
     getRequest(`/directors/videos/${id}`)
       .then((data) => {
-        if (!cancelled) setVideo(data);
+        if (!cancelled) {
+          setVideo(data);
+          if (data.moderationStatus === "rejected") {
+            setShowModerationNotice(true);
+          }
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || "Failed to load video");
@@ -111,6 +119,19 @@ export default function WatchVideo() {
       cancelled = true;
     };
   }, [id]);
+
+  async function handleResubmit() {
+    setResubmitError(null);
+    setResubmitting(true);
+    try {
+      await postEmpty(`/directors/videos/${id}/resubmit`);
+      setVideo((prev) => ({ ...prev, moderationStatus: "pending", moderationComment: null }));
+    } catch (err) {
+      setResubmitError(err.message || "Resubmit failed");
+    } finally {
+      setResubmitting(false);
+    }
+  }
 
   useEffect(() => {
     if (!video?.hlsManifestUrl || !videoRef.current) return;
@@ -425,6 +446,43 @@ export default function WatchVideo() {
       {deleteError && (
         <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-[3px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
           {deleteError}
+        </div>
+      )}
+
+      {showModerationNotice && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(16,13,16,0.75)] p-4">
+          <div className="w-full max-w-md rounded-[4px] border border-[rgba(224,138,107,0.4)] bg-[#17131a] p-6">
+            <p className="mb-2 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--error)]">
+              This film was rejected
+            </p>
+            <p className="mb-4 text-sm leading-relaxed text-[var(--parchment)]">
+              {video.moderationComment || "No reason was provided by the reviewer."}
+            </p>
+            {formatDate(video.moderatedAt) && (
+              <p className="mb-5 text-xs text-[var(--mauve)]">
+                Reviewed on {formatDate(video.moderatedAt)}
+              </p>
+            )}
+            <button
+              onClick={() => setShowModerationNotice(false)}
+              className="w-full rounded-[3px] bg-[var(--gold)] py-2.5 text-sm font-semibold text-[#1a1210] hover:bg-[var(--gold-soft)]"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!showModerationNotice && video.moderationStatus === "rejected" && (
+        <div className="fixed bottom-6 left-1/2 z-[90] flex -translate-x-1/2 flex-col items-center gap-2">
+          <button
+            onClick={handleResubmit}
+            disabled={resubmitting}
+            className="rounded-[3px] border border-[rgba(217,166,83,0.4)] bg-[#17131a] px-5 py-2.5 font-[var(--font-mono)] text-[0.72rem] uppercase tracking-[0.06em] text-[var(--gold-soft)] hover:bg-[rgba(217,166,83,0.1)] disabled:opacity-50"
+          >
+            {resubmitting ? "Resubmitting…" : "Resubmit for review"}
+          </button>
+          {resubmitError && <p className="text-xs text-[var(--error)]">{resubmitError}</p>}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import React from "react";
-import {Bookmark,Compass,Film,Globe2,Heart,History,Home,Languages,LogOut,Menu,Sparkles,Star,TrendingUp,User,Settings,X,} from "lucide-react";
+import {Bookmark,Compass,Film,Globe2,Heart,History,Home,Languages,LogOut,Sparkles,Star,TrendingUp,User,Settings,X,} from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 
@@ -64,7 +64,8 @@ export default function Sidebar({
       >
         <Brand
           collapsed={collapsed}
-          onClick={() => navigate("/viewer")}
+          onToggle={() => setCollapsed((value) => !value)}
+          onNavigate={() => navigate("/viewer")}
         />
 
         <div className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -145,14 +146,6 @@ export default function Sidebar({
         </div>
       </aside>
 
-      <button
-        onClick={() => setCollapsed((value) => !value)}
-        className="fixed left-3 top-4 z-[80] hidden h-9 w-9 place-items-center rounded-xl border border-white/10 bg-[#171216]/90 text-[#c6bbbe] backdrop-blur lg:grid"
-        aria-label="Toggle sidebar"
-      >
-        <Menu size={16} />
-      </button>
-
       {mobileOpen && (
         <div
           className="fixed inset-0 z-[90] bg-black/70 lg:hidden"
@@ -165,7 +158,7 @@ export default function Sidebar({
             <div className="flex items-center justify-between">
               <Brand
                 collapsed={false}
-                onClick={() => {
+                onNavigate={() => {
                   navigate("/viewer");
                   setMobileOpen(false);
                 }}
@@ -225,20 +218,27 @@ export default function Sidebar({
   );
 }
 
-function Brand({ collapsed, onClick }) {
+function Brand({ collapsed, onToggle, onNavigate }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex h-[76px] items-center gap-3 border-b border-white/[0.07] px-4 text-left ${
+    <div
+      className={`flex h-[76px] items-center gap-3 border-b border-white/[0.07] px-4 ${
         collapsed ? "justify-center" : ""
       }`}
     >
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5c1220] text-[#d9a653]">
+      <button
+        onClick={onToggle || onNavigate}
+        title={onToggle ? (collapsed ? "Expand sidebar" : "Collapse sidebar") : undefined}
+        aria-label={onToggle ? "Toggle sidebar" : "Proscenium home"}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5c1220] text-[#d9a653] transition hover:bg-[#6d1627]"
+      >
         <Film size={17} />
-      </span>
+      </button>
 
       {!collapsed && (
-        <span>
+        <button
+          onClick={onNavigate}
+          className="text-left"
+        >
           <b className="block font-[var(--font-display)] text-lg text-[#efe7da]">
             Proscenium
           </b>
@@ -246,9 +246,9 @@ function Brand({ collapsed, onClick }) {
           <small className="font-[var(--font-mono)] text-[7px] uppercase tracking-[.18em] text-[#71656a]">
             The Viewer House
           </small>
-        </span>
+        </button>
       )}
-    </button>
+    </div>
   );
 }
 
