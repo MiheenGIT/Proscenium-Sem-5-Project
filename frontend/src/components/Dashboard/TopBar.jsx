@@ -5,7 +5,10 @@ import { getRequest } from "../../api/client.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { Avatar } from "./Sidebar.jsx";
 
-export default function TopBar({ onMenu }) {
+export default function TopBar({
+  collapsed,
+  onMenu,
+}) {
   const { auth, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,7 +60,18 @@ export default function TopBar({ onMenu }) {
   }, [location.pathname]);
 
   return (
-    <header className="sticky top-0 z-50 flex h-[76px] items-center gap-3 border-b border-white/[0.07] bg-[#100d10]/85 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+  <header
+  className={`fixed top-0 right-0 z-[100] flex h-[76px]
+  items-center gap-3 border-b border-white/[0.07]
+  bg-[#100d10]/85 backdrop-blur-xl
+  px-4 sm:px-6 lg:px-8
+  transition-all duration-300
+  ${
+    collapsed
+      ? "lg:left-[76px]"
+      : "lg:left-[240px]"
+  }`}
+>
       <button
         onClick={onMenu}
         className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.04] text-[#d0c4c7] lg:hidden"
@@ -99,7 +113,7 @@ export default function TopBar({ onMenu }) {
         </div>
 
         {open && q && (
-          <div className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-2xl border border-white/10 bg-[#171216]/98 p-2 shadow-2xl backdrop-blur-xl">
+          <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[110] overflow-hidden rounded-2xl border border-white/10 bg-[#171216]/98 p-2 shadow-2xl backdrop-blur-xl">
             {loading ? (
               <div className="p-4 text-xs text-[#8b7c82]">
                 Searching…
@@ -144,7 +158,7 @@ export default function TopBar({ onMenu }) {
       <div className="ml-auto flex items-center gap-2">
         <button
           onClick={() =>
-            navigate("/viewer/notifications")
+            navigate("/notifications")
           }
           className="relative grid h-9 w-9 place-items-center rounded-xl bg-white/[0.04] text-[#b8acb0] hover:text-[#d9a653]"
           aria-label="Notifications"
@@ -175,23 +189,23 @@ export default function TopBar({ onMenu }) {
           </button>
 
           {menu && (
-            <div className="absolute right-0 top-[calc(100%+8px)] w-44 rounded-2xl border border-white/10 bg-[#171216] p-2 shadow-2xl">
+            <div className="absolute right-0 top-[calc(100%+8px)] z-[110] w-44 rounded-2xl border border-white/10 bg-[#171216] p-2 shadow-2xl">
               <button
-                onClick={() => navigate("/viewer/profile")}
+                onClick={() => navigate("/profile")}
                 className="w-full rounded-xl px-3 py-2.5 text-left text-[10px] text-[#b9aeb1] hover:bg-white/[0.05]"
               >
                 Profile
               </button>
 
               <button
-                onClick={() => navigate("/viewer/settings")}
+                onClick={() => navigate("/settings")}
                 className="w-full rounded-xl px-3 py-2.5 text-left text-[10px] text-[#b9aeb1] hover:bg-white/[0.05]"
               >
                 Settings
               </button>
 
               <button
-                onClick={() => navigate("/viewer/watchlist")}
+                onClick={() => navigate("/watchlist")}
                 className="w-full rounded-xl px-3 py-2.5 text-left text-[10px] text-[#b9aeb1] hover:bg-white/[0.05]"
               >
                 Watchlist

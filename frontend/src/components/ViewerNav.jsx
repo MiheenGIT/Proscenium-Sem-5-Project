@@ -11,9 +11,9 @@ export default function ViewerNav() {
 
   const items = [
     ["Home", "/viewer", Film],
-    ["History", "/viewer/history", History],
-    ["Watchlist", "/viewer/watchlist", Bookmark],
-    ["Profile", "/viewer/profile", User],
+    ["History", "/history", History],
+    ["Watchlist", "/watchlist", Bookmark],
+    ["Profile", "/profile", User],
   ];
 
   function signOut() {

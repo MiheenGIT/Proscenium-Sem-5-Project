@@ -8,34 +8,34 @@ const groups = [
     "DISCOVER",
     [
       ["Home", "/viewer", Home],
-      ["For You", "/viewer/for-you", Sparkles],
-      ["Trending", "/viewer/trending", TrendingUp],
-      ["Explore", "/viewer/explore", Compass],
+      ["For You", "/for-you", Sparkles],
+      ["Trending", "/trending", TrendingUp],
+      ["Explore", "/explore", Compass],
     ],
   ],
   [
     "YOUR CINEMA",
     [
-      ["Continue Watching", "/viewer#continue", Film],
-      ["Watchlist", "/viewer/watchlist", Bookmark],
-      ["History", "/viewer/history", History],
-      ["Liked Videos", "/viewer/liked", Heart],
-      ["My Reviews", "/viewer/reviews", Star],
+      ["Continue Watching", "/viewer", Film],
+      ["Watchlist", "/watchlist", Bookmark],
+      ["History", "/history", History],
+      ["Liked Videos", "/liked", Heart],
+      ["My Reviews", "/reviews", Star],
     ],
   ],
   [
     "PERSONALIZE",
     [
-      ["Genre Preferences", "/viewer/preferences/genres", Sparkles],
-      ["Language Preferences", "/viewer/preferences/languages", Languages],
+      ["Genre Preferences", "/preferences/genres", Sparkles],
+      ["Language Preferences", "/preferences/languages", Languages],
     ],
   ],
   [
     "ACCOUNT",
     [
-      ["Profile", "/viewer/profile", User],
-      ["Settings", "/viewer/settings", Settings],
-      ["Help & Support", "/viewer/help", Globe2],
+      ["Profile", "/profile", User],
+      ["Settings", "/settings", Settings],
+      ["Help & Support", "/help", Globe2],
     ],
   ],
 ];
@@ -58,7 +58,7 @@ export default function Sidebar({
   return (
     <>
       <aside
-        className={`fixed left-0 top-0 z-[70] hidden h-screen flex-col border-r border-white/[0.07] bg-[#100d10]/95 backdrop-blur-xl transition-all duration-300 lg:flex ${
+        className={`fixed left-0 top-0 z-[80] hidden h-screen flex-col border-r border-white/[0.07] bg-[#100d10]/95 backdrop-blur-xl transition-all duration-300 lg:flex ${
           collapsed ? "w-[76px]" : "w-[240px]"
         }`}
       >
@@ -111,7 +111,7 @@ export default function Sidebar({
 
         <div className="border-t border-white/[0.07] p-3">
           <button
-            onClick={() => navigate("/viewer/profile")}
+            onClick={() => navigate("/profile")}
             className={`flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-white/[0.04] ${
               collapsed ? "justify-center" : ""
             }`}
@@ -153,7 +153,7 @@ export default function Sidebar({
         >
           <aside
             onClick={(event) => event.stopPropagation()}
-            className="h-full w-[285px] border-r border-white/10 bg-[#100d10] p-4"
+            className="h-full w-[85vw] max-w-[285px] border-r border-white/10 bg-[#100d10] p-4"
           >
             <div className="flex items-center justify-between">
               <Brand

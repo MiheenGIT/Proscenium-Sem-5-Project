@@ -23,10 +23,14 @@ export default function DashboardLayout({ children }) {
         }`}
       >
         <TopBar
-          onMenu={() => setMobileOpen(true)}
-        />
+  collapsed={collapsed}
+  onMenu={() => setMobileOpen(true)}
+/>
 
-        {children}
+       <main className="pt-[76px]">
+  {children}
+</main>
+
       </div>
     </div>
   );
