@@ -148,6 +148,13 @@ function FilmCard({
             <Bookmark size={15} />
           )}
         </button>
+
+        {video.isFeatured && (
+          <span className="absolute left-2.5 top-2.5 flex items-center gap-1 rounded-full border border-[#d9a653]/50 bg-black/60 px-2 py-1 text-[8px] font-semibold uppercase tracking-[.08em] text-[#d9a653] backdrop-blur">
+            <Star size={9} fill="currentColor" />
+            Featured
+          </span>
+        )}
       </div>
 
       <div className="px-1 pt-3">

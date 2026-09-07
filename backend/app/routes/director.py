@@ -1940,6 +1940,9 @@ async def get_my_video(
     # OBJECT IDS
     # ========================================================
 
+    # adminNotes is internal-only — never surfaced to directors.
+    video.pop("adminNotes", None)
+
     video["_id"] = str(
         video["_id"]
     )

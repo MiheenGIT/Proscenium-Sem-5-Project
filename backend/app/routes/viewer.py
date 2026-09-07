@@ -143,6 +143,7 @@ def _serialize_summary(video: dict) -> dict:
         "language": video.get("language"),
         "durationSec": video.get("durationSec", 0),
         "ageRestricted": video.get("ageRestricted", False),
+        "isFeatured": video.get("isFeatured", False),
         "avgRating": video.get("avgRating", 0),
         "reviewCount": video.get("reviewCount", 0),
         "views": video.get("views", 0),

@@ -6,7 +6,6 @@ import React, {
 import {
   AlertTriangle,
   Check,
-  Eye,
   Play,
   RefreshCw,
   RotateCcw,
@@ -21,7 +20,6 @@ import {
   postJson,
   putJson,
 } from "../../api/client.js";
-import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 import AdminVideoPlayer from "../../components/admin/AdminVideoPlayer.jsx";
 
 function normalizeVideos(data) {
@@ -38,20 +36,20 @@ function normalizeVideos(data) {
   return [];
 }
 
-function statusClass(status) {
-  if (status === "approved") {
-    return "border-[#7fc59b]/25 text-[#7fc59b]";
-  }
+const STATUS_META = {
+  approved: { dot: "bg-[#7fc59b]", text: "text-[#7fc59b]", ring: "border-[#7fc59b]/25" },
+  rejected: { dot: "bg-[#e08a6b]", text: "text-[#e08a6b]", ring: "border-[#e08a6b]/25" },
+  pending: { dot: "bg-[#d9a653]", text: "text-[#d9a653]", ring: "border-[#d9a653]/25" },
+  unknown: { dot: "bg-[#a99da1]", text: "text-[#a99da1]", ring: "border-white/[0.1]" },
+};
 
-  if (status === "rejected") {
-    return "border-[#e08a6b]/25 text-[#e08a6b]";
-  }
+function statusMeta(status) {
+  return STATUS_META[status] || STATUS_META.unknown;
+}
 
-  if (status === "pending") {
-    return "border-[#d9a653]/25 text-[#d9a653]";
-  }
-
-  return "border-white/[0.1] text-[#a99da1]";
+function shortId(id) {
+  if (!id) return "—";
+  return `${String(id).slice(0, 6)}…${String(id).slice(-4)}`;
 }
 
 export default function Content() {
@@ -566,6 +564,10 @@ export default function Content() {
     }
   }
 
+  const allVisibleSelected =
+    filteredVideos.length > 0 &&
+    filteredVideos.every((v) => selectedIds.has(v._id));
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -579,8 +581,7 @@ export default function Content() {
           </h2>
 
           <p className="mt-2 text-sm text-[#8b7c82]">
-            Watch and moderate videos returned by
-            the existing Admin API.
+            Click a frame to open its full record.
           </p>
         </div>
 
@@ -634,14 +635,27 @@ export default function Content() {
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
+
+        <button
+          onClick={() => {
+            if (allVisibleSelected) {
+              setSelectedIds(new Set());
+            } else {
+              setSelectedIds(
+                new Set(filteredVideos.map((v) => v._id))
+              );
+            }
+          }}
+          className="whitespace-nowrap rounded-xl border border-white/[0.08] px-4 py-3 font-[var(--font-mono)] text-[10px] uppercase tracking-[.1em] text-[#b8acb0]"
+        >
+          {allVisibleSelected ? "Deselect all" : "Select all"}
+        </button>
       </div>
 
       {selectedIds.size > 0 && (
         <div className="mb-4 flex items-center justify-between rounded-xl border border-[#d9a653]/25 bg-[#d9a653]/[0.06] px-4 py-3">
-          <p className="text-xs text-[#d9a653]">
-            {selectedIds.size} video
-            {selectedIds.size === 1 ? "" : "s"}{" "}
-            selected
+          <p className="font-[var(--font-mono)] text-[10px] uppercase tracking-[.14em] text-[#d9a653]">
+            {selectedIds.size} selected
           </p>
 
           <div className="flex gap-2">
@@ -651,7 +665,7 @@ export default function Content() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#d9a653] px-3 py-2 text-[9px] font-semibold uppercase tracking-[.08em] text-[#100d10] disabled:opacity-50"
             >
               <Check size={12} />
-              Approve selected
+              Approve
             </button>
 
             <button
@@ -660,7 +674,7 @@ export default function Content() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-[#e08a6b]/30 px-3 py-2 text-[9px] uppercase tracking-[.08em] text-[#e08a6b] disabled:opacity-50"
             >
               <X size={12} />
-              Reject selected
+              Reject
             </button>
 
             <button
@@ -674,246 +688,37 @@ export default function Content() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025]">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left">
-            <thead className="border-b border-white/[0.07] text-[9px] uppercase tracking-[.14em] text-[#71656a]">
-              <tr>
-                <th className="px-4 py-4">
-                  <input
-                    type="checkbox"
-                    checked={
-                      filteredVideos.length > 0 &&
-                      filteredVideos.every((v) =>
-                        selectedIds.has(v._id)
-                      )
-                    }
-                    onChange={(event) => {
-                      if (event.target.checked) {
-                        setSelectedIds(
-                          new Set(
-                            filteredVideos.map(
-                              (v) => v._id
-                            )
-                          )
-                        );
-                      } else {
-                        setSelectedIds(new Set());
-                      }
-                    }}
-                  />
-                </th>
-                <th className="px-4 py-4">
-                  Video
-                </th>
-                <th className="px-4 py-4">
-                  Director
-                </th>
-                <th className="px-4 py-4">
-                  Status
-                </th>
-                <th className="px-4 py-4">
-                  Uploaded
-                </th>
-                <th className="px-4 py-4 text-right">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-white/[0.06]">
-              {loading ? (
-                [1, 2, 3, 4].map((item) => (
-                  <tr key={item}>
-                    <td
-                      colSpan="6"
-                      className="px-4 py-4"
-                    >
-                      <div className="h-14 animate-pulse rounded-xl bg-white/[0.04]" />
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                filteredVideos.map((video) => {
-                  const videoStatus =
-                    video.moderationStatus ||
-                    "unknown";
-
-                  return (
-                    <tr
-                      key={video._id}
-                      className="hover:bg-white/[0.02]"
-                    >
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(
-                            video._id
-                          )}
-                          onChange={() =>
-                            toggleSelect(video._id)
-                          }
-                        />
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <img
-                              src={
-                                video.thumbnailUrl ||
-                                ""
-                              }
-                              alt=""
-                              className="h-14 w-24 rounded-lg bg-white/[0.04] object-cover"
-                            />
-
-                            <span className="absolute inset-0 grid place-items-center">
-                              <span className="grid h-7 w-7 place-items-center rounded-full bg-black/65 text-[#d9a653]">
-                                <Play
-                                  size={12}
-                                  fill="currentColor"
-                                />
-                              </span>
-                            </span>
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="max-w-[300px] truncate text-xs text-[#e5dcde]">
-                              {video.title ||
-                                "Untitled video"}
-                            </p>
-
-                            <p className="mt-1 text-[9px] text-[#71656a]">
-                              {video.language ||
-                                "Language unavailable"}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3 text-xs text-[#a99da1]">
-                        {video.directorId ||
-                          "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-[9px] uppercase tracking-[.08em] ${statusClass(
-                            videoStatus
-                          )}`}
-                        >
-                          {videoStatus}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-xs text-[#8b7c82]">
-                        {video.uploadedAt
-                          ? new Date(
-                              video.uploadedAt
-                            ).toLocaleDateString()
-                          : "—"}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() =>
-                              openVideo(video)
-                            }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-2.5 py-2 text-[9px] uppercase tracking-[.08em] text-[#b8acb0] hover:border-[#d9a653]/40"
-                          >
-                            <Eye size={12} />
-                            Watch
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              toggleFeatured(video)
-                            }
-                            disabled={featuredBusy}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-[9px] uppercase tracking-[.08em] disabled:opacity-50 ${
-                              video.isFeatured
-                                ? "border-[#d9a653]/50 text-[#d9a653]"
-                                : "border-white/[0.08] text-[#b8acb0]"
-                            }`}
-                          >
-                            <Star
-                              size={12}
-                              fill={
-                                video.isFeatured
-                                  ? "currentColor"
-                                  : "none"
-                              }
-                            />
-                            {video.isFeatured
-                              ? "Featured"
-                              : "Feature"}
-                          </button>
-
-                          {videoStatus ===
-                            "pending" && (
-                            <>
-                              <button
-                                onClick={() =>
-                                  askModeration(
-                                    "approve",
-                                    video
-                                  )
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-[#d9a653] px-2.5 py-2 text-[9px] font-semibold uppercase tracking-[.08em] text-[#100d10]"
-                              >
-                                <Check size={12} />
-                                Approve
-                              </button>
-
-                              <button
-                                onClick={() =>
-                                  askModeration(
-                                    "reject",
-                                    video
-                                  )
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#e08a6b]/25 px-2.5 py-2 text-[9px] uppercase tracking-[.08em] text-[#e08a6b]"
-                              >
-                                <X size={12} />
-                                Reject
-                              </button>
-                            </>
-                          )}
-
-                          {videoStatus !==
-                            "pending" && (
-                            <button
-                              onClick={() =>
-                                askModeration(
-                                  "reset",
-                                  video
-                                )
-                              }
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-2.5 py-2 text-[9px] uppercase tracking-[.08em] text-[#b8acb0]"
-                            >
-                              <RotateCcw size={12} />
-                              Reset
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      {loading ? (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((item) => (
+            <div
+              key={item}
+              className="h-[280px] animate-pulse rounded-2xl bg-white/[0.04]"
+            />
+          ))}
         </div>
-
-        {!loading &&
-          !filteredVideos.length && (
-            <div className="p-12 text-center">
-              <FilmEmpty />
-            </div>
-          )}
-      </div>
+      ) : filteredVideos.length ? (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filteredVideos.map((video) => (
+            <FrameCard
+              key={video._id}
+              video={video}
+              selected={selectedIds.has(video._id)}
+              onToggleSelect={() => toggleSelect(video._id)}
+              onOpen={() => openVideo(video)}
+              onToggleFeatured={() => toggleFeatured(video)}
+              featuredBusy={featuredBusy}
+              onApprove={() => askModeration("approve", video)}
+              onReject={() => askModeration("reject", video)}
+              onReset={() => askModeration("reset", video)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-12 text-center">
+          <FilmEmpty />
+        </div>
+      )}
 
       {selected && (
         <div
@@ -1307,6 +1112,143 @@ export default function Content() {
         />
       )}
     </div>
+  );
+}
+
+function FrameCard({
+  video,
+  selected,
+  onToggleSelect,
+  onOpen,
+  onToggleFeatured,
+  featuredBusy,
+  onApprove,
+  onReject,
+  onReset,
+}) {
+  const meta = statusMeta(video.moderationStatus || "unknown");
+  const isPending = video.moderationStatus === "pending";
+
+  return (
+    <article
+      className={`group overflow-hidden rounded-2xl border bg-white/[0.025] transition ${
+        selected
+          ? "border-[#d9a653]/50 shadow-[0_0_0_1px_rgba(217,166,83,.25)]"
+          : "border-white/[0.08]"
+      }`}
+    >
+      <div className="relative">
+        <button
+          onClick={onOpen}
+          className="block w-full"
+          aria-label={`Open ${video.title || "video"}`}
+        >
+          <img
+            src={video.thumbnailUrl || ""}
+            alt=""
+            className="aspect-video w-full bg-black object-cover transition group-hover:brightness-110"
+          />
+        </button>
+
+        {/* HUD corner brackets */}
+        <span className="pointer-events-none absolute left-2 top-2 h-4 w-4 border-l border-t border-[#d9a653]/60" />
+        <span className="pointer-events-none absolute right-2 top-2 h-4 w-4 border-r border-t border-[#d9a653]/60" />
+        <span className="pointer-events-none absolute bottom-2 left-2 h-4 w-4 border-b border-l border-[#d9a653]/60" />
+        <span className="pointer-events-none absolute bottom-2 right-2 h-4 w-4 border-b border-r border-[#d9a653]/60" />
+
+        <span className="pointer-events-none absolute inset-0 grid place-items-center opacity-0 transition group-hover:opacity-100">
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-black/70 text-[#d9a653]">
+            <Play size={16} fill="currentColor" />
+          </span>
+        </span>
+
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleSelect();
+          }}
+          className={`absolute left-3 top-3 grid h-6 w-6 place-items-center rounded-md border text-[10px] font-bold backdrop-blur ${
+            selected
+              ? "border-[#d9a653] bg-[#d9a653] text-[#100d10]"
+              : "border-white/30 bg-black/40 text-transparent"
+          }`}
+          aria-label={selected ? "Deselect" : "Select"}
+        >
+          {selected ? "✓" : ""}
+        </button>
+
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFeatured();
+          }}
+          disabled={featuredBusy}
+          className={`absolute right-3 top-3 grid h-6 w-6 place-items-center rounded-md border backdrop-blur disabled:opacity-50 ${
+            video.isFeatured
+              ? "border-[#d9a653] bg-[#d9a653]/90 text-[#100d10]"
+              : "border-white/30 bg-black/40 text-[#d9a653]"
+          }`}
+          aria-label="Toggle featured"
+        >
+          <Star size={12} fill={video.isFeatured ? "currentColor" : "none"} />
+        </button>
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="min-w-0 truncate text-xs text-[#e5dcde]">
+            {video.title || "Untitled video"}
+          </h3>
+        </div>
+
+        <div className="mt-2 flex items-center gap-1.5 font-[var(--font-mono)] text-[9px] uppercase tracking-[.1em]">
+          <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+          <span className={meta.text}>
+            {video.moderationStatus || "unknown"}
+          </span>
+          <span className="text-[#4d454a]">/</span>
+          <span className="text-[#71656a]">
+            {video.uploadedAt
+              ? new Date(video.uploadedAt).toLocaleDateString()
+              : "—"}
+          </span>
+          <span className="text-[#4d454a]">/</span>
+          <span className="text-[#71656a]">
+            {shortId(video.directorId)}
+          </span>
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          {isPending ? (
+            <>
+              <button
+                onClick={onApprove}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#d9a653] px-2.5 py-2 text-[9px] font-semibold uppercase tracking-[.08em] text-[#100d10]"
+              >
+                <Check size={12} />
+                Approve
+              </button>
+
+              <button
+                onClick={onReject}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#e08a6b]/25 px-2.5 py-2 text-[9px] uppercase tracking-[.08em] text-[#e08a6b]"
+              >
+                <X size={12} />
+                Reject
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onReset}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] px-2.5 py-2 text-[9px] uppercase tracking-[.08em] text-[#b8acb0]"
+            >
+              <RotateCcw size={12} />
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 
