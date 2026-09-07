@@ -6,7 +6,6 @@ import {
   Upload,
   Film,
   Sparkles,
-  Type,
   AlignLeft,
   Tags,
   Globe2,
@@ -30,7 +29,7 @@ const GENRE_OPTIONS = [
 
 function emptyCastMember() {
   return {
-    id: crypto.randomUUID(), // doubles as clientId sent to backend
+    id: crypto.randomUUID(),
     name: "",
     characterName: "",
     photoFile: null,
@@ -38,13 +37,10 @@ function emptyCastMember() {
   };
 }
 
-// ---------- cast slider ----------
-
 function CastSlider({ cast, setCast }) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    // keep index in range as members are added/removed
     if (index >= cast.length) setIndex(Math.max(0, cast.length - 1));
   }, [cast.length, index]);
 
@@ -54,12 +50,11 @@ function CastSlider({ cast, setCast }) {
         if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
       });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function addMember() {
     setCast((prev) => [...prev, emptyCastMember()]);
-    setIndex(cast.length); // jump to the new one
+    setIndex(cast.length);
   }
 
   function updateMember(id, field, value) {
@@ -84,7 +79,6 @@ function CastSlider({ cast, setCast }) {
 
   function removeMember(id) {
     setIndex((i) => Math.min(i, Math.max(0, cast.length - 2)));
-
     setCast((prev) => {
       const target = prev.find((c) => c.id === id);
       if (target?.photoPreviewUrl) URL.revokeObjectURL(target.photoPreviewUrl);
@@ -97,7 +91,7 @@ function CastSlider({ cast, setCast }) {
       <button
         type="button"
         onClick={addMember}
-        className="w-full rounded-[3px] mt-1 border border-dashed border-[rgba(239,231,218,0.25)] py-8 text-center font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.08em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)]"
+        className="w-full rounded-[4px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] py-7 text-center font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
       >
         + Add first cast member
       </button>
@@ -107,13 +101,14 @@ function CastSlider({ cast, setCast }) {
   const current = cast[index];
 
   return (
-    <div className="relative rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="relative rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-4">
+      {/* Navigation Header */}
+      <div className="mb-3 flex items-center justify-between px-2">
         <button
           type="button"
           onClick={() => setIndex((i) => Math.max(0, i - 1))}
           disabled={index === 0}
-          className="flex h-8 w-8 ml-30 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
         >
           ‹
         </button>
@@ -126,7 +121,7 @@ function CastSlider({ cast, setCast }) {
           type="button"
           onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))}
           disabled={index === cast.length - 1}
-          className="flex h-8 w-8 mr-30 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
         >
           ›
         </button>
@@ -136,14 +131,13 @@ function CastSlider({ cast, setCast }) {
         type="button"
         onClick={() => removeMember(current.id)}
         aria-label="Remove this cast member"
-        title="Remove this cast member"
-        className="absolute right-5 top-14 flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(224,138,107,0.35)] text-base leading-none text-[var(--error)] transition-colors hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
+        className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(224,138,107,0.35)] text-sm leading-none text-[var(--error)] transition-colors hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
       >
         ×
       </button>
 
       <div className="flex flex-col items-center">
-        <label className="block h-28 w-28 cursor-pointer overflow-hidden rounded-full border border-[rgba(239,231,218,0.2)] bg-[var(--velvet-deep)] transition-colors hover:border-[var(--gold)]">
+        <label className="block h-24 w-24 cursor-pointer overflow-hidden rounded-full border border-[rgba(239,231,218,0.2)] bg-[var(--velvet-deep)] transition-colors hover:border-[var(--gold)]">
           {current.photoPreviewUrl ? (
             <img
               src={current.photoPreviewUrl}
@@ -165,13 +159,13 @@ function CastSlider({ cast, setCast }) {
           />
         </label>
 
-        <div className="mt-4 w-full max-w-xl space-y-2">
+        <div className="mt-3 w-full space-y-2">
           <input
             type="text"
             placeholder="Actor name"
             value={current.name}
             onChange={(e) => updateMember(current.id, "name", e.target.value)}
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
           />
           <input
             type="text"
@@ -180,7 +174,7 @@ function CastSlider({ cast, setCast }) {
             onChange={(e) =>
               updateMember(current.id, "characterName", e.target.value)
             }
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
           />
         </div>
       </div>
@@ -188,15 +182,13 @@ function CastSlider({ cast, setCast }) {
       <button
         type="button"
         onClick={addMember}
-        className="mt-4 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] py-2 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)]"
+        className="mt-3 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
       >
         + Add another cast member
       </button>
     </div>
   );
 }
-
-// ---------- main page ----------
 
 export default function UploadVideo() {
   const navigate = useNavigate();
@@ -221,12 +213,9 @@ export default function UploadVideo() {
   const [error, setError] = useState(null);
   const [uploadPercent, setUploadPercent] = useState(0);
   const [processingPercent, setProcessingPercent] = useState(0);
-  const [phase, setPhase] = useState("idle"); // idle | uploading | processing
+  const [phase, setPhase] = useState("idle");
 
   const processingTimerRef = useRef(null);
-  const mainRef = useRef(null);
-  const castSectionRef = useRef(null);
-  const prevCastLenRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -240,36 +229,6 @@ export default function UploadVideo() {
     };
   }, [thumbnailPreviewUrl]);
 
-  // scroll just past the nav bar on first entering this page
-  useEffect(() => {
-    if (mainRef.current) {
-      const top = mainRef.current.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ top, behavior: "smooth" });
-    }
-  }, []);
-
-  // scroll further down once the cast panel actually opens (0 -> 1+),
-  // so the newly revealed fields are visible without a manual scroll
-  useEffect(() => {
-    if (
-      prevCastLenRef.current === 0 &&
-      cast.length > 0 &&
-      castSectionRef.current
-    ) {
-      castSectionRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }
-    prevCastLenRef.current = cast.length;
-  }, [cast.length]);
-
-  // time-based processing estimate — there's no real backend signal for
-  // this phase (the endpoint runs AI upscale + full HLS ladder
-  // synchronously with no progress reporting), so this ticks up over
-  // roughly the time a typical short clip takes and holds just short of
-  // 100% until the actual response arrives, rather than showing a bar
-  // that visibly never moves at all.
   useEffect(() => {
     if (phase !== "processing") {
       clearInterval(processingTimerRef.current);
@@ -345,8 +304,6 @@ export default function UploadVideo() {
     fd.append("tags", tags);
     fd.append("language", language);
     fd.append("productionCountry", productionCountry);
-    // Send the actual thumbnail file if one was chosen.
-    // If not, the backend generates one automatically from the video.
     if (thumbnailFile) fd.append("thumbnail", thumbnailFile);
     fd.append("useUpscale", useUpscale ? "true" : "false");
     if (releaseYear) fd.append("releaseYear", releaseYear);
@@ -383,38 +340,19 @@ export default function UploadVideo() {
   }
 
   return (
-    <div className="min-h-[92vh] bg-[var(--stage)] text-[var(--parchment)]">
+    <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
       <DirectorNav />
 
-      <main ref={mainRef} className="mx-auto max-w-6xl px-8 py-6">
+      <main className="mx-auto max-w-6xl px-6 py-8">
         {error && (
-          <div className="mb-4 rounded-[3px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
+          <div className="mb-4 rounded-[4px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
             {error}
           </div>
         )}
 
-        <motion.form
-          onSubmit={handleSubmit}
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: {},
-            visible: {
-              transition: {
-                staggerChildren: 0.06,
-              },
-            },
-          }}
-          className="mt-4"
-        >
-          {/* title — full width, above the three columns */}
-          <motion.div
-            variants={{
-              hidden: { opacity: 0, x: -18 },
-              visible: { opacity: 1, x: 0 },
-            }}
-            className="group relative mb-6 rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
-          >
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Top Full Width: Film Title */}
+          <div className="rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm">
             <div className="mb-2 flex items-center gap-3">
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
               <label className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.18em] text-[var(--gold)]">
@@ -429,61 +367,51 @@ export default function UploadVideo() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Give your film a name"
-              className="w-full h-8 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 py-3 text-base text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.45)] transition-all duration-300 focus:border-[var(--gold)] focus:bg-[rgba(217,166,83,0.025)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.15)]"
+              className="w-full h-9 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.45)] focus:border-[var(--gold)] focus:outline-none"
             />
-          </motion.div>
+          </div>
 
-          {/* three independent columns — each one just stacks its own
-              fields top to bottom with a normal gap. No shared rows, no
-              margin tricks, so nothing can drift into a neighbor no
-              matter how any one box's height changes later. */}
-          <div className="upload-columns">
-            {/* LEFT COLUMN */}
-            <div className="flex flex-col gap-4">
-              {/* description */}
+          {/* 3 Columns Section (Left, Center, Right) */}
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
+            {/* LEFT COLUMN (Description, Tags, Thumbnail, Language) */}
+            <div className="space-y-4 lg:col-span-3">
+              {/* Description */}
               <div>
-                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                   Description
                 </label>
                 <textarea
                   required
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="w-full h-32 resize-y rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                  rows={4}
+                  className="w-full resize-none rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-3 text-xs leading-relaxed text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
                 />
               </div>
 
-              {/* tags */}
+              {/* Tags */}
               <div>
-                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                  Tags{" "}
-                  <span className="normal-case text-[var(--mauve)]">
-                    (comma-separated)
-                  </span>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Tags <span className="normal-case">(comma-separated)</span>
                 </label>
                 <input
                   type="text"
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
                   placeholder="noir, single-take, festival-cut"
-                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
                 />
               </div>
 
-              {/* thumbnail */}
+              {/* Thumbnail */}
               <div>
-                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                   Thumbnail
                 </label>
 
                 {!thumbnailPreviewUrl ? (
-                  <label className="group flex h-[90px] w-full cursor-pointer flex-col items-center justify-center rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-3 text-center transition-colors hover:border-[var(--gold)]">
-                    <Image
-                      size={19}
-                      strokeWidth={1.5}
-                      className="mb-1 text-[var(--gold)]"
-                    />
+                  <label className="group flex h-[85px] w-full cursor-pointer flex-col items-center justify-center rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-3 text-center transition-colors hover:border-[var(--gold)]">
+                    <Image size={18} strokeWidth={1.5} className="mb-1 text-[var(--gold)]" />
                     <span className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
                       Choose thumbnail
                     </span>
@@ -504,11 +432,11 @@ export default function UploadVideo() {
                       <img
                         src={thumbnailPreviewUrl}
                         alt="Thumbnail preview"
-                        className="h-[90px] w-full object-cover"
+                        className="h-[85px] w-full object-cover"
                       />
                       {!submitting && (
                         <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between">
-                          <label className="cursor-pointer rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11]/90 px-2.5 py-1 text-[0.65rem] text-[var(--parchment)] hover:border-[var(--gold)]">
+                          <label className="cursor-pointer rounded-[3px] bg-[#0f0c11]/90 px-2 py-0.5 text-[0.65rem] text-[var(--parchment)] hover:border-[var(--gold)] border border-white/10">
                             Change
                             <input
                               type="file"
@@ -520,26 +448,20 @@ export default function UploadVideo() {
                           <button
                             type="button"
                             onClick={removeThumbnail}
-                            className="flex items-center gap-1 rounded-[3px] border border-[rgba(224,138,107,0.35)] bg-[#0f0c11]/90 px-2.5 py-1 text-[0.65rem] text-[var(--error)] hover:border-[var(--error)]"
+                            className="rounded-[3px] bg-[#0f0c11]/90 px-2 py-0.5 text-[0.65rem] text-[var(--error)] hover:border-[var(--error)] border border-white/10"
                           >
-                            <X size={11} />
                             Remove
                           </button>
                         </div>
                       )}
                     </div>
-                    <div className="border-t border-[rgba(239,231,218,0.1)] px-2.5 py-1.5">
-                      <p className="truncate text-[0.65rem] text-[var(--mauve)]">
-                        {thumbnailFile?.name}
-                      </p>
-                    </div>
                   </div>
                 )}
               </div>
 
-              {/* language */}
+              {/* Language */}
               <div>
-                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                   Language
                 </label>
                 <input
@@ -547,66 +469,34 @@ export default function UploadVideo() {
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
                   placeholder="Enter language"
-                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* CENTER COLUMN */}
-            <div className="flex flex-col gap-4">
-              {/* film file */}
-              <motion.div
-                variants={{
-                  hidden: { opacity: 0, scale: 0.92, y: 20 },
-                  visible: {
-                    opacity: 1,
-                    scale: 1,
-                    y: 0,
-                    transition: {
-                      type: "spring",
-                      stiffness: 90,
-                      damping: 18,
-                    },
-                  },
-                }}
-                className="relative flex flex-col"
-              >
-                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[200px] w-[200px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(217,166,83,0.035)] blur-3xl" />
-                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(217,166,83,0.06)]" />
+            {/* CENTER COLUMN (Film Stage, Cast, Action Button) */}
+            <div className="space-y-4 lg:col-span-6">
+              {/* Film Stage */}
+              <div className="relative flex flex-col">
+                {/* Orbital Backlight rings */}
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(217,166,83,0.035)] blur-3xl" />
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(217,166,83,0.06)]" />
 
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 45,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                  className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-[rgba(217,166,83,0.045)]"
-                />
                 <div className="relative flex flex-1 flex-col">
-                  <div className="mb-3 flex items-center justify-center gap-2">
-                    <Film
-                      size={13}
-                      strokeWidth={1.5}
-                      className="text-[var(--gold)]"
-                    />
-
+                  <div className="mb-2 flex items-center justify-center gap-2">
+                    <Film size={13} strokeWidth={1.5} className="text-[var(--gold)]" />
                     <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[var(--mauve)]">
                       Film
                     </label>
                   </div>
 
                   {!filmPreviewUrl && (
-                    <label className="group relative flex min-h-[190px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-8 py-6 text-center shadow-[0_0_80px_rgba(217,166,83,0.025)] transition-all duration-500 hover:border-[rgba(217,166,83,0.55)] hover:shadow-[0_0_100px_rgba(217,166,83,0.08)]">
-                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-[rgba(217,166,83,0.3)] bg-[rgba(217,166,83,0.045)] text-[var(--gold)] shadow-[0_0_40px_rgba(217,166,83,0.06)] transition-all duration-500 group-hover:scale-105 group-hover:border-[rgba(217,166,83,0.65)] group-hover:bg-[rgba(217,166,83,0.08)]">
-                        <Upload
-                          size={22}
-                          strokeWidth={1.3}
-                          className="transition-transform duration-500 group-hover:-translate-y-1"
-                        />
+                    <label className="group relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-6 py-6 text-center transition-all duration-300 hover:border-[rgba(217,166,83,0.55)]">
+                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-[rgba(217,166,83,0.3)] bg-[rgba(217,166,83,0.045)] text-[var(--gold)] transition-transform duration-300 group-hover:scale-105">
+                        <Upload size={20} strokeWidth={1.4} />
                       </div>
 
-                      <span className="font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.12em] text-[var(--parchment)]">
+                      <span className="font-[var(--font-mono)] text-[0.7rem] font-bold uppercase tracking-[0.14em] text-[var(--parchment)]">
                         Select your film
                       </span>
 
@@ -614,7 +504,7 @@ export default function UploadVideo() {
                         MP4, MOV, WebM or another video file
                       </span>
 
-                      <span className="mt-3 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-2 text-xs font-medium text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
+                      <span className="mt-3 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-wider text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
                         Choose video
                       </span>
 
@@ -634,7 +524,7 @@ export default function UploadVideo() {
                   )}
 
                   {filmPreviewUrl && (
-                    <label className="group relative block cursor-pointer overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-black">
+                    <label className="group relative block cursor-pointer overflow-hidden rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-black">
                       <video
                         src={filmPreviewUrl}
                         muted
@@ -646,8 +536,8 @@ export default function UploadVideo() {
                       />
 
                       {!submitting && (
-                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[rgba(16,13,16,0)] opacity-0 transition-all group-hover:bg-[rgba(16,13,16,0.45)] group-hover:opacity-100">
-                          <span className="rounded-[3px] px-4 py-2 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                          <span className="rounded-[3px] border border-white/20 bg-[#17131a] px-4 py-2 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
                             Choose another video
                           </span>
                         </div>
@@ -666,74 +556,45 @@ export default function UploadVideo() {
                       />
 
                       {submitting && (
-                        <div className="absolute inset-0 flex flex-col justify-end bg-[rgba(16,13,16,0.55)] p-4">
-                          {phase === "uploading" && (
-                            <>
-                              <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                                <span>Uploading</span>
-                                <span>{uploadPercent}%</span>
-                              </div>
-                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
-                                <div
-                                  className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-150 ease-out"
-                                  style={{ width: `${uploadPercent}%` }}
-                                />
-                              </div>
-                            </>
-                          )}
-
-                          {phase === "processing" && (
-                            <>
-                              <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                                <span>Processing (estimated)</span>
-                                <span>{processingPercent}%</span>
-                              </div>
-                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
-                                <div
-                                  className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-500 ease-out"
-                                  style={{ width: `${processingPercent}%` }}
-                                />
-                              </div>
-                            </>
-                          )}
+                        <div className="absolute inset-0 flex flex-col justify-end bg-black/70 p-4">
+                          <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
+                            <span>{phase === "uploading" ? "Uploading" : "Processing (estimated)"}</span>
+                            <span>{phase === "uploading" ? `${uploadPercent}%` : `${processingPercent}%`}</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                            <div
+                              className="h-full rounded-full bg-[var(--gold)] transition-all duration-300"
+                              style={{ width: `${phase === "uploading" ? uploadPercent : processingPercent}%` }}
+                            />
+                          </div>
                         </div>
                       )}
                     </label>
                   )}
                 </div>
-              </motion.div>
+              </div>
 
-              {/* cast */}
-              <div ref={castSectionRef} className="relative z-10">
-                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+              {/* Cast Section */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                   Cast
                 </label>
                 <CastSlider cast={cast} setCast={setCast} />
               </div>
 
-              {/* submit */}
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={cast.length > 0 ? "cast-open" : "cast-closed"}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 120, damping: 16 }}
-                  className="relative z-10"
-                >
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex h-10 w-full items-center justify-center rounded-[3px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold leading-none text-[#1a1210] transition-colors duration-300 ease-in-out hover:bg-[var(--gold-soft)] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {submitting ? "Working…" : "Upload Film"}
-                  </button>
-                </motion.div>
-              </AnimatePresence>
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded-[4px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold uppercase tracking-wider text-[#100d10] transition-colors hover:bg-[var(--gold-soft)] hover:brightness-105 disabled:opacity-60 shadow-lg shadow-[#d9a653]/15"
+              >
+                {submitting ? "Uploading Film…" : "Upload Film"}
+              </button>
             </div>
 
-            {/* RIGHT COLUMN */}
-            <div className="flex flex-col gap-4">
-              {/* genres */}
+            {/* RIGHT COLUMN (Genres, AI Upscale, Country & Year) */}
+            <div className="space-y-4 lg:col-span-3">
+              {/* Genres */}
               <div>
                 <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                   Genres
@@ -745,7 +606,7 @@ export default function UploadVideo() {
                       type="button"
                       onClick={() => toggleGenre(g)}
                       aria-pressed={genres.includes(g)}
-                      className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                         genres.includes(g)
                           ? "border-[var(--gold)] bg-[rgba(217,166,83,0.08)] text-[var(--gold-soft)]"
                           : "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] hover:border-[var(--gold)]"
@@ -755,6 +616,7 @@ export default function UploadVideo() {
                     </button>
                   ))}
                 </div>
+
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -767,32 +629,28 @@ export default function UploadVideo() {
                       }
                     }}
                     placeholder="Add a genre not listed above"
-                    className="flex-1 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                    className="flex-1 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={addCustomGenre}
-                    className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-4 text-sm text-[var(--parchment)] hover:border-[var(--gold)]"
+                    className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-3 text-xs text-[var(--parchment)] hover:border-[var(--gold)] transition"
                   >
                     Add
                   </button>
                 </div>
               </div>
 
-              {/* AI upscale toggle */}
-              <label className="flex cursor-pointer select-none flex-col justify-between rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.55)] p-5">
+              {/* AI Quality Upscale */}
+              <label className="flex cursor-pointer select-none flex-col justify-between rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.55)] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Sparkles
-                      size={13}
-                      strokeWidth={1.5}
-                      className="text-[var(--gold)]"
-                    />
+                    <Sparkles size={13} strokeWidth={1.5} className="text-[var(--gold)]" />
                     <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">
                       AI quality upscaling
                     </p>
                   </div>
-                  <div className="relative h-6 w-11 shrink-0">
+                  <div className="relative h-5 w-10 shrink-0">
                     <input
                       type="checkbox"
                       checked={useUpscale}
@@ -800,18 +658,16 @@ export default function UploadVideo() {
                       className="peer sr-only"
                     />
                     <div className="absolute inset-0 rounded-full bg-[rgba(239,231,218,0.2)] transition-colors peer-checked:bg-[var(--gold)]" />
-                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-[#1a1210] transition-transform peer-checked:translate-x-5" />
+                    <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-[#1a1210] transition-transform peer-checked:translate-x-5" />
                   </div>
                 </div>
-                <p className="mt-4 text-xs leading-relaxed text-[var(--mauve)]">
-                  If your footage is below 1080p, AI upscaling fills out the
-                  higher quality options. Leave off to only generate
-                  renditions at or below your upload's actual resolution.
+                <p className="mt-3 text-[11px] leading-relaxed text-[var(--mauve)]">
+                  If your footage is below 1080p, AI upscaling fills out the higher quality options. Leave off to only generate renditions at or below your upload's actual resolution.
                 </p>
               </label>
 
-              {/* production country / release year */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* Country & Release Year (Side-by-side) */}
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="mb-1.5 block whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                     Country
@@ -820,7 +676,7 @@ export default function UploadVideo() {
                     type="text"
                     value={productionCountry}
                     onChange={(e) => setProductionCountry(e.target.value)}
-                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
                   />
                 </div>
                 <div>
@@ -831,44 +687,13 @@ export default function UploadVideo() {
                     type="number"
                     value={releaseYear}
                     onChange={(e) => setReleaseYear(e.target.value)}
-                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
                   />
                 </div>
               </div>
             </div>
           </div>
-        </motion.form>
-
-        <style>{`
-          .upload-columns {
-            display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
-            column-gap: 2.5rem;
-          }
-
-          .upload-columns > :nth-child(1) {
-            grid-column: 1 / span 3;
-          }
-
-          .upload-columns > :nth-child(2) {
-            grid-column: 4 / span 6;
-          }
-
-          .upload-columns > :nth-child(3) {
-            grid-column: 10 / span 3;
-          }
-
-          @media (max-width: 900px) {
-            .upload-columns {
-              grid-template-columns: 1fr;
-              row-gap: 1.5rem;
-            }
-
-            .upload-columns > * {
-              grid-column: 1 !important;
-            }
-          }
-        `}</style>
+        </form>
       </main>
     </div>
   );

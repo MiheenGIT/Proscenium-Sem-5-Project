@@ -53,6 +53,7 @@ import DirectorHome from "./pages/Director-panel/DirectorHome.jsx";
 import EditVideo from "./pages/Director-panel/EditVideo.jsx";
 import UploadVideo from "./pages/Director-panel/UploadVideo.jsx";
 import DirectorWatchVideo from "./pages/Helpers/WatchVideo.jsx";
+import DirectorProfile from "./pages/Director-panel/DirectorProfile.jsx";
 
 import Dashboard from "./pages/Viewer-panel/Dashboard.jsx";
 import History from "./pages/Viewer-panel/History.jsx";
@@ -180,6 +181,15 @@ export default function App() {
         element={
           <DirectorOnly>
             <EditVideo />
+          </DirectorOnly>
+        }
+      />
+
+      <Route
+        path="/director/profile"
+        element={
+          <DirectorOnly>
+            <DirectorProfile />
           </DirectorOnly>
         }
       />

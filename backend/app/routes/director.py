@@ -2556,3 +2556,30 @@ async def update_video_metadata(
             video.get("thumbnailUrl"),
         ),
     }
+
+@router.put("/profile/avatar")
+def update_director_avatar(
+    avatar: UploadFile = File(...),
+    current_user: dict = Depends(require_role("director")),
+):
+    """
+    Uploads director profile photo via Cloudinary and updates directors_collection.
+    """
+    user_id = current_user.get("user_id") or current_user.get("id") or current_user.get("_id")
+
+    if not avatar:
+        raise HTTPException(status_code=400, detail="Avatar file is required")
+
+    avatar_url = upload_avatar(avatar, user_id)
+    if not avatar_url:
+        raise HTTPException(status_code=500, detail="Failed to upload avatar to storage")
+
+    directors_collection.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"avatarUrl": avatar_url, "updatedAt": datetime.now()}}
+    )
+
+    return {
+        "message": "Avatar updated successfully",
+        "avatarUrl": avatar_url,
+    }

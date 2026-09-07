@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, NavLink } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import DirectorNav from "../../components/DirectorNav.jsx";
 import { getRequest, putForm, postForm, postEmpty } from "../../api/client";
 import {
@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
-  Type,
   AlignLeft,
   Tags as TagsIcon,
   Globe2,
@@ -16,7 +15,6 @@ import {
   Image as ImageIcon,
   Users,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import Hls from "hls.js";
 
 const GENRE_OPTIONS = [
@@ -25,9 +23,9 @@ const GENRE_OPTIONS = [
 ];
 
 function StatusIcon({ status }) {
-  if (status === "approved") return <ShieldCheck size={13} strokeWidth={1.5} className="text-[var(--gold)]" />;
-  if (status === "rejected") return <ShieldAlert size={13} strokeWidth={1.5} className="text-[var(--error)]" />;
-  return <ShieldQuestion size={13} strokeWidth={1.5} className="text-[var(--gold)]" />;
+  if (status === "approved") return <ShieldCheck size={14} className="text-[#7fc59b]" />;
+  if (status === "rejected") return <ShieldAlert size={14} className="text-[#e08a6b]" />;
+  return <ShieldQuestion size={14} className="text-[var(--gold)]" />;
 }
 
 function StatusBadge({ status }) {
@@ -43,8 +41,6 @@ function StatusBadge({ status }) {
   );
 }
 
-// ---------- cast slider (same visual pattern as UploadVideo's) ----------
-
 function CastSlider({ cast, setCast }) {
   const [index, setIndex] = useState(0);
 
@@ -58,7 +54,6 @@ function CastSlider({ cast, setCast }) {
         if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
       });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function addMember() {
@@ -97,7 +92,7 @@ function CastSlider({ cast, setCast }) {
       <button
         type="button"
         onClick={addMember}
-        className="mt-1 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.25)] py-8 text-center font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.08em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)]"
+        className="w-full rounded-[4px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] py-7 text-center font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
       >
         + Add first cast member
       </button>
@@ -107,13 +102,13 @@ function CastSlider({ cast, setCast }) {
   const current = cast[index];
 
   return (
-    <div className="relative rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="relative rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-4">
+      <div className="mb-3 flex items-center justify-between px-2">
         <button
           type="button"
           onClick={() => setIndex((i) => Math.max(0, i - 1))}
           disabled={index === 0}
-          className="flex h-8 w-8 ml-30 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
         >
           ‹
         </button>
@@ -124,7 +119,7 @@ function CastSlider({ cast, setCast }) {
           type="button"
           onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))}
           disabled={index === cast.length - 1}
-          className="flex h-8 w-8 mr-30 items-center justify-center rounded-full text-[var(--parchment)] disabled:opacity-30 hover:bg-[rgba(217,166,83,0.15)]"
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
         >
           ›
         </button>
@@ -132,16 +127,15 @@ function CastSlider({ cast, setCast }) {
 
       <button
         type="button"
-        onClick={() => removeMember(current.id)}
+        onClick={() => removeMember(current.clientId)}
         aria-label="Remove this cast member"
-        onClickCapture={() => removeMember(current.clientId)}
-        className="absolute right-5 top-14 flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(224,138,107,0.35)] text-base leading-none text-[var(--error)] transition-colors hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
+        className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(224,138,107,0.35)] text-sm leading-none text-[var(--error)] transition-colors hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
       >
         ×
       </button>
 
       <div className="flex flex-col items-center">
-        <label className="block h-28 w-28 cursor-pointer overflow-hidden rounded-full border border-[rgba(239,231,218,0.2)] bg-[var(--velvet-deep)] transition-colors hover:border-[var(--gold)]">
+        <label className="block h-24 w-24 cursor-pointer overflow-hidden rounded-full border border-[rgba(239,231,218,0.2)] bg-[var(--velvet-deep)] transition-colors hover:border-[var(--gold)]">
           {current.photoPreviewUrl || current.existingPhotoUrl ? (
             <img src={current.photoPreviewUrl || current.existingPhotoUrl} alt="" className="h-full w-full object-cover" />
           ) : (
@@ -157,20 +151,20 @@ function CastSlider({ cast, setCast }) {
           />
         </label>
 
-        <div className="mt-4 w-full max-w-xl space-y-2">
+        <div className="mt-3 w-full space-y-2">
           <input
             type="text"
             placeholder="Actor name"
             value={current.name}
             onChange={(e) => updateMember(current.clientId, "name", e.target.value)}
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
           />
           <input
             type="text"
             placeholder="Character name"
             value={current.characterName}
             onChange={(e) => updateMember(current.clientId, "characterName", e.target.value)}
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
           />
         </div>
       </div>
@@ -178,15 +172,13 @@ function CastSlider({ cast, setCast }) {
       <button
         type="button"
         onClick={addMember}
-        className="mt-4 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] py-2 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)]"
+        className="mt-3 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
       >
         + Add another cast member
       </button>
     </div>
   );
 }
-
-// ---------- main page ----------
 
 export default function EditVideo() {
   const { id } = useParams();
@@ -223,8 +215,9 @@ export default function EditVideo() {
   const bgVideoRef = useRef(null);
   const bgHlsRef = useRef(null);
 
-  // muted looping background preview of the current video — only while
-  // no replacement file has been picked yet
+  const [resubmitting, setResubmitting] = useState(false);
+  const [resubmitError, setResubmitError] = useState(null);
+
   useEffect(() => {
     if (newFilmPreviewUrl || !video?.hlsManifestUrl || !bgVideoRef.current) return;
 
@@ -248,9 +241,6 @@ export default function EditVideo() {
       }
     };
   }, [video?.hlsManifestUrl, newFilmPreviewUrl]);
-
-  const [resubmitting, setResubmitting] = useState(false);
-  const [resubmitError, setResubmitError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -356,7 +346,6 @@ export default function EditVideo() {
     setReuploadError(null);
     setMetaSaved(false);
 
-    // ---- step 1: metadata (title/description/genres/tags/cast/etc) ----
     const fd = new FormData();
     fd.append("title", title);
     fd.append("description", description);
@@ -385,11 +374,10 @@ export default function EditVideo() {
     } catch (err) {
       setMetaError(err.message || "Failed to save changes");
       setSavingMeta(false);
-      return; // don't attempt reupload if metadata itself failed
+      return;
     }
     setSavingMeta(false);
 
-    // ---- step 2: reupload, only if a new film file was actually chosen ----
     if (!newFilm) {
       setMetaSaved(true);
       return;
@@ -430,10 +418,10 @@ export default function EditVideo() {
 
   if (loadError) {
     return (
-      <div className="min-h-[92vh] bg-[var(--stage)] text-[var(--parchment)]">
+      <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
         <DirectorNav confirmBeforeLeave={false} />
-        <main className="mx-auto max-w-6xl px-8 py-12">
-          <div className="rounded-[3px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
+        <main className="mx-auto max-w-6xl px-6 py-12">
+          <div className="rounded-[4px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
             {loadError}
           </div>
         </main>
@@ -443,9 +431,9 @@ export default function EditVideo() {
 
   if (!video) {
     return (
-      <div className="min-h-[92vh] bg-[var(--stage)] text-[var(--parchment)]">
+      <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
         <DirectorNav confirmBeforeLeave={false} />
-        <main className="mx-auto max-w-6xl px-8 py-12">
+        <main className="mx-auto max-w-6xl px-6 py-12">
           <p className="font-[var(--font-mono)] text-sm text-[var(--mauve)]">Loading…</p>
         </main>
       </div>
@@ -453,379 +441,337 @@ export default function EditVideo() {
   }
 
   return (
-    <div className="min-h-[92vh] bg-[var(--stage)] text-[var(--parchment)]">
+    <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
       <DirectorNav confirmBeforeLeave={isDirty} />
 
-      <main className="mx-auto max-w-6xl px-8 py-12">
+      <main className="mx-auto max-w-6xl px-6 py-8">
         {metaError && (
-          <div className="mb-6 rounded-[3px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
+          <div className="mb-4 rounded-[4px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
             {metaError}
           </div>
         )}
         {metaSaved && (
-          <div className="mb-6 rounded-[3px] border border-[var(--gold)] bg-[rgba(217,166,83,0.08)] px-4 py-3 text-sm text-[var(--gold-soft)]">
-            Changes saved.
+          <div className="mb-4 rounded-[4px] border border-[var(--gold)] bg-[rgba(217,166,83,0.08)] px-4 py-3 text-sm text-[var(--gold-soft)]">
+            Changes saved successfully.
           </div>
         )}
 
-        <motion.form
-          onSubmit={handleSubmit}
-          initial="hidden"
-          animate="visible"
-          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}
-          className="edit-orbit-grid mt-14"
-        >
-          {/* video / reupload */}
-          <motion.div
-            variants={{
-              hidden: { opacity: 0, scale: 0.92, y: 20 },
-              visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 90, damping: 18 } },
-            }}
-            className="relative flex h-full min-h-[300px] flex-col"
-          >
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(217,166,83,0.035)] blur-3xl" />
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[380px] w-[380px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(217,166,83,0.06)]" />
-
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 45, repeat: Infinity, ease: "linear" }}
-              className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-[rgba(217,166,83,0.045)]"
-            />
-
-            <div className="relative flex h-full flex-1 flex-col">
-              <div className="mb-3 flex items-center justify-center gap-2">
-                <Film size={13} strokeWidth={1.5} className="text-[var(--gold)]" />
-                <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[var(--mauve)]">
-                  Film
-                </label>
-              </div>
-
-              {!newFilmPreviewUrl && (
-                <label className="group relative flex min-h-[260px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-black text-center transition-colors hover:border-[rgba(217,166,83,0.55)]">
-                  <video
-                    ref={bgVideoRef}
-                    muted
-                    loop
-                    autoPlay
-                    playsInline
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-[rgba(16,13,16,0.55)] transition-colors group-hover:bg-[rgba(16,13,16,0.7)]" />
-
-                  <div className="relative">
-                    <h2 className="mb-1 font-[var(--font-display)] text-lg font-medium text-[var(--parchment)] drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
-                      {video.title}
-                    </h2>
-                    <div className="mb-4 flex justify-center gap-2">
-                      <StatusBadge status={video.moderationStatus} />
-                    </div>
-                    <span className="inline-flex items-center gap-2 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-4 py-2 text-xs font-medium text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
-                      <RefreshCw size={13} strokeWidth={1.5} />
-                      Replace video file
-                    </span>
-                  </div>
-
-                  <input
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      setNewFilm(f);
-                      setNewFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
-                    }}
-                  />
-                </label>
-              )}
-
-              {newFilmPreviewUrl && (
-                <div className="relative mt-3 overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-black">
-                  <video
-                    src={newFilmPreviewUrl}
-                    muted
-                    playsInline
-                    className="aspect-video w-full object-contain"
-                    onLoadedData={(e) => {
-                      e.currentTarget.currentTime = 1;
-                    }}
-                  />
-
-                  {!reuploading && (
-                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[rgba(16,13,16,0.55)] p-3">
-                      <span className="font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--gold-soft)]">
-                        Queued — saves when you click Save Changes
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newFilmPreviewUrl) URL.revokeObjectURL(newFilmPreviewUrl);
-                          setNewFilm(null);
-                          setNewFilmPreviewUrl(null);
-                        }}
-                        className="rounded-[3px] border border-[rgba(239,231,218,0.2)] px-4 py-1.5 text-xs text-[var(--parchment)] hover:border-[var(--gold)]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-
-                  {reuploading && (
-                    <div className="absolute inset-0 flex flex-col justify-end bg-[rgba(16,13,16,0.55)] p-4">
-                      {reuploadPhase === "uploading" && (
-                        <>
-                          <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                            <span>Uploading</span>
-                            <span>{reuploadPercent}%</span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
-                            <div className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-150 ease-out" style={{ width: `${reuploadPercent}%` }} />
-                          </div>
-                        </>
-                      )}
-                      {reuploadPhase === "processing" && (
-                        <>
-                          <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                            <span>Processing (estimated)</span>
-                            <span>{reuploadProcessingPercent}%</span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgba(239,231,218,0.25)]">
-                            <div className="h-full rounded-full bg-[var(--gold)] transition-[width] duration-500 ease-out" style={{ width: `${reuploadProcessingPercent}%` }} />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {reuploadError && <p className="mt-2 text-xs text-[var(--error)]">{reuploadError}</p>}
-            </div>
-          </motion.div>
-
-          {/* moderation / resubmit */}
-          <div className="flex flex-col justify-between rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.55)] p-5">
-            <div className="flex items-center gap-2">
-              <StatusIcon status={video.moderationStatus} />
-              <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">
-                Moderation
-              </p>
-            </div>
-            <p className="mt-4 text-xs leading-relaxed text-[var(--mauve)]">
-              {video.moderationStatus === "approved" && "This film is live and publicly visible."}
-              {video.moderationStatus === "pending" && "Awaiting review — not yet public."}
-              {video.moderationStatus === "rejected" && (video.moderationComment || "This film was rejected. Address the notes and resubmit.")}
-            </p>
-            {video.moderationStatus === "rejected" && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleResubmit}
-                  disabled={resubmitting}
-                  className="mt-4 rounded-[3px] border border-[rgba(217,166,83,0.4)] px-4 py-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.06em] text-[var(--gold-soft)] hover:bg-[rgba(217,166,83,0.1)] disabled:opacity-50"
-                >
-                  {resubmitting ? "Resubmitting…" : "Resubmit for review"}
-                </button>
-                {resubmitError && <p className="mt-2 text-xs text-[var(--error)]">{resubmitError}</p>}
-              </>
-            )}
-          </div>
-
-          {/* title */}
-          <motion.div
-            variants={{ hidden: { opacity: 0, x: -18 }, visible: { opacity: 1, x: 0 } }}
-            className="group -mt-25 w-272 relative h-21 rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm transition-colors hover:border-[rgba(217,166,83,0.35)]"
-          >
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Top Full Width: Film Title */}
+          <div className="rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm">
             <div className="mb-2 flex items-center gap-3">
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
-              <label className="flex items-center gap-1.5 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.18em] text-[var(--gold)]">
+              <label className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.18em] text-[var(--gold)]">
                 Film Title
               </label>
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
             </div>
+
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full h-8 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 py-3 text-base text-[var(--parchment)] transition-all duration-300 focus:border-[var(--gold)] focus:bg-[rgba(217,166,83,0.025)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.15)]"
-            />
-          </motion.div>
-
-          {/* description */}
-          <div>
-            <label className="mb-1.5 -mt-30 flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              <AlignLeft size={12} strokeWidth={1.5} /> Description
-            </label>
-            <textarea
-              required
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full resize-y h-70 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+              placeholder="Give your film a name"
+              className="w-full h-9 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.45)] focus:border-[var(--gold)] focus:outline-none"
             />
           </div>
 
-          {/* genres */}
-          <div>
-            <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              Genres
-            </label>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {allGenreOptions.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => toggleGenre(g)}
-                  aria-pressed={genres.includes(g)}
-                  className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                    genres.includes(g)
-                      ? "border-[var(--gold)] bg-[rgba(217,166,83,0.08)] text-[var(--gold-soft)]"
-                      : "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] hover:border-[var(--gold)]"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
+          {/* 3 Columns Section (Left, Center, Right) */}
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
+            {/* LEFT COLUMN (Description, Tags, Thumbnail URL, Language) */}
+            <div className="space-y-4 lg:col-span-3">
+              {/* Description */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Description
+                </label>
+                <textarea
+                  required
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  className="w-full resize-none rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-3 text-xs leading-relaxed text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Tags <span className="normal-case">(comma-separated)</span>
+                </label>
+                <input
+                  type="text"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="noir, single-take, festival-cut"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
+
+              {/* Thumbnail URL */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Thumbnail URL
+                </label>
+                <input
+                  type="text"
+                  value={thumbnailUrl}
+                  onChange={(e) => setThumbnailUrl(e.target.value)}
+                  placeholder="https://…"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
+
+              {/* Language */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Language
+                </label>
+                <input
+                  type="text"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  placeholder="Enter language"
+                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={customGenreInput}
-                onChange={(e) => setCustomGenreInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addCustomGenre();
-                  }
-                }}
-                placeholder="Add a genre not listed above"
-                className="flex-1 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-              />
+
+            {/* CENTER COLUMN (Film Stage, Cast, Action Button) */}
+            <div className="space-y-4 lg:col-span-6">
+              {/* Film Stage */}
+              <div className="relative flex flex-col">
+                {/* Orbital Backlight rings */}
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[rgba(217,166,83,0.035)] blur-3xl" />
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[rgba(217,166,83,0.06)]" />
+
+                <div className="relative flex flex-1 flex-col">
+                  <div className="mb-2 flex items-center justify-center gap-2">
+                    <Film size={13} strokeWidth={1.5} className="text-[var(--gold)]" />
+                    <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[var(--mauve)]">
+                      Film
+                    </label>
+                  </div>
+
+                  {!newFilmPreviewUrl && (
+                    <label className="group relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.2)] bg-black text-center transition-all duration-300 hover:border-[rgba(217,166,83,0.55)]">
+                      <video
+                        ref={bgVideoRef}
+                        muted
+                        loop
+                        autoPlay
+                        playsInline
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/60 transition-colors group-hover:bg-black/70" />
+
+                      <div className="relative z-10 p-4">
+                        <h2 className="mb-1 font-[var(--font-display)] text-lg font-medium text-[var(--parchment)] drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
+                          {video.title}
+                        </h2>
+                        <div className="mb-3 flex justify-center">
+                          <StatusBadge status={video.moderationStatus} />
+                        </div>
+                        <span className="inline-flex items-center gap-2 rounded-[3px] border border-[rgba(239,231,218,0.2)] bg-[#17131a] px-3.5 py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-wider text-[var(--parchment)] transition-colors group-hover:border-[var(--gold)] group-hover:text-[var(--gold-soft)]">
+                          <RefreshCw size={12} strokeWidth={1.5} />
+                          Replace video file
+                        </span>
+                      </div>
+
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          setNewFilm(f);
+                          setNewFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
+                        }}
+                      />
+                    </label>
+                  )}
+
+                  {newFilmPreviewUrl && (
+                    <div className="relative overflow-hidden rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-black">
+                      <video
+                        src={newFilmPreviewUrl}
+                        muted
+                        playsInline
+                        className="aspect-video w-full object-contain"
+                        onLoadedData={(e) => {
+                          e.currentTarget.currentTime = 1;
+                        }}
+                      />
+
+                      {!reuploading && (
+                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-black/80 p-3">
+                          <span className="font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--gold-soft)]">
+                            Replacement Queued
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newFilmPreviewUrl) URL.revokeObjectURL(newFilmPreviewUrl);
+                              setNewFilm(null);
+                              setNewFilmPreviewUrl(null);
+                            }}
+                            className="rounded-[3px] border border-white/20 px-3 py-1 text-xs text-[var(--parchment)] hover:border-[var(--gold)]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      {reuploading && (
+                        <div className="absolute inset-0 flex flex-col justify-end bg-black/75 p-4">
+                          <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
+                            <span>{reuploadPhase === "uploading" ? "Uploading" : "Processing (estimated)"}</span>
+                            <span>{reuploadPhase === "uploading" ? `${reuploadPercent}%` : `${reuploadProcessingPercent}%`}</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                            <div
+                              className="h-full rounded-full bg-[var(--gold)] transition-all duration-300"
+                              style={{ width: `${reuploadPhase === "uploading" ? reuploadPercent : reuploadProcessingPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {reuploadError && <p className="mt-2 text-xs text-[var(--error)]">{reuploadError}</p>}
+                </div>
+              </div>
+
+              {/* Cast Section */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Cast
+                </label>
+                <CastSlider cast={cast} setCast={setCast} />
+              </div>
+
+              {/* Submit Button */}
               <button
-                type="button"
-                onClick={addCustomGenre}
-                className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-4 text-sm text-[var(--parchment)] hover:border-[var(--gold)]"
+                type="submit"
+                disabled={savingMeta || reuploading}
+                className="w-full rounded-[4px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold uppercase tracking-wider text-[#100d10] transition-colors hover:bg-[var(--gold-soft)] hover:brightness-105 disabled:opacity-60 shadow-lg shadow-[#d9a653]/15"
               >
-                Add
+                {savingMeta ? "Saving Changes…" : reuploading ? "Uploading Film…" : "Save Changes"}
               </button>
             </div>
-          </div>
 
-          {/* tags */}
-          <div>
-            <label className="mb-1.5 flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              <TagsIcon size={12} strokeWidth={1.5} /> Tags <span className="normal-case text-[var(--mauve)]">(comma-separated)</span>
-            </label>
-            <input
-              type="text"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-            />
-          </div>
+            {/* RIGHT COLUMN (Genres, Moderation Card, Country & Year) */}
+            <div className="space-y-4 lg:col-span-3">
+              {/* Genres */}
+              <div>
+                <label className="mb-2 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Genres
+                </label>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {allGenreOptions.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => toggleGenre(g)}
+                      aria-pressed={genres.includes(g)}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        genres.includes(g)
+                          ? "border-[var(--gold)] bg-[rgba(217,166,83,0.08)] text-[var(--gold-soft)]"
+                          : "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] hover:border-[var(--gold)]"
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
 
-          {/* language / country / year */}
-          <div className="grid grid-rows-1 gap-2 sm:grid-rows-3">
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                <Globe2 size={12} strokeWidth={1.5} /> Language
-              </label>
-              <input
-                type="text"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-              />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customGenreInput}
+                    onChange={(e) => setCustomGenreInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustomGenre();
+                      }
+                    }}
+                    placeholder="Add a genre not listed above"
+                    className="flex-1 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomGenre}
+                    className="rounded-[3px] border border-[rgba(239,231,218,0.16)] px-3 text-xs text-[var(--parchment)] hover:border-[var(--gold)] transition"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Moderation Card */}
+              <div className="flex flex-col justify-between rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.55)] p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusIcon status={video.moderationStatus} />
+                    <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">
+                      Moderation
+                    </p>
+                  </div>
+                  <StatusBadge status={video.moderationStatus} />
+                </div>
+
+                <p className="mt-3 text-xs leading-relaxed text-[var(--mauve)]">
+                  {video.moderationStatus === "approved" && "This film is live and publicly visible to all viewers."}
+                  {video.moderationStatus === "pending" && "Awaiting moderator review before publishing."}
+                  {video.moderationStatus === "rejected" && (video.moderationComment || "This film was rejected. Address notes and resubmit.")}
+                </p>
+
+                {video.moderationStatus === "rejected" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleResubmit}
+                      disabled={resubmitting}
+                      className="mt-3.5 w-full rounded-[3px] border border-[rgba(217,166,83,0.4)] bg-[rgba(217,166,83,0.05)] py-2 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.06em] text-[var(--gold-soft)] hover:bg-[rgba(217,166,83,0.12)] disabled:opacity-50 transition"
+                    >
+                      {resubmitting ? "Resubmitting…" : "Resubmit for review"}
+                    </button>
+                    {resubmitError && <p className="mt-2 text-xs text-[var(--error)]">{resubmitError}</p>}
+                  </>
+                )}
+              </div>
+
+              {/* Country & Release Year (Side-by-side) */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="mb-1.5 block whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={productionCountry}
+                    onChange={(e) => setProductionCountry(e.target.value)}
+                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                    Release Year
+                  </label>
+                  <input
+                    type="number"
+                    value={releaseYear}
+                    onChange={(e) => setReleaseYear(e.target.value)}
+                    className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="mb-1.5 whitespace-nowrap block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                Country
-              </label>
-              <input
-                type="text"
-                value={productionCountry}
-                onChange={(e) => setProductionCountry(e.target.value)}
-                className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 whitespace-nowrap font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                <CalendarDays size={12} strokeWidth={1.5} /> Year
-              </label>
-              <input
-                type="number"
-                value={releaseYear}
-                onChange={(e) => setReleaseYear(e.target.value)}
-                className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-              />
-            </div>
           </div>
-
-          {/* thumbnail url */}
-          <div>
-            <label className="-mt-35 flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-              <ImageIcon size={12} strokeWidth={1.5} /> Thumbnail URL
-            </label>
-            <input
-              type="text"
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2.5 text-sm text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
-            />
-          </div>
-
-          {/* cast */}
-          <div className="relative z-10">
-            <label className={`${newFilm ? "-mt-45" : "-mt-55"} flex items-center gap-1.5 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]`}>
-              <Users size={12} strokeWidth={1.5} /> Cast
-            </label>
-            <CastSlider cast={cast} setCast={setCast} />
-          </div>
-
-          <div className="relative z-10">
-            <button
-              type="submit"
-              disabled={savingMeta || reuploading}
-              className="mx-auto flex h-10 w-full max-w-[420px] items-center justify-center rounded-[3px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold leading-none text-[#1a1210] transition-colors hover:bg-[var(--gold-soft)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {savingMeta ? "Saving…" : reuploading ? "Uploading film…" : "Save Changes"}
-            </button>
-          </div>
-        </motion.form>
-
-        <style>{`
-          .edit-orbit-grid {
-            position: relative;
-            display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
-            column-gap: 2.5rem;
-            row-gap: 1.1rem;
-            padding: 1.25rem 0 1rem;
-          }
-          .edit-orbit-grid > * { min-width: 0; }
-
-          .edit-orbit-grid > :nth-child(1) { grid-column: 4 / span 6; grid-row: 1 / span 3; }
-          .edit-orbit-grid > :nth-child(2) { grid-column: 10 / span 3; grid-row: 2; }
-          .edit-orbit-grid > :nth-child(3) { grid-column: 1 / span 3; grid-row: 1; }
-          .edit-orbit-grid > :nth-child(4) { grid-column: 1 / span 3; grid-row: 2; }
-          .edit-orbit-grid > :nth-child(5) { grid-column: 10 / span 3; grid-row: 1; }
-          .edit-orbit-grid > :nth-child(6) { grid-column: 1 / span 3; grid-row: 3; }
-          .edit-orbit-grid > :nth-child(7) { grid-column: 10 / span 3; grid-row: 3; }
-          .edit-orbit-grid > :nth-child(8) { grid-column: 1 / span 3; grid-row: 4; }
-          .edit-orbit-grid > :nth-child(9) { grid-column: 4 / span 6; grid-row: 4 / span 2; }
-          .edit-orbit-grid > :nth-child(10) { grid-column: 4 / span 6; grid-row: 6; }
-
-          @media (max-width: 900px) {
-            .edit-orbit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .edit-orbit-grid > * { grid-column: auto !important; grid-row: auto !important; }
-            .edit-orbit-grid > :nth-child(1) { grid-column: 1 / -1 !important; grid-row: 1 !important; order: -10; }
-          }
-
-          @media (max-width: 640px) {
-            .edit-orbit-grid { display: flex; flex-direction: column; gap: 1rem; }
-            .edit-orbit-grid > :nth-child(1) { order: -10; }
-          }
-        `}</style>
+        </form>
       </main>
     </div>
   );
