@@ -2,7 +2,7 @@ from datetime import datetime
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database import (
     cast_collection,
@@ -690,63 +690,117 @@ def bulk_reject_videos(
 
 
 # ============================================================
-# COMMENT SERIALIZATION
+# COMMENT MODERATION
 # ============================================================
 
-def _serialize_flagged_comment(c: dict) -> dict:
-    return {
-        "id": str(c["_id"]),
-        "videoId": str(c["videoId"]),
-        "viewerId": str(c["viewerId"]),
+def _serialize_admin_comment(c: dict) -> dict:
+    viewer = viewers_collection.find_one(
+        {"_id": c.get("viewerId")},
+        {"username": 1, "avatarUrl": 1},
+    ) if c.get("viewerId") else None
+
+    video = film_collection.find_one(
+        {"_id": c.get("videoId")},
+        {"title": 1, "directorId": 1},
+    ) if c.get("videoId") else None
+
+    director = directors_collection.find_one(
+        {"_id": video.get("directorId")},
+        {"username": 1, "studioName": 1},
+    ) if video and video.get("directorId") else None
+
+    return _serialize_mongo({
+        "id": c.get("_id"),
+        "videoId": c.get("videoId"),
+        "videoTitle": video.get("title", "Untitled film") if video else "Unknown film",
+        "viewerId": c.get("viewerId"),
+        "viewerUsername": viewer.get("username", "Viewer") if viewer else "Viewer",
+        "viewerAvatarUrl": viewer.get("avatarUrl") if viewer else None,
+        "directorUsername": director.get("username") if director else None,
         "text": c.get("text", ""),
-        "moderationStatus": c.get(
-            "moderationStatus",
-            "auto_hidden",
-        ),
-        "aiFlagCategories": c.get(
-            "aiFlagCategories",
-            [],
-        ),
-        "aiCheckFailed": c.get(
-            "aiCheckFailed",
-            False,
-        ),
+        "parentId": c.get("parentId"),
+        "moderationStatus": c.get("moderationStatus", "visible"),
+        "moderationFlagged": c.get("moderationFlagged", c.get("aiFlagged", False)),
+        "moderationCategories": c.get("moderationCategories", c.get("aiFlagCategories", [])),
+        "moderationMatchedTerms": c.get("moderationMatchedTerms", []),
+        "moderationLanguages": c.get("moderationLanguages", []),
+        "moderationLanguageCodes": c.get("moderationLanguageCodes", []),
+        "moderationSeverity": c.get("moderationSeverity", "low"),
+        "moderationCheckFailed": c.get("moderationCheckFailed", c.get("aiCheckFailed", False)),
+        "moderatedBy": c.get("moderatedBy"),
+        "moderatedAt": c.get("moderatedAt"),
+        "moderationHistory": c.get("moderationHistory", []),
         "createdAt": c.get("createdAt"),
-    }
+        "updatedAt": c.get("updatedAt"),
+    })
 
 
-# ============================================================
-# FLAGGED COMMENTS
-# ============================================================
+@router.get("/comments")
+def list_comments(
+    status: str = Query("all"),
+    video_id: str | None = Query(None),
+    payload: dict = Depends(require_role("admin")),
+):
+    allowed = {"all", "flagged", "visible", "removed", "auto_hidden"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail=f"status must be one of {sorted(allowed)}")
+
+    query = {}
+    if status == "flagged":
+        query["moderationFlagged"] = True
+    elif status != "all":
+        query["moderationStatus"] = status
+
+    if video_id:
+        try:
+            query["videoId"] = ObjectId(video_id)
+        except (InvalidId, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid video id")
+
+    comments = list(
+        comments_collection.find(query)
+        .sort("createdAt", -1)
+    )
+
+    serialized = [_serialize_admin_comment(c) for c in comments]
+    return {"count": len(serialized), "comments": serialized}
+
 
 @router.get("/comments/flagged")
 def list_flagged_comments(
     payload: dict = Depends(require_role("admin")),
 ):
     comments = list(
-        comments_collection
-        .find(
-            {
-                "moderationStatus": "auto_hidden",
-            }
-        )
-        .sort("createdAt", 1)
+        comments_collection.find({
+            "$or": [
+                {"moderationFlagged": True},
+                {"aiFlagged": True},
+            ]
+        })
+        .sort("createdAt", -1)
     )
 
-    serialized_comments = [
-        _serialize_flagged_comment(comment)
-        for comment in comments
-    ]
-
-    return {
-        "count": len(serialized_comments),
-        "comments": serialized_comments,
-    }
+    serialized = [_serialize_admin_comment(c) for c in comments]
+    return {"count": len(serialized), "comments": serialized}
 
 
-# ============================================================
-# RESTORE COMMENT
-# ============================================================
+def _comment_thread_ids(root_id: ObjectId) -> list[ObjectId]:
+    ids = [root_id]
+    frontier = [root_id]
+    while frontier:
+        children = list(
+            comments_collection.find(
+                {"parentId": {"$in": frontier}},
+                {"_id": 1},
+            )
+        )
+        child_ids = [c["_id"] for c in children]
+        if not child_ids:
+            break
+        ids.extend(child_ids)
+        frontier = child_ids
+    return ids
+
 
 @router.post("/comments/{comment_id}/restore")
 def restore_comment(
@@ -756,14 +810,14 @@ def restore_comment(
     try:
         oid = ObjectId(comment_id)
     except (InvalidId, TypeError):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid comment id",
-        )
+        raise HTTPException(status_code=400, detail="Invalid comment id")
+
+    comment = comments_collection.find_one({"_id": oid})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
 
     now = datetime.utcnow()
     moderator_id = ObjectId(payload["user_id"])
-
     result = comments_collection.update_one(
         {"_id": oid},
         {
@@ -782,21 +836,14 @@ def restore_comment(
         },
     )
 
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="Comment not found",
+    if result.modified_count and comment.get("moderationStatus") == "removed":
+        film_collection.update_one(
+            {"_id": comment["videoId"]},
+            {"$inc": {"commentCount": 1}},
         )
 
-    return {
-        "message": "Comment restored",
-        "commentId": comment_id,
-    }
+    return {"message": "Comment restored", "commentId": comment_id}
 
-
-# ============================================================
-# REMOVE COMMENT
-# ============================================================
 
 @router.post("/comments/{comment_id}/remove")
 def admin_remove_comment(
@@ -806,14 +853,17 @@ def admin_remove_comment(
     try:
         oid = ObjectId(comment_id)
     except (InvalidId, TypeError):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid comment id",
-        )
+        raise HTTPException(status_code=400, detail="Invalid comment id")
+
+    comment = comments_collection.find_one({"_id": oid})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    if comment.get("moderationStatus") == "removed":
+        return {"message": "Comment already removed", "commentId": comment_id}
 
     now = datetime.utcnow()
     moderator_id = ObjectId(payload["user_id"])
-
     result = comments_collection.update_one(
         {"_id": oid},
         {
@@ -832,16 +882,13 @@ def admin_remove_comment(
         },
     )
 
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="Comment not found",
+    if result.modified_count and comment.get("moderationStatus", "visible") == "visible":
+        film_collection.update_one(
+            {"_id": comment["videoId"]},
+            {"$inc": {"commentCount": -1}},
         )
 
-    return {
-        "message": "Comment permanently removed",
-        "commentId": comment_id,
-    }
+    return {"message": "Comment removed", "commentId": comment_id}
 
 
 # ============================================================

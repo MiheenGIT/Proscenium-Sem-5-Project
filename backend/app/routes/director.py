@@ -35,6 +35,9 @@ from database import (
     film_collection,
     directors_collection,
     cast_collection,
+    comments_collection,
+    comment_reactions_collection,
+    viewers_collection,
 )
 
 from models.schemas import BioUpdateRequest
@@ -1997,6 +2000,131 @@ async def get_my_video(
     video["cast"] = cast_docs
 
     return video
+
+
+# ============================================================
+# DIRECTOR COMMENT READ-ONLY VIEW
+# ============================================================
+
+def _serialize_director_comment(comment: dict) -> dict:
+    viewer = viewers_collection.find_one(
+        {"_id": comment["viewerId"]},
+        {"username": 1, "avatarUrl": 1},
+    )
+
+    return {
+        "id": str(comment["_id"]),
+        "videoId": str(comment["videoId"]),
+        "viewerId": str(comment["viewerId"]),
+        "viewerUsername": viewer.get("username", "Viewer") if viewer else "Viewer",
+        "viewerAvatarUrl": viewer.get("avatarUrl") if viewer else None,
+        "text": comment.get("text", ""),
+        "parentId": str(comment["parentId"]) if comment.get("parentId") else None,
+        "replyIds": [str(r) for r in comment.get("replyIds", [])],
+        "likes": comment_reactions_collection.count_documents({"commentId": comment["_id"], "type": "like"}),
+        "dislikes": comment_reactions_collection.count_documents({"commentId": comment["_id"], "type": "dislike"}),
+        "createdAt": comment.get("createdAt"),
+        "updatedAt": comment.get("updatedAt"),
+        "moderationStatus": comment.get("moderationStatus", "visible"),
+    }
+
+
+@router.get("/videos/{video_id}/comments")
+async def list_my_video_comments(
+    video_id: str,
+    page: int = 1,
+    limit: int = 50,
+    payload: dict = Depends(require_role("director")),
+):
+    try:
+        oid = ObjectId(video_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    limit = max(1, min(int(limit), 100))
+    page = max(1, int(page))
+
+    video = film_collection.find_one({
+        "_id": oid,
+        "directorId": ObjectId(payload["user_id"]),
+    })
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    query = {
+        "videoId": oid,
+        "parentId": None,
+        "moderationStatus": "visible",
+    }
+
+    total = comments_collection.count_documents(query)
+    comments = list(
+        comments_collection.find(query)
+        .sort("createdAt", -1)
+        .skip((page - 1) * limit)
+        .limit(limit)
+    )
+
+    return {
+        "count": total,
+        "page": page,
+        "limit": limit,
+        "comments": [_serialize_director_comment(c) for c in comments],
+    }
+
+
+@router.get("/videos/{video_id}/comments/{comment_id}/replies")
+async def list_my_video_comment_replies(
+    video_id: str,
+    comment_id: str,
+    page: int = 1,
+    limit: int = 100,
+    payload: dict = Depends(require_role("director")),
+):
+    try:
+        video_oid = ObjectId(video_id)
+        comment_oid = ObjectId(comment_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid id")
+
+    limit = max(1, min(int(limit), 100))
+    page = max(1, int(page))
+
+    video = film_collection.find_one({
+        "_id": video_oid,
+        "directorId": ObjectId(payload["user_id"]),
+    })
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    parent = comments_collection.find_one({
+        "_id": comment_oid,
+        "videoId": video_oid,
+        "parentId": None,
+        "moderationStatus": "visible",
+    })
+    if not parent:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    query = {
+        "videoId": video_oid,
+        "parentId": comment_oid,
+        "moderationStatus": "visible",
+    }
+    total = comments_collection.count_documents(query)
+    replies = list(
+        comments_collection.find(query)
+        .sort("createdAt", 1)
+        .skip((page - 1) * limit)
+        .limit(limit)
+    )
+
+    return {
+        "count": total,
+        "page": page,
+        "limit": limit,
+        "replies": [_serialize_director_comment(r) for r in replies],
+    }
 
 
 # ============================================================

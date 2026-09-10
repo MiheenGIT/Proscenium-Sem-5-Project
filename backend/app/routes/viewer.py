@@ -34,6 +34,7 @@ from models.schemas import (
     ViewerSettingsRequest,
 )
 from utils.cloudinary_helpers import upload_avatar
+from utils.moderation import check_comment_text
 from utils.security import require_role
 
 router = APIRouter(prefix="/viewer", tags=["viewer"])
@@ -702,6 +703,8 @@ def add_comment(
 
     now = datetime.utcnow()
 
+    moderation = check_comment_text(body.text.strip())
+
     comment_doc = {
         "videoId": oid,
         "viewerId": viewer["_id"],
@@ -710,7 +713,16 @@ def add_comment(
         "replyIds": [],
         "createdAt": now,
         "updatedAt": now,
+        # Always public immediately. Moderation only flags for admin review.
         "moderationStatus": "visible",
+        "moderationFlagged": moderation["flagged"],
+        "moderationCategories": moderation["categories"],
+        "moderationMatchedTerms": moderation["matchedTerms"],
+        "moderationLanguages": moderation["languages"],
+        "moderationLanguageCodes": moderation["languageCodes"],
+        "moderationSeverity": moderation["severity"],
+        "moderationCheckFailed": moderation["checkFailed"],
+        # Keep old fields for compatibility with existing frontend/data.
         "aiFlagged": False,
         "aiFlagCategories": [],
         "aiCheckFailed": False,
@@ -751,9 +763,7 @@ def reply_to_comment(
     parent = comments_collection.find_one({
         "_id": parent_oid,
         "videoId": video_oid,
-        "moderationStatus": {
-            "$ne": "auto_hidden",
-        },
+        "moderationStatus": "visible",
     })
 
     if not parent:
@@ -765,6 +775,8 @@ def reply_to_comment(
     viewer = _viewer_or_404(payload)
     now = datetime.utcnow()
 
+    moderation = check_comment_text(body.text.strip())
+
     reply_doc = {
         "videoId": video_oid,
         "viewerId": viewer["_id"],
@@ -774,6 +786,13 @@ def reply_to_comment(
         "createdAt": now,
         "updatedAt": now,
         "moderationStatus": "visible",
+        "moderationFlagged": moderation["flagged"],
+        "moderationCategories": moderation["categories"],
+        "moderationMatchedTerms": moderation["matchedTerms"],
+        "moderationLanguages": moderation["languages"],
+        "moderationLanguageCodes": moderation["languageCodes"],
+        "moderationSeverity": moderation["severity"],
+        "moderationCheckFailed": moderation["checkFailed"],
         "aiFlagged": False,
         "aiFlagCategories": [],
         "aiCheckFailed": False,
@@ -811,9 +830,7 @@ def list_comments(
     query = {
         "videoId": oid,
         "parentId": None,
-        "moderationStatus": {
-            "$ne": "auto_hidden",
-        },
+        "moderationStatus": "visible",
     }
 
     skip = (page - 1) * limit
@@ -860,9 +877,7 @@ def list_replies(
     query = {
         "videoId": video_oid,
         "parentId": parent_oid,
-        "moderationStatus": {
-            "$ne": "auto_hidden",
-        },
+        "moderationStatus": "visible",
     }
 
     total = comments_collection.count_documents(query)
@@ -931,7 +946,7 @@ def react_to_comment(
     comment = comments_collection.find_one({
         "_id": comment_oid,
         "videoId": video_oid,
-        "moderationStatus": {"$ne": "auto_hidden"},
+        "moderationStatus": "visible",
     })
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -983,6 +998,7 @@ def edit_comment(
     comment = comments_collection.find_one({
         "_id": comment_oid,
         "videoId": video_oid,
+        "moderationStatus": "visible",
     })
 
     if not comment:
@@ -998,6 +1014,7 @@ def edit_comment(
         )
 
     now = datetime.utcnow()
+    moderation = check_comment_text(body.text.strip())
 
     comments_collection.update_one(
         {"_id": comment_oid},
@@ -1006,8 +1023,16 @@ def edit_comment(
                 "text": body.text.strip(),
                 "updatedAt": now,
                 "moderationStatus": "visible",
+                "moderationFlagged": moderation["flagged"],
+                "moderationCategories": moderation["categories"],
+                "moderationMatchedTerms": moderation["matchedTerms"],
+                "moderationLanguages": moderation["languages"],
+                "moderationLanguageCodes": moderation["languageCodes"],
+                "moderationSeverity": moderation["severity"],
+                "moderationCheckFailed": moderation["checkFailed"],
                 "aiFlagged": False,
                 "aiFlagCategories": [],
+                "aiCheckFailed": False,
             }
         },
     )
@@ -1060,6 +1085,14 @@ def delete_comment(
 
     all_ids = [comment_oid] + descendants
 
+    # Only comments that were still visible counted toward the film's public
+    # commentCount. A comment may have been removed by an admin before the
+    # owner deletes it, so decrement only the currently visible documents.
+    visible_count = comments_collection.count_documents({
+        "_id": {"$in": all_ids},
+        "moderationStatus": "visible",
+    })
+
     comments_collection.delete_many({
         "_id": {"$in": all_ids}
     })
@@ -1081,7 +1114,7 @@ def delete_comment(
         {"_id": video_oid},
         {
             "$inc": {
-                "commentCount": -len(all_ids),
+                "commentCount": -visible_count,
             }
         },
     )
@@ -1090,6 +1123,7 @@ def delete_comment(
         "message": "Comment deleted",
         "commentId": comment_id,
         "removedCount": len(all_ids),
+        "countedRemoved": visible_count,
     }
 
 

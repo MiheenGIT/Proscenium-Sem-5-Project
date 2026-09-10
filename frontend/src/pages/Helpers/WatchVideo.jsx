@@ -177,6 +177,219 @@ function StatusBadge({ status }) {
   );
 }
 
+function DirectorCommentItem({ comment, videoId }) {
+  const [replies, setReplies] = useState([]);
+  const [showReplies, setShowReplies] = useState(false);
+  const [loadingReplies, setLoadingReplies] = useState(false);
+  const [error, setError] = useState("");
+
+  async function toggleReplies() {
+    if (showReplies) {
+      setShowReplies(false);
+      return;
+    }
+
+    setLoadingReplies(true);
+    setError("");
+    try {
+      const data = await getRequest(
+        `/directors/videos/${videoId}/comments/${comment.id}/replies?limit=100`
+      );
+      setReplies(data.replies || []);
+      setShowReplies(true);
+    } catch (err) {
+      setError(err.message || "Unable to load replies.");
+    } finally {
+      setLoadingReplies(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-white/[0.018] p-4">
+      <div className="flex gap-3">
+        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/[0.1] bg-white/[0.04]">
+          {comment.viewerAvatarUrl ? (
+            <img
+              src={comment.viewerAvatarUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="grid h-full w-full place-items-center text-xs text-[var(--gold-soft)]">
+              {comment.viewerUsername?.charAt(0)?.toUpperCase() || "V"}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-[var(--parchment)]">
+              {comment.viewerUsername || "Viewer"}
+            </span>
+            <span className="text-[0.65rem] text-[var(--mauve)]">
+              {comment.createdAt
+                ? new Date(comment.createdAt).toLocaleString()
+                : ""}
+            </span>
+          </div>
+
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--parchment)]/85">
+            {comment.text}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-4 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.08em] text-[var(--mauve)]">
+            <span>{comment.likes || 0} likes</span>
+            {comment.dislikes ? <span>{comment.dislikes} dislikes</span> : null}
+            {comment.replyIds?.length > 0 ? (
+              <button
+                type="button"
+                onClick={toggleReplies}
+                disabled={loadingReplies}
+                className="text-[var(--gold-soft)] transition hover:text-[var(--parchment)] disabled:opacity-50"
+              >
+                {loadingReplies
+                  ? "Loading…"
+                  : showReplies
+                    ? "Hide replies"
+                    : `${comment.replyIds.length} ${comment.replyIds.length === 1 ? "reply" : "replies"}`}
+              </button>
+            ) : null}
+          </div>
+
+          {error ? (
+            <p className="mt-2 text-xs text-[var(--error)]">{error}</p>
+          ) : null}
+
+          {showReplies && replies.length > 0 ? (
+            <div className="mt-4 space-y-3 border-l border-white/[0.08] pl-4">
+              {replies.map((reply) => (
+                <div key={reply.id} className="flex gap-3">
+                  <div className="h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/[0.08] bg-white/[0.04]">
+                    {reply.viewerAvatarUrl ? (
+                      <img
+                        src={reply.viewerAvatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-[0.6rem] text-[var(--gold-soft)]">
+                        {reply.viewerUsername?.charAt(0)?.toUpperCase() || "V"}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-[var(--parchment)]">
+                        {reply.viewerUsername || "Viewer"}
+                      </span>
+                      <span className="text-[0.58rem] text-[var(--mauve)]">
+                        {reply.createdAt
+                          ? new Date(reply.createdAt).toLocaleString()
+                          : ""}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--parchment)]/75">
+                      {reply.text}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DirectorComments({ videoId }) {
+  const [comments, setComments] = useState([]);
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadComments() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getRequest(
+        `/directors/videos/${videoId}/comments?limit=100`
+      );
+      setComments(data.comments || []);
+      setCount(Number(data.count || 0));
+    } catch (err) {
+      setError(err.message || "Unable to load audience comments.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadComments();
+  }, [videoId]);
+
+  return (
+    <section className="mt-10 border-t border-white/[0.06] pt-8">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.18em] text-[var(--gold)]">
+            Audience
+          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <h2 className="font-[var(--font-display)] text-2xl text-[var(--parchment)]">
+              Comments
+            </h2>
+            <span className="rounded-full border border-white/[0.08] px-2 py-0.5 font-[var(--font-mono)] text-[0.6rem] text-[var(--mauve)]">
+              {count}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[var(--mauve)]">
+            Viewer comments on this film. This is a read-only director view.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={loadComments}
+          disabled={loading}
+          className="rounded-lg border border-white/[0.09] px-3 py-2 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.1em] text-[var(--mauve)] transition hover:border-[var(--gold)]/40 hover:text-[var(--gold-soft)] disabled:opacity-50"
+        >
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {error ? (
+        <div className="rounded-xl border border-[var(--error)]/30 bg-[var(--error)]/10 p-4 text-sm text-[var(--error)]">
+          {error}
+        </div>
+      ) : loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((item) => (
+            <div
+              key={item}
+              className="h-24 animate-pulse rounded-2xl border border-white/[0.05] bg-white/[0.02]"
+            />
+          ))}
+        </div>
+      ) : comments.length ? (
+        <div className="space-y-3">
+          {comments.map((comment) => (
+            <DirectorCommentItem
+              key={comment.id}
+              comment={comment}
+              videoId={videoId}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.015] p-10 text-center text-sm text-[var(--mauve)]">
+          No viewer comments yet.
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               MAIN COMPONENT                               */
 /* -------------------------------------------------------------------------- */
@@ -685,6 +898,8 @@ export default function WatchVideo() {
             </div>
           </div>
         </div>
+
+        <DirectorComments videoId={id} />
       </main>
 
       {/* Floating Error Toast */}
