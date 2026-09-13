@@ -11,6 +11,7 @@ const groups = [
       ["For You", "/for-you", Sparkles],
       ["Trending", "/trending", TrendingUp],
       ["Explore", "/explore", Compass],
+      ["Film Reviews", "/film-reviews", Star],
     ],
   ],
   [

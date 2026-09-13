@@ -1209,7 +1209,10 @@ def _serialize_review(review: dict, viewer_id=None) -> dict:
     viewer = viewers_collection.find_one(
         {"_id": review["viewerId"]}, {"username": 1, "avatarUrl": 1}
     )
-    video = film_collection.find_one({"_id": review["videoId"]}, {"title": 1, "thumbnailUrl": 1})
+    video = film_collection.find_one(
+        {"_id": review["videoId"]},
+        {"title": 1, "thumbnailUrl": 1, "releaseYear": 1, "genres": 1},
+    )
 
     liked = None
     if viewer_id:
@@ -1217,7 +1220,9 @@ def _serialize_review(review: dict, viewer_id=None) -> dict:
             "viewerId": viewer_id, "reviewId": review["_id"],
         }) is not None
 
-    likes = review_reactions_collection.count_documents({"reviewId": review["_id"], "type": "like"})
+    likes = review_reactions_collection.count_documents({
+        "reviewId": review["_id"], "type": "like"
+    })
 
     return {
         "id": str(review["_id"]),
@@ -1229,6 +1234,7 @@ def _serialize_review(review: dict, viewer_id=None) -> dict:
         "thumbnailUrl": video.get("thumbnailUrl") if video else None,
         "rating": float(review.get("rating", 0)),
         "text": review.get("text", ""),
+        "moderationStatus": review.get("moderationStatus", "visible"),
         "likes": likes,
         "liked": liked,
         "createdAt": review.get("createdAt"),
@@ -1242,18 +1248,189 @@ def list_my_reviews(
 ):
     viewer = _viewer_or_404(payload)
     rows = video_reviews_collection.find({"viewerId": viewer["_id"]}).sort("updatedAt", -1)
-    return {"count": video_reviews_collection.count_documents({"viewerId": viewer["_id"]}), "reviews": [_serialize_review(r, viewer["_id"]) for r in rows]}
+    return {
+        "count": video_reviews_collection.count_documents({"viewerId": viewer["_id"]}),
+        "reviews": [_serialize_review(r, viewer["_id"]) for r in rows],
+    }
+
+
+@router.get("/reviews/catalog")
+def list_reviewable_films(
+    genre: Optional[str] = None,
+    sort: str = Query("reviews", description="Sort by: reviews, rating, recent, title"),
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(36, ge=1, le=100),
+    payload: dict = Depends(require_role("viewer")),
+):
+    """
+    Letterboxd-style poster catalog view (View A).
+    Returns all public approved films with ratings and review counts.
+    """
+    _viewer_or_404(payload)
+    maturity_filter = _maturity_filter(payload)
+
+    query = {
+        "moderationStatus": "approved",
+        "visibility": "public",
+        **maturity_filter,
+    }
+
+    if genre:
+        query["genres"] = {"$regex": f"^{genre.strip()}$", "$options": "i"}
+
+    if search:
+        query["title"] = {"$regex": search.strip(), "$options": "i"}
+
+    if sort == "rating":
+        sort_spec = [("avgRating", -1), ("reviewCount", -1)]
+    elif sort == "recent":
+        sort_spec = [("publishedAt", -1)]
+    elif sort == "title":
+        sort_spec = [("title", 1)]
+    else:  # default "reviews" (most reviewed first)
+        sort_spec = [("reviewCount", -1), ("avgRating", -1), ("publishedAt", -1)]
+
+    total = film_collection.count_documents(query)
+    films = list(
+        film_collection.find(query)
+        .sort(sort_spec)
+        .skip((page - 1) * limit)
+        .limit(limit)
+    )
+
+    return {
+        "count": total,
+        "page": page,
+        "limit": limit,
+        "films": [
+            {
+                "id": str(f["_id"]),
+                "title": f.get("title", "Untitled"),
+                "thumbnailUrl": f.get("thumbnailUrl"),
+                "releaseYear": f.get("releaseYear"),
+                "durationSec": f.get("durationSec", 0),
+                "genres": f.get("genres", []),
+                "avgRating": float(f.get("avgRating", 0)),
+                "reviewCount": int(f.get("reviewCount", 0)),
+                "views": int(f.get("views", 0)),
+            }
+            for f in films
+        ],
+    }
+
+
+@router.get("/videos/{video_id}/reviews/top")
+def get_top_video_reviews(
+    video_id: str,
+    limit: int = Query(5, ge=1, le=20),
+    payload: dict = Depends(require_role("viewer")),
+):
+    """
+    Dashboard teaser surface: Capped fetch of the top N reviews sorted highest-first by rating.
+    """
+    oid, _ = _get_public_video_or_404(video_id)
+    viewer = _viewer_or_404(payload)
+
+    query = {"videoId": oid, "moderationStatus": {"$ne": "removed"}}
+    rows = list(
+        video_reviews_collection.find(query)
+        .sort([("rating", -1), ("updatedAt", -1)])
+        .limit(limit)
+    )
+
+    return {
+        "videoId": video_id,
+        "count": len(rows),
+        "total": video_reviews_collection.count_documents(query),
+        "reviews": [_serialize_review(r, viewer["_id"]) for r in rows],
+    }
 
 
 @router.get("/videos/{video_id}/reviews")
 def list_video_reviews(
     video_id: str,
+    sort: str = Query("rating_desc", description="Sort by: rating_desc, rating_asc, recent, oldest, helpful"),
+    rating: Optional[int] = Query(None, ge=1, le=5, description="Filter by exact star rating (1-5)"),
+    min_rating: Optional[float] = Query(None, ge=1, le=5),
+    max_rating: Optional[float] = Query(None, ge=1, le=5),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     payload: dict = Depends(require_role("viewer")),
 ):
-    oid, _ = _get_public_video_or_404(video_id)
+    """
+    Letterboxd-style per-film review list (View B).
+    Returns all reviews for a film with sorting, filtering, and star distribution.
+    """
+    oid, video = _get_public_video_or_404(video_id)
     viewer = _viewer_or_404(payload)
-    rows = video_reviews_collection.find({"videoId": oid}).sort("updatedAt", -1).limit(100)
-    return {"count": video_reviews_collection.count_documents({"videoId": oid}), "reviews": [_serialize_review(r, viewer["_id"]) for r in rows]}
+
+    query = {"videoId": oid, "moderationStatus": {"$ne": "removed"}}
+
+    if rating is not None:
+        query["rating"] = {"$gte": rating, "$lt": rating + 1} if rating < 5 else {"$gte": 5.0}
+    else:
+        rating_conditions = {}
+        if min_rating is not None:
+            rating_conditions["$gte"] = min_rating
+        if max_rating is not None:
+            rating_conditions["$lte"] = max_rating
+        if rating_conditions:
+            query["rating"] = rating_conditions
+
+    # Sorting options
+    if sort == "rating_asc":
+        sort_spec = [("rating", 1), ("updatedAt", -1)]
+    elif sort == "recent":
+        sort_spec = [("updatedAt", -1)]
+    elif sort == "oldest":
+        sort_spec = [("createdAt", 1)]
+    else:  # default "rating_desc" / "helpful"
+        sort_spec = [("rating", -1), ("updatedAt", -1)]
+
+    total_matching = video_reviews_collection.count_documents(query)
+    total_all = video_reviews_collection.count_documents({"videoId": oid, "moderationStatus": {"$ne": "removed"}})
+
+    # Calculate star breakdown distribution (1-5 stars)
+    distribution = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+    dist_stats = list(video_reviews_collection.aggregate([
+        {"$match": {"videoId": oid, "moderationStatus": {"$ne": "removed"}}},
+        {"$project": {"starBucket": {"$floor": "$rating"}}},
+        {"$group": {"_id": "$starBucket", "count": {"$sum": 1}}},
+    ]))
+    for stat in dist_stats:
+        b_id = stat.get("_id")
+        if b_id is not None:
+            k = str(min(5, max(1, int(b_id))))
+            distribution[k] = distribution.get(k, 0) + int(stat["count"])
+
+    rows = list(
+        video_reviews_collection.find(query)
+        .sort(sort_spec)
+        .skip((page - 1) * limit)
+        .limit(limit)
+    )
+
+    return {
+        "videoId": video_id,
+        "film": {
+            "id": str(video["_id"]),
+            "title": video.get("title", "Untitled"),
+            "description": video.get("description"),
+            "thumbnailUrl": video.get("thumbnailUrl"),
+            "releaseYear": video.get("releaseYear"),
+            "durationSec": video.get("durationSec"),
+            "genres": video.get("genres", []),
+            "avgRating": float(video.get("avgRating", 0)),
+            "reviewCount": int(video.get("reviewCount", 0)),
+        },
+        "count": total_matching,
+        "total": total_all,
+        "page": page,
+        "limit": limit,
+        "distribution": distribution,
+        "reviews": [_serialize_review(r, viewer["_id"]) for r in rows],
+    }
 
 
 @router.post("/videos/{video_id}/reviews")
@@ -1262,21 +1439,42 @@ def upsert_review(
     body: ReviewRequest,
     payload: dict = Depends(require_role("viewer")),
 ):
-    oid, _ = _get_public_video_or_404(video_id)
+    oid, video = _get_public_video_or_404(video_id)
     viewer = _viewer_or_404(payload)
 
-    has_watched = video_views_collection.find_one({
-        "videoId": oid, "viewerId": viewer["_id"],
-    }) is not None
-    if not has_watched:
+    # 80% Watch Completion Gate
+    duration = float(video.get("durationSec", 0) or 0)
+    history = watch_history_collection.find_one({"videoId": oid, "viewerId": viewer["_id"]})
+    session = watch_sessions_collection.find_one({"videoId": oid, "viewerId": viewer["_id"]})
+    has_view = video_views_collection.find_one({"videoId": oid, "viewerId": viewer["_id"]}) is not None
+
+    has_watched_80 = False
+    if duration > 0:
+        if history and (float(history.get("progress", 0)) >= 0.80 or float(history.get("currentTimeSec", 0)) >= duration * 0.80):
+            has_watched_80 = True
+        elif session and (float(session.get("accumulatedSeconds", 0)) >= duration * 0.80):
+            has_watched_80 = True
+        elif has_view:
+            has_watched_80 = True
+    else:
+        has_watched_80 = bool(has_view or history)
+
+    if not has_watched_80:
         raise HTTPException(
             status_code=403,
-            detail="You can only review a video after watching at least 75% of it",
+            detail="You can only submit a review after watching at least 80% of this film.",
         )
 
     now = datetime.utcnow()
     existing = video_reviews_collection.find_one({"viewerId": viewer["_id"], "videoId": oid})
-    doc = {"viewerId": viewer["_id"], "videoId": oid, "rating": body.rating, "text": body.text.strip(), "updatedAt": now}
+    doc = {
+        "viewerId": viewer["_id"],
+        "videoId": oid,
+        "rating": float(body.rating),
+        "text": body.text.strip(),
+        "moderationStatus": "visible",
+        "updatedAt": now,
+    }
     if existing:
         video_reviews_collection.update_one({"_id": existing["_id"]}, {"$set": doc})
         review = video_reviews_collection.find_one({"_id": existing["_id"]})
@@ -1284,13 +1482,16 @@ def upsert_review(
         doc["createdAt"] = now
         result = video_reviews_collection.insert_one(doc)
         review = video_reviews_collection.find_one({"_id": result.inserted_id})
+
+    # Recalculate avgRating and reviewCount for approved public film
     stats = list(video_reviews_collection.aggregate([
-        {"$match": {"videoId": oid}},
+        {"$match": {"videoId": oid, "moderationStatus": {"$ne": "removed"}}},
         {"$group": {"_id": None, "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
     ]))
-    avg = round(float(stats[0]["avg"]), 1) if stats else 0
+    avg = round(float(stats[0]["avg"]), 1) if stats else 0.0
     count = int(stats[0]["count"]) if stats else 0
     film_collection.update_one({"_id": oid}, {"$set": {"avgRating": avg, "reviewCount": count}})
+
     result = _serialize_review(review, viewer["_id"])
     result.update({"avgRating": avg, "reviewCount": count})
     return result
@@ -1307,13 +1508,14 @@ def delete_my_review(
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Review not found")
     stats = list(video_reviews_collection.aggregate([
-        {"$match": {"videoId": oid}},
+        {"$match": {"videoId": oid, "moderationStatus": {"$ne": "removed"}}},
         {"$group": {"_id": None, "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
     ]))
-    avg = round(float(stats[0]["avg"]), 1) if stats else 0
+    avg = round(float(stats[0]["avg"]), 1) if stats else 0.0
     count = int(stats[0]["count"]) if stats else 0
     film_collection.update_one({"_id": oid}, {"$set": {"avgRating": avg, "reviewCount": count}})
     return {"message": "Review deleted", "reviewCount": count, "avgRating": avg}
+
 
 @router.post("/videos/{video_id}/reviews/{review_id}/like")
 def toggle_review_like(
@@ -1350,7 +1552,6 @@ def toggle_review_like(
         liked = True
 
     likes = review_reactions_collection.count_documents({"reviewId": review_oid, "type": "like"})
-
     return {"liked": liked, "likes": likes}
 
 @router.get("/liked")

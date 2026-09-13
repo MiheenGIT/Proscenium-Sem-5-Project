@@ -12,6 +12,7 @@ export default function MovieRow({
   onPlay,
   onSaved,
   onLiked,
+  onShowReviews,
   action,
 }) {
   if (!loading && !videos.length) {
@@ -54,6 +55,7 @@ export default function MovieRow({
                 onSaved={onSaved}
                 onLiked={onLiked}
                 onPlay={onPlay}
+                onShowReviews={onShowReviews}
               />
             ))}
       </div>

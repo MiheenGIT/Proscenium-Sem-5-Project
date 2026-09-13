@@ -5,6 +5,7 @@ import HeroBanner from "../../components/Dashboard/HeroBanner.jsx";
 import MovieRow from "../../components/Dashboard/MovieRow.jsx";
 import ActivityPanel from "../../components/Dashboard/ActivityPanel.jsx";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
+import TopReviewsModal from "../../components/Dashboard/TopReviewsModal.jsx";
 
 import { getRequest, postJson } from "../../api/client.js";
 import { ErrorState,} from "../../components/common/States.jsx";
@@ -102,6 +103,7 @@ function HomeInner() {
 
   const [genre, setGenre] = useState("");
   const [hero, setHero] = useState(0);
+  const [selectedReviewVideo, setSelectedReviewVideo] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -517,6 +519,7 @@ function HomeInner() {
             likedIds={likedIds}
             onPlay={play}
             onSaved={onSaved}
+            onShowReviews={(v) => setSelectedReviewVideo(v)}
           />
 
           <MovieRow
@@ -528,6 +531,7 @@ function HomeInner() {
             onPlay={play}
             onSaved={onSaved}
             onLiked={() => {}}
+            onShowReviews={(v) => setSelectedReviewVideo(v)}
           />
 
           <MovieRow
@@ -552,6 +556,7 @@ function HomeInner() {
             likedIds={likedIds}
             onPlay={play}
             onSaved={onSaved}
+            onShowReviews={(v) => setSelectedReviewVideo(v)}
           />
 
           <MovieRow
@@ -562,6 +567,7 @@ function HomeInner() {
             likedIds={likedIds}
             onPlay={play}
             onSaved={onSaved}
+            onShowReviews={(v) => setSelectedReviewVideo(v)}
           />
 
           <MovieRow
@@ -571,6 +577,7 @@ function HomeInner() {
             likedIds={likedIds}
             onPlay={play}
             onSaved={onSaved}
+            onShowReviews={(v) => setSelectedReviewVideo(v)}
           />
 
           <MovieRow
@@ -580,6 +587,7 @@ function HomeInner() {
             likedIds={likedIds}
             onPlay={play}
             onSaved={onSaved}
+            onShowReviews={(v) => setSelectedReviewVideo(v)}
             action={
               <button
                 onClick={() =>
@@ -604,6 +612,14 @@ function HomeInner() {
           onPlay={play}
         />
       </div>
+
+      {selectedReviewVideo && (
+        <TopReviewsModal
+          video={selectedReviewVideo}
+          onClose={() => setSelectedReviewVideo(null)}
+          onPlay={play}
+        />
+      )}
     </div>
   );
 }

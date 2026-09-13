@@ -79,6 +79,7 @@ export default function MovieCard({
   onSaved,
   onLiked,
   onPlay,
+  onShowReviews,
   compact = false,
 }) {
   const [busy, setBusy] = useState(false);
@@ -271,14 +272,27 @@ export default function MovieCard({
             <>
               <span>•</span>
 
-              <span className="flex items-center gap-1 text-[#d9a653]">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowReviews?.(video);
+                }}
+                className="inline-flex items-center gap-1 text-[#d9a653] transition hover:text-[#f3d39b]"
+                title="View community reviews"
+              >
                 <Star
                   size={9}
                   fill="currentColor"
                 />
 
-                {num(video.avgRating).toFixed(1)}
-              </span>
+                <span>{num(video.avgRating).toFixed(1)}</span>
+                {num(video?.reviewCount) > 0 && (
+                  <span className="text-[8px] text-[#756a6f]">
+                    ({num(video.reviewCount)})
+                  </span>
+                )}
+              </button>
             </>
           )}
         </div>

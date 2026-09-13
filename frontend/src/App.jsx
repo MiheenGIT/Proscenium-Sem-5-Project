@@ -61,6 +61,7 @@ import LibraryPage from "./pages/Viewer-panel/LibraryPage.jsx";
 import MovieDetail from "./pages/Viewer-panel/MovieDetail.jsx";
 import Profile from "./pages/Viewer-panel/Profile.jsx";
 import Reviews from "./pages/Viewer-panel/Reviews.jsx";
+import FilmReviewsPage from "./pages/Viewer-panel/FilmReviewsPage.jsx";
 import WatchVideo from "./pages/Viewer-panel/WatchVideo.jsx";
 import AccountPages from "./pages/Viewer-panel/AccountPages.jsx";
 
@@ -332,6 +333,24 @@ export default function App() {
         element={
           <ViewerOnly>
             <Reviews />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/film-reviews"
+        element={
+          <ViewerOnly>
+            <FilmReviewsPage />
+          </ViewerOnly>
+        }
+      />
+
+      <Route
+        path="/film-reviews/:id"
+        element={
+          <ViewerOnly>
+            <FilmReviewsPage />
           </ViewerOnly>
         }
       />

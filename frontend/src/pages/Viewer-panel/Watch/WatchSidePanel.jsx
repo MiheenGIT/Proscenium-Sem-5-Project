@@ -56,7 +56,7 @@ export default function WatchSidePanel({ video, videoId, onReviewSaved, onReview
         </div>
 
         <p className="mt-6 text-[10px] leading-5 text-[#756a6f]">
-          Watch at least 75% of this film to unlock reviewing.
+          Watch at least 80% of this film to unlock reviewing.
         </p>
       </aside>
     );
