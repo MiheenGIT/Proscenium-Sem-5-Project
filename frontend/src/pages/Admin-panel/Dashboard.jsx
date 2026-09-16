@@ -131,13 +131,13 @@ function StatCard({ label, value, subtext, icon: Icon, accent = "gold", loading 
 
 export default function Dashboard() {
   const [videos, setVideos] = useState([]);
-  const [flaggedComments, setFlaggedComments] = useState(0);
+  const [flaggedFeedback, setFlaggedFeedback] = useState({ comments: 0, reviews: 0 });
 
   const [videoLoading, setVideoLoading] = useState(true);
-  const [commentLoading, setCommentLoading] = useState(true);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
 
   const [videoError, setVideoError] = useState("");
-  const [commentError, setCommentError] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
 
   async function loadVideos() {
     setVideoLoading(true);
@@ -153,22 +153,26 @@ export default function Dashboard() {
     }
   }
 
-  async function loadComments() {
-    setCommentLoading(true);
-    setCommentError("");
+  async function loadFeedback() {
+    setFeedbackLoading(true);
+    setFeedbackError("");
     try {
-      const data = await getRequest("/admin/comments/flagged");
-      setFlaggedComments(getCommentCount(data));
+      const result = await getRequest("/admin/feedback/flagged");
+
+      setFlaggedFeedback({
+        comments: Number(result?.comments || 0),
+        reviews: Number(result?.reviews || 0),
+      });
     } catch (error) {
-      setCommentError(error.message || "Unable to load flagged comments.");
-      setFlaggedComments(0);
+      setFeedbackError(error.message || "Unable to load flagged feedback.");
+      setFlaggedFeedback({ comments: 0, reviews: 0 });
     } finally {
-      setCommentLoading(false);
+      setFeedbackLoading(false);
     }
   }
 
   async function load() {
-    await Promise.all([loadVideos(), loadComments()]);
+    await Promise.all([loadVideos(), loadFeedback()]);
   }
 
   useEffect(() => {
@@ -192,7 +196,8 @@ export default function Dashboard() {
       .slice(0, 5);
   }, [videos]);
 
-  const loading = videoLoading || commentLoading;
+  const loading = videoLoading || feedbackLoading;
+  const flaggedFeedbackCount = flaggedFeedback.comments + flaggedFeedback.reviews;
   const pendingCount = counts.pending || 0;
   const approvedCount = counts.approved || 0;
   const rejectedCount = counts.rejected || 0;
@@ -227,7 +232,7 @@ export default function Dashboard() {
       </div>
 
       {/* Priority Action Banner (If queue has items) */}
-      {!loading && (pendingCount > 0 || flaggedComments > 0) && (
+      {!loading && (pendingCount > 0 || flaggedFeedbackCount > 0) && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[#d9a653]/30 bg-[#d9a653]/[0.08] p-4 shadow-lg shadow-[#d9a653]/5">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#d9a653]/20 text-[#d9a653]">
@@ -239,8 +244,8 @@ export default function Dashboard() {
               </p>
               <p className="text-[11px] text-[#b8acb0]">
                 {pendingCount > 0 && `${pendingCount} film${pendingCount === 1 ? "" : "s"} waiting for screening approval`}
-                {pendingCount > 0 && flaggedComments > 0 && " • "}
-                {flaggedComments > 0 && `${flaggedComments} user comment${flaggedComments === 1 ? "" : "s"} flagged`}
+                {pendingCount > 0 && flaggedFeedbackCount > 0 && " • "}
+                {flaggedFeedbackCount > 0 && `${flaggedFeedbackCount} flagged feedback item${flaggedFeedbackCount === 1 ? "" : "s"} (${flaggedFeedback.comments} comment${flaggedFeedback.comments === 1 ? "" : "s"}, ${flaggedFeedback.reviews} review${flaggedFeedback.reviews === 1 ? "" : "s"})`}
               </p>
             </div>
           </div>
@@ -258,9 +263,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {commentError && (
+      {feedbackError && (
         <div className="rounded-xl border border-[#e08a6b]/30 bg-[#e08a6b]/[0.07] p-4 text-sm text-[#e08a6b]">
-          Comments Feed Error: {commentError}
+          Feedback Feed Error: {feedbackError}
         </div>
       )}
 
@@ -303,12 +308,12 @@ export default function Dashboard() {
         />
 
         <StatCard
-          label="Flagged Comments"
-          value={commentLoading ? "—" : flaggedComments}
-          subtext={flaggedComments > 0 ? "Needs triage" : "Community clear"}
+          label="Flagged Feedback"
+          value={feedbackLoading ? "—" : flaggedFeedbackCount}
+          subtext={flaggedFeedbackCount > 0 ? `${flaggedFeedback.comments} comments · ${flaggedFeedback.reviews} reviews` : "Community clear"}
           icon={MessageSquareWarning}
-          accent={flaggedComments > 0 ? "red" : "neutral"}
-          loading={commentLoading}
+          accent={flaggedFeedbackCount > 0 ? "red" : "neutral"}
+          loading={feedbackLoading}
         />
       </div>
 

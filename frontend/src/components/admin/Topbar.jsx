@@ -1,8 +1,5 @@
 import React from "react";
-import {
-  Bell,
-  ChevronRight,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 
@@ -42,13 +39,6 @@ export default function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button
-          className="grid h-9 w-9 place-items-center rounded-xl bg-white/4 text-[#b8acb0]"
-          aria-label="Notifications"
-        >
-          <Bell size={16} />
-        </button>
-
         <div className="hidden text-right sm:block">
           <p className="text-[11px] font-medium text-[#d9d0d2]">
             {username}

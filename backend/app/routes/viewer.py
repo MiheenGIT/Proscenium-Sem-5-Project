@@ -1466,13 +1466,25 @@ def upsert_review(
         )
 
     now = datetime.utcnow()
+    review_text = body.text.strip()
+    moderation = check_comment_text(review_text)
     existing = video_reviews_collection.find_one({"viewerId": viewer["_id"], "videoId": oid})
     doc = {
         "viewerId": viewer["_id"],
         "videoId": oid,
         "rating": float(body.rating),
-        "text": body.text.strip(),
+        "text": review_text,
         "moderationStatus": "visible",
+        "moderationFlagged": moderation["flagged"],
+        "moderationCategories": moderation["categories"],
+        "moderationMatchedTerms": moderation["matchedTerms"],
+        "moderationLanguages": moderation["languages"],
+        "moderationLanguageCodes": moderation["languageCodes"],
+        "moderationSeverity": moderation["severity"],
+        "moderationCheckFailed": moderation["checkFailed"],
+        "aiFlagged": False,
+        "aiFlagCategories": [],
+        "aiCheckFailed": False,
         "updatedAt": now,
     }
     if existing:

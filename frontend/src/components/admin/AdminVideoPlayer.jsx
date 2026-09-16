@@ -27,6 +27,8 @@ export default function AdminVideoPlayer({ src, poster, title }) {
     let hls = null;
     let player = null;
     let isMounted = true;
+    let networkRetries = 0;
+    let mediaRecovered = false;
 
     // Helper to safely tear down previous instances
     function cleanup() {
@@ -106,19 +108,31 @@ export default function AdminVideoPlayer({ src, poster, title }) {
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!isMounted) return;
-        if (data?.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
+        if (!data?.fatal) return;
+
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            if (networkRetries < 2) {
+              networkRetries += 1;
               hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
+            } else {
               setLoading(false);
-              setError("Stream failed to load.");
-              break;
-          }
+              setError("Unable to load the video stream. Check the stream URL or media service.");
+            }
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            if (!mediaRecovered) {
+              mediaRecovered = true;
+              hls.recoverMediaError();
+            } else {
+              setLoading(false);
+              setError("The video stream contains an unsupported or damaged media segment.");
+            }
+            break;
+          default:
+            setLoading(false);
+            setError("Stream failed to load.");
+            break;
         }
       });
     } else if (el.canPlayType("application/vnd.apple.mpegurl")) {

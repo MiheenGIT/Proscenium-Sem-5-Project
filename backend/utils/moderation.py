@@ -8,7 +8,7 @@ import unicodedata
 
 FLAGGED_TERMS = {
     "en": {
-        "profanity": {"fuck", "fucker", "fucking", "motherfucker", "shit", "shithead", "bitch", "bastard", "asshole", "bullshit", "cunt", "dickhead", "dumbass", "jackass", "piss off", "son of a bitch"},
+        "profanity": {"fuck", "fucker", "fucking", "motherfucker", "shit", "shithead", "bitch", "bastard", "asshole", "bullshit", "cunt", "dickhead", "dumbass", "jackass", "piss off", "son of a bitch", "fuck off", "fuck you", "shithead", "stfu", "wtf"},
         "sexual": {"rape", "rapist", "porn", "porno", "pornography", "blowjob", "handjob", "dick pic", "send nudes", "sex video", "sexual assault"},
         "threat": {"kill you", "i will kill you", "i'll kill you", "i will hurt you", "i'll hurt you", "hurt you", "beat you up", "you will die", "go die", "die die die"},
         "harassment": {"idiot", "stupid", "loser", "moron", "shut up", "worthless", "piece of shit", "you suck", "get lost", "ugly loser"},
@@ -18,16 +18,16 @@ FLAGGED_TERMS = {
     },
     "hi": {
         "profanity": {"madarchod", "madar chod", "bhenchod", "behenchod", "gandu", "gaand", "harami", "haramkhor", "bakchod", "bakchodi", "randi", "lavde", "laude", "bhosdike", "bhosdi", "chutiya", "chutiye", "chutiye", "kamine", "kamina", "saala", "sala", "kutti", "kutte"},
-        "harassment": {"nikal yahan se", "chup kar", "pagal", "bewakoof", "ullu ka pattha", "ghatiya insaan", "teri aukat", "aukat nahi"},
+        "harassment": {"nikal yahan se", "chup kar", "pagal", "bewakoof", "ullu ka pattha", "ghatiya insaan", "teri aukat", "aukat nahi", "चुप कर", "चुप हो जा", "बेवकूफ", "पागल", "घटिया इंसान"},
         "threat": {"maar dunga", "maar dungi", "jaan se maar", "uda dunga", "uda dungi", "dekh lunga", "dekh lungi", "tujhe maar"},
         "sexual": {"nanga", "nangi", "porn", "rape", "balatkar"},
         "hate_discrimination": {"jaatiwaadi", "bhedbhaav", "naslvaadi"},
         "spam_scam": {"free paisa", "paise kamao", "link par click", "inaam jeeta", "prize claim", "whatsapp karo", "telegram karo"},
-        "regional_abuse": {"randichya", "aai ghalya", "aai zhavadya", "zhavnya", "zhavadya"},
+        "regional_abuse": {"randichya", "aai ghalya", "aai zhavadya", "zhavnya", "zhavadya", "रांडीच्या", "आई घाल्या", "आई झवाड्या", "झवण्या", "झवाड्या"},
     },
     "mr": {
         "profanity": {"madarchod", "bhenchod", "gandu", "harami", "haramkhor", "bakchod", "bakchodi", "randi", "lavdya", "laudya", "bhosdya", "chutya", "chutiya", "kamina", "saala", "sala"},
-        "harassment": {"vedya", "murkha", "bavlat", "gadhav", "ghatiya", "chup bas", "nigh itheun"},
+        "harassment": {"vedya", "murkha", "bavlat", "gadhav", "ghatiya", "chup bas", "nigh itheun", "वेड्या", "मूर्ख", "बावळट", "गाढव", "घटिया", "चूप बस", "निघ इथून"},
         "threat": {"maarun taak", "jaan se maar", "tula maarto", "tula maarin", "baghun gheto", "baghun ghete"},
         "sexual": {"balatkar", "nagna", "nagn", "porn"},
         "hate_discrimination": {"jatiwad", "bhedbhav", "naslvaad"},
@@ -72,8 +72,19 @@ def _nfkc(text: str) -> str:
 def _normalize_text(text: str) -> str:
     text = _nfkc(text).translate(LEET_TRANSLATION)
     text = re.sub(r"[`´‘’ʻʼ]", "'", text)
-    text = re.sub(r"[\.\,\;\:\!\?\-\_\+/\\|=*~^]+", " ", text)
-    text = re.sub(r"[^\w\s']", " ", text, flags=re.UNICODE)
+
+    # Remove punctuation while preserving Unicode letters, digits and combining
+    # marks. The old ``[^\w\s]`` filter removed Indic vowel marks, which made
+    # legitimate Hindi/Marathi/Bengali/etc. terms impossible to match exactly.
+    cleaned = []
+    for char in text:
+        category = unicodedata.category(char)
+        if char.isspace() or category[0] in {"L", "N", "M"} or char == "'":
+            cleaned.append(char)
+        else:
+            cleaned.append(" ")
+
+    text = "".join(cleaned)
     text = re.sub(r"(?<=\w)'(?=\w)", " ", text)
     text = re.sub(r"(.)\1{2,}", r"\1\1", text, flags=re.UNICODE)
     return re.sub(r"\s+", " ", text).strip()
@@ -85,46 +96,92 @@ def _term_is_short(term: str) -> bool:
     return len(term.replace(" ", "")) <= 3
 
 def _contains_term(normalized: str, compact: str, term: str, original: str = "") -> bool:
+    """Match a moderation term while resisting simple obfuscation.
+
+    Matching order:
+    1. Normal word/phrase boundaries.
+    2. Punctuation/spacing inserted between characters.
+    3. Stretched characters (``fuuuck`` -> ``fuck``).
+    4. Asterisk masking (``fu***k`` -> ``fuck``).
+    5. Leetspeak is already handled by normalization.
+
+    Compact substring matching is deliberately *not* used for ordinary words;
+    otherwise a short term such as ``porn`` would incorrectly match
+    ``pornographic``.
+    """
     term_norm = _normalize_text(term)
     if not term_norm:
         return False
-    if " " in term_norm:
-        if term_norm in normalized:
-            return True
-        compact_term = term_norm.replace(" ", "")
-        if len(compact_term) >= 5 and compact_term in compact:
-            return True
-    else:
-        if re.search(rf"(?<!\w){re.escape(term_norm)}(?!\w)", normalized, flags=re.UNICODE):
-            return True
-        compact_term = term_norm.replace(" ", "")
-        if len(compact_term) >= 4 and compact_term in compact:
+
+    # Exact word/phrase match.
+    if re.search(rf"(?<!\w){re.escape(term_norm)}(?!\w)", normalized, flags=re.UNICODE):
+        return True
+
+    # Match separators inserted between the letters of a term:
+    # f.u.c.k / f-u-c-k / f u c k / f_*_u_*_c_*_k
+    term_parts = [part for part in re.split(r"\s+", term_norm) if part]
+    if len(term_parts) > 1:
+        phrase_pattern = r"[\W_]+".join(re.escape(part) for part in term_parts)
+        if re.search(rf"(?<!\w){phrase_pattern}(?!\w)", normalized, flags=re.UNICODE):
             return True
 
-    # Asterisks are commonly used to mask letters, e.g. ``bul***it``.
-    # Treat a run of asterisks as a bounded wildcard, while still requiring
-    # the meaningful prefix/suffix to match a configured moderation term.
-    # This is checked against the original text so '*' is not confused with
-    # leetspeak. Other punctuation/spacing bypasses are handled above.
+    compact_term = re.sub(r"\s+", "", term_norm)
+    if not compact_term:
+        return False
+
+    # For single words, permit arbitrary non-word separators between letters.
+    # Boundary checks prevent matching inside innocent longer words.
+    if len(compact_term) >= 3:
+        separator_pattern = r"[\W_]*".join(re.escape(ch) for ch in compact_term)
+        if re.search(rf"(?<!\w){separator_pattern}(?!\w)", _nfkc(original or normalized), flags=re.UNICODE):
+            return True
+
+    # Collapse repeated characters in the user's input and retry exact matching.
+    collapsed = re.sub(r"(.)\1+", r"\1", _normalize_text(original or normalized), flags=re.UNICODE)
+    if re.search(rf"(?<!\w){re.escape(term_norm)}(?!\w)", collapsed, flags=re.UNICODE):
+        return True
+
+    # Asterisk masking. Treat ``*`` as hidden characters rather than requiring
+    # the masked token to contain the complete profanity. This catches forms
+    # such as ``fu**``, ``fu***k`` and ``f**k`` while requiring enough visible
+    # characters to avoid flagging every short ``f*`` token.
     if original and "*" in original:
-        compact_original = re.sub(r"\s+", "", _nfkc(original))
-        if compact_original:
-            term_compact = term_norm.replace(" ", "")
-            if len(term_compact) >= 4:
-                parts = re.split(r"\*+", compact_original)
-                if len(parts) > 1 and all(parts):
-                    pattern = ".{0,6}".join(re.escape(part) for part in parts if part)
-                    if pattern and re.search(pattern, term_compact, flags=re.UNICODE):
-                        return True
-                    # Also test the inverse direction: the user's masked text
-                    # may omit several letters from the configured term.
-                    pattern = ".{0,6}".join(re.escape(part) for part in parts if part)
-                    if pattern and re.search(pattern, term_compact, flags=re.UNICODE):
-                        return True
-            # Direct term-to-input wildcard matching: each '*' can stand for
-            # a bounded number of hidden letters.
-            star_pattern = re.escape(compact_original).replace(r"\*", ".{0,6}")
-            if star_pattern and re.search(star_pattern, term_compact, flags=re.UNICODE):
+        term_compact = term_norm.replace(" ", "")
+        for raw_token in re.findall(r"[^\s]+", _nfkc(original)):
+            if "*" not in raw_token or len(term_compact) < 3:
+                continue
+
+            # Remove punctuation around/between the visible pieces but keep
+            # asterisks as the masking boundaries.
+            token = re.sub(r"[^\w*]", "", raw_token, flags=re.UNICODE)
+            if "*" not in token:
+                continue
+            pieces = [p for p in token.split("*") if p]
+            visible = "".join(pieces)
+            if len(visible) < 2:
+                continue
+
+            # The visible characters must occur in order inside the configured
+            # term. For a leading/trailing masked form, the visible edge must
+            # also align with the corresponding edge of the term:
+            #   fu**  -> fuck
+            #   **ck  -> fuck
+            #   f**k  -> fuck
+            cursor = 0
+            valid = True
+            for index, piece in enumerate(pieces):
+                pos = term_compact.find(piece, cursor)
+                if pos < 0:
+                    valid = False
+                    break
+                if index == 0 and not token.startswith("*") and pos != 0:
+                    valid = False
+                    break
+                if index == len(pieces) - 1 and not token.endswith("*") and pos + len(piece) != len(term_compact):
+                    valid = False
+                    break
+                cursor = pos + len(piece)
+            if valid:
                 return True
 
     return False

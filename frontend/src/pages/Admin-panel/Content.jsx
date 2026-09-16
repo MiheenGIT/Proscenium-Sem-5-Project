@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Check,
   Clock,
+  Film as FilmIcon,
   Play,
   Plus,
   RefreshCw,
@@ -10,10 +11,11 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
-  Star,
   StickyNote,
   Tag,
   User,
+  MessageSquare,
+  Star,
   X,
 } from "lucide-react";
 import { getRequest, postEmpty, postJson, putJson } from "../../api/client.js";
@@ -85,6 +87,14 @@ export default function Content() {
   const [videos, setVideos] = useState([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [catalogSummary, setCatalogSummary] = useState({
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    flaggedVideos: 0,
+  });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -116,6 +126,9 @@ export default function Content() {
 
   const [directorDetail, setDirectorDetail] = useState(null);
   const [directorBusy, setDirectorBusy] = useState(false);
+  const [feedback, setFeedback] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackBusy, setFeedbackBusy] = useState({});
 
   async function load() {
     setLoading(true);
@@ -129,6 +142,9 @@ export default function Content() {
 
       const data = await getRequest(path);
       setVideos(normalizeVideos(data));
+      if (data?.summary) {
+        setCatalogSummary((current) => ({ ...current, ...data.summary }));
+      }
     } catch (err) {
       setVideos([]);
       setError(err.message || "Unable to load videos.");
@@ -143,14 +159,67 @@ export default function Content() {
 
   const filteredVideos = useMemo(() => {
     const value = query.trim().toLowerCase();
-    if (!value) return videos;
 
     return videos.filter((video) => {
-      return [video.title, video.description, video.language, video.directorId]
+      const hasFlaggedFeedback =
+        Number(video.flaggedFeedbackCount || 0) > 0 ||
+        video.hasFlaggedFeedback === true;
+
+      if (flaggedOnly && !hasFlaggedFeedback) return false;
+      if (!value) return true;
+
+      return [
+        video.title,
+        video.description,
+        video.language,
+        video.directorId,
+        video.director?.username,
+        video.director?.studioName,
+      ]
         .filter(Boolean)
         .some((field) => String(field).toLowerCase().includes(value));
     });
-  }, [videos, query]);
+  }, [videos, query, flaggedOnly]);
+
+  async function loadFeedback(videoId) {
+    if (!videoId) return;
+    setFeedbackLoading(true);
+    try {
+      const data = await getRequest(`/admin/videos/${videoId}/feedback`);
+      setFeedback(Array.isArray(data?.feedback) ? data.feedback : []);
+    } catch (err) {
+      setFeedback([]);
+      setError(err.message || "Unable to load comments and reviews.");
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }
+
+  async function moderateFeedbackItem(item, action) {
+    const id = item?.id;
+    if (!id) return;
+
+    const isRestore = action === "restore";
+    const label = item.feedbackType === "review" ? "review" : "comment";
+    const confirmed = window.confirm(
+      isRestore
+        ? `Restore this ${label}?`
+        : `Remove this ${label} from public view?`
+    );
+    if (!confirmed) return;
+
+    setFeedbackBusy((current) => ({ ...current, [id]: true }));
+    try {
+      await postEmpty(
+        `/admin/${item.feedbackType === "review" ? "reviews" : "comments"}/${id}/${action}`
+      );
+      await loadFeedback(selectedDetail?._id || selected?._id);
+    } catch (err) {
+      setError(err.message || `Unable to ${action} ${label}.`);
+    } finally {
+      setFeedbackBusy((current) => ({ ...current, [id]: false }));
+    }
+  }
 
   async function openVideo(video) {
     setSelected(video);
@@ -165,7 +234,10 @@ export default function Content() {
     setContentWarningsText((video.contentWarnings || []).join(", "));
     setDirectorDetail(null);
 
-    const [detailResult, watchResult, notesResult, directorResult] =
+    setFeedback([]);
+    setFeedbackLoading(true);
+
+    const [detailResult, watchResult, notesResult, directorResult, feedbackResult] =
       await Promise.allSettled([
         getRequest(`/admin/videos/${video._id}`),
         getRequest(`/admin/videos/${video._id}/watch`),
@@ -173,6 +245,7 @@ export default function Content() {
         video.directorId
           ? getRequest(`/admin/directors/${video.directorId}`)
           : Promise.resolve(null),
+        getRequest(`/admin/videos/${video._id}/feedback`),
       ]);
 
     if (detailResult.status === "fulfilled") {
@@ -196,6 +269,14 @@ export default function Content() {
       setDirectorDetail(directorResult.value);
     }
 
+    if (feedbackResult.status === "fulfilled") {
+      setFeedback(
+        Array.isArray(feedbackResult.value?.feedback)
+          ? feedbackResult.value.feedback
+          : []
+      );
+    }
+
     if (
       detailResult.status === "rejected" &&
       watchResult.status === "rejected"
@@ -210,6 +291,7 @@ export default function Content() {
     setDetailLoading(false);
     setWatchLoading(false);
     setNotesLoading(false);
+    setFeedbackLoading(false);
   }
 
   function closeVideo() {
@@ -222,6 +304,8 @@ export default function Content() {
     setNoteText("");
     setContentWarningsText("");
     setDirectorDetail(null);
+    setFeedback([]);
+    setFeedbackLoading(false);
   }
 
   function askModeration(kind, video) {
@@ -255,13 +339,19 @@ export default function Content() {
     setError("");
 
     try {
-      await postJson("/admin/videos/bulk-approve", {
+      const result = await postJson("/admin/videos/bulk-approve", {
         videoIds: Array.from(selectedIds),
         comment: null,
       });
 
+      const failures = Array.isArray(result?.results)
+        ? result.results.filter((item) => !item.success)
+        : [];
       setSelectedIds(new Set());
       await load();
+      if (failures.length) {
+        setError(`${failures.length} selected video${failures.length === 1 ? "" : "s"} could not be approved. ${failures.map((item) => item.detail).filter(Boolean).join(" ")}`);
+      }
     } catch (err) {
       setError(err.message || "Bulk approve failed.");
     } finally {
@@ -422,15 +512,21 @@ export default function Content() {
       setError("");
 
       try {
-        await postJson("/admin/videos/bulk-reject", {
+        const result = await postJson("/admin/videos/bulk-reject", {
           videoIds: Array.from(selectedIds),
           reason: moderationText.trim(),
         });
 
+        const failures = Array.isArray(result?.results)
+          ? result.results.filter((item) => !item.success)
+          : [];
         setAction(null);
         setModerationText("");
         setSelectedIds(new Set());
         await load();
+        if (failures.length) {
+          setError(`${failures.length} selected video${failures.length === 1 ? "" : "s"} could not be rejected. ${failures.map((item) => item.detail).filter(Boolean).join(" ")}`);
+        }
       } catch (err) {
         setError(err.message || "Bulk reject failed.");
       } finally {
@@ -518,7 +614,7 @@ export default function Content() {
       {/* KPI Overview Tiles */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div
-          onClick={() => setStatus("all")}
+          onClick={() => { setStatus("all"); }}
           className={`cursor-pointer rounded-2xl border p-3.5 transition ${
             status === "all"
               ? "border-white/20 bg-white/[0.06]"
@@ -529,12 +625,12 @@ export default function Content() {
             Total Films
           </span>
           <p className="mt-1.5 font-[var(--font-display)] text-2xl text-[#efe7da]">
-            {videos.length}
+            {catalogSummary.total}
           </p>
         </div>
 
         <div
-          onClick={() => setStatus("pending")}
+          onClick={() => { setStatus("pending"); }}
           className={`cursor-pointer rounded-2xl border p-3.5 transition ${
             status === "pending"
               ? "border-[#d9a653]/50 bg-[#d9a653]/10"
@@ -545,12 +641,12 @@ export default function Content() {
             Pending Queue
           </span>
           <p className="mt-1.5 font-[var(--font-display)] text-2xl text-[#d9a653]">
-            {videos.filter((v) => v.moderationStatus === "pending").length}
+            {catalogSummary.pending}
           </p>
         </div>
 
         <div
-          onClick={() => setStatus("approved")}
+          onClick={() => { setStatus("approved"); }}
           className={`cursor-pointer rounded-2xl border p-3.5 transition ${
             status === "approved"
               ? "border-[#7fc59b]/50 bg-[#7fc59b]/10"
@@ -561,12 +657,12 @@ export default function Content() {
             Approved & Live
           </span>
           <p className="mt-1.5 font-[var(--font-display)] text-2xl text-[#7fc59b]">
-            {videos.filter((v) => v.moderationStatus === "approved").length}
+            {catalogSummary.approved}
           </p>
         </div>
 
         <div
-          onClick={() => setStatus("rejected")}
+          onClick={() => { setStatus("rejected"); }}
           className={`cursor-pointer rounded-2xl border p-3.5 transition ${
             status === "rejected"
               ? "border-[#e08a6b]/50 bg-[#e08a6b]/10"
@@ -577,7 +673,7 @@ export default function Content() {
             Rejected
           </span>
           <p className="mt-1.5 font-[var(--font-display)] text-2xl text-[#e08a6b]">
-            {videos.filter((v) => v.moderationStatus === "rejected").length}
+            {catalogSummary.rejected}
           </p>
         </div>
       </div>
@@ -611,23 +707,23 @@ export default function Content() {
         {/* Status Filter Tabs */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/[0.08] bg-black/30 p-1">
           {[
-            { id: "all", label: "All", count: videos.length },
+            { id: "all", label: "All", count: catalogSummary.total },
             {
               id: "pending",
               label: "Pending",
-              count: videos.filter((v) => v.moderationStatus === "pending").length,
+              count: catalogSummary.pending,
               activeColor: "text-[#d9a653] bg-[#d9a653]/15 border-[#d9a653]/30",
             },
             {
               id: "approved",
               label: "Approved",
-              count: videos.filter((v) => v.moderationStatus === "approved").length,
+              count: catalogSummary.approved,
               activeColor: "text-[#7fc59b] bg-[#7fc59b]/15 border-[#7fc59b]/30",
             },
             {
               id: "rejected",
               label: "Rejected",
-              count: videos.filter((v) => v.moderationStatus === "rejected").length,
+              count: catalogSummary.rejected,
               activeColor: "text-[#e08a6b] bg-[#e08a6b]/15 border-[#e08a6b]/30",
             },
           ].map((tab) => {
@@ -654,6 +750,24 @@ export default function Content() {
             );
           })}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setFlaggedOnly((current) => !current)}
+          aria-pressed={flaggedOnly}
+          className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 py-2.5 font-[var(--font-mono)] text-[10px] uppercase tracking-[.1em] transition ${
+            flaggedOnly
+              ? "border-[#e08a6b]/40 bg-[#e08a6b]/10 text-[#e08a6b]"
+              : "border-white/[0.08] bg-white/[0.02] text-[#8b7c82] hover:bg-white/[0.06] hover:text-[#d9d0d2]"
+          }`}
+          title="Show only videos with currently flagged comments or reviews"
+        >
+          <ShieldAlert size={13} />
+          Flagged feedback
+          <span className={`rounded-md px-1.5 py-0.2 text-[9px] ${flaggedOnly ? "bg-[#e08a6b]/15" : "bg-white/[0.06]"}`}>
+            {catalogSummary.flaggedVideos}
+          </span>
+        </button>
 
         <button
           onClick={() => {
@@ -750,7 +864,7 @@ export default function Content() {
             className="relative flex flex-col lg:flex-row w-full max-w-5xl max-h-[86vh] overflow-hidden rounded-2xl border border-white/[0.12] bg-[#140f13] shadow-[0_25px_80px_rgba(0,0,0,0.85)]"
           >
             {/* Left Column: Video Screening Stage */}
-            <div className="lg:w-[55%] flex flex-col bg-black/90 border-b lg:border-b-0 lg:border-r border-white/[0.08] relative">
+            <div className="lg:w-[55%] flex flex-col bg-black/90 border-b lg:border-b-0 lg:border-r border-white/[0.08] relative max-h-[86vh] overflow-y-auto lg:[&::-webkit-scrollbar]:w-1.5 lg:[&::-webkit-scrollbar-thumb]:bg-white/15 lg:[&::-webkit-scrollbar-thumb]:rounded-full" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
               {/* Stage Top Bar */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06] bg-white/[0.01]">
                 <div className="flex items-center gap-2">
@@ -808,6 +922,144 @@ export default function Content() {
                   </span>
                 </div>
               </div>
+
+                {/* Community Feedback — flagged first, then unflagged */}
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare size={12} className="text-[#d9a653]" />
+                      <p className="text-[8.5px] uppercase tracking-[.12em] text-[#71656a]">
+                        Comments & Reviews
+                      </p>
+                    </div>
+                    <span className="font-[var(--font-mono)] text-[8px] uppercase tracking-wider text-[#71656a]">
+                      {feedback.length} total
+                    </span>
+                  </div>
+
+                  {feedbackLoading ? (
+                    <div className="mt-3 space-y-2">
+                      {[1, 2].map((item) => (
+                        <div key={item} className="h-16 animate-pulse rounded-lg bg-white/[0.04]" />
+                      ))}
+                    </div>
+                  ) : feedback.length ? (
+                    <div className="mt-3 space-y-2">
+                      {feedback.map((item) => {
+                        const flagged = !!item.isFlagged;
+                        const removed = item.moderationStatus === "removed";
+                        const hidden = item.moderationStatus === "hidden" || item.moderationStatus === "auto_hidden";
+                        const busy = !!feedbackBusy[item.id];
+                        return (
+                          <div
+                            key={`${item.feedbackType}-${item.id}`}
+                            className={`rounded-lg border p-2.5 ${
+                              flagged
+                                ? "border-[#e08a6b]/30 bg-[#e08a6b]/[0.07]"
+                                : "border-white/[0.06] bg-white/[0.015]"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="font-[var(--font-mono)] text-[8px] uppercase tracking-wider text-[#d9a653]">
+                                    {item.feedbackType}
+                                  </span>
+                                  {flagged && (
+                                    <span className="rounded border border-[#e08a6b]/30 bg-[#e08a6b]/10 px-1.5 py-0.5 text-[7.5px] uppercase tracking-wider text-[#e08a6b]">
+                                      Flagged
+                                    </span>
+                                  )}
+                                  {removed && (
+                                    <span className="rounded border border-[#e08a6b]/30 bg-[#e08a6b]/10 px-1.5 py-0.5 text-[7.5px] uppercase tracking-wider text-[#e08a6b]">
+                                      Removed
+                                    </span>
+                                  )}
+                                  {hidden && (
+                                    <span className="rounded border border-[#d9a653]/30 bg-[#d9a653]/10 px-1.5 py-0.5 text-[7.5px] uppercase tracking-wider text-[#d9a653]">
+                                      Hidden
+                                    </span>
+                                  )}
+                                  {item.feedbackType === "review" && (
+                                    <span className="inline-flex items-center gap-0.5 text-[#d9a653]">
+                                      <Star size={9} fill="currentColor" />
+                                      <span className="text-[8px]">{Number(item.rating || 0).toFixed(1)}</span>
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-1 text-[10.5px] font-medium text-[#d9d0d2]">
+                                  {item.viewerUsername || "Viewer"}
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-[10.5px] leading-relaxed text-[#b8acb0]">
+                                  {item.text || "No text provided."}
+                                </p>
+
+                                {(item.moderationCategories?.length || item.moderationMatchedTerms?.length || item.moderationSeverity) ? (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {(item.moderationCategories || []).map((category) => (
+                                      <span key={category} className="rounded border border-[#e08a6b]/20 px-1.5 py-0.5 text-[7.5px] text-[#e08a6b]">
+                                        {category}
+                                      </span>
+                                    ))}
+                                    {item.moderationMatchedTerms?.length ? (
+                                      <span className="rounded border border-white/[0.06] px-1.5 py-0.5 text-[7.5px] text-[#71656a]">
+                                        {item.moderationMatchedTerms.length} matched term{item.moderationMatchedTerms.length === 1 ? "" : "s"}
+                                      </span>
+                                    ) : null}
+                                    {item.moderationSeverity && (
+                                      <span className="rounded border border-white/[0.06] px-1.5 py-0.5 text-[7.5px] text-[#71656a]">
+                                        severity: {item.moderationSeverity}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : null}
+
+                                {item.moderationHistory?.length ? (
+                                  <details className="mt-2">
+                                    <summary className="cursor-pointer text-[7.5px] uppercase tracking-wider text-[#71656a]">
+                                      Moderation history ({item.moderationHistory.length})
+                                    </summary>
+                                    <div className="mt-1.5 space-y-1">
+                                      {item.moderationHistory.slice().reverse().map((entry, index) => (
+                                        <p key={index} className="text-[8px] text-[#71656a]">
+                                          {entry.action || "moderation"} · {entry.moderatedAt ? new Date(entry.moderatedAt).toLocaleString() : "undated"}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : null}
+                              </div>
+
+                              <div className="flex shrink-0 flex-col gap-1">
+                                {(removed || hidden) ? (
+                                  <button
+                                    disabled={busy}
+                                    onClick={() => moderateFeedbackItem(item, "restore")}
+                                    className="rounded-lg border border-[#7fc59b]/25 px-2 py-1 text-[7.5px] uppercase tracking-wider text-[#7fc59b] disabled:opacity-50"
+                                  >
+                                    Restore
+                                  </button>
+                                ) : (
+                                  <button
+                                    disabled={busy}
+                                    onClick={() => moderateFeedbackItem(item, "remove")}
+                                    className="rounded-lg border border-[#e08a6b]/25 px-2 py-1 text-[7.5px] uppercase tracking-wider text-[#e08a6b] disabled:opacity-50"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-[10.5px] text-[#71656a]">
+                      No comments or reviews have been submitted for this film.
+                    </p>
+                  )}
+                </div>
             </div>
 
             {/* Right Column: Review Dossier & Inspector */}
@@ -1264,11 +1516,22 @@ function FrameCard({
           className="block w-full cursor-pointer focus:outline-none"
           aria-label={`Open ${video.title || "video"}`}
         >
-          <img
-            src={video.thumbnailUrl || ""}
-            alt=""
-            className="aspect-video w-full bg-black object-cover transition duration-300 group-hover:scale-[1.02] group-hover:brightness-105"
-          />
+          <div className="grid aspect-video w-full place-items-center bg-black px-4 text-center">
+            <div>
+              <FilmIcon size={22} className="mx-auto mb-2 text-[#d9a653]/70" />
+              <p className="font-[var(--font-mono)] text-[9px] uppercase tracking-[.16em] text-[#71656a]">
+                Preview unavailable
+              </p>
+            </div>
+          </div>
+          {video.thumbnailUrl && (
+            <img
+              src={video.thumbnailUrl}
+              alt=""
+              onError={(event) => { event.currentTarget.style.display = "none"; }}
+              className="absolute inset-0 aspect-video w-full bg-black object-cover transition duration-300 group-hover:scale-[1.02] group-hover:brightness-105"
+            />
+          )}
         </button>
 
         {/* HUD corner brackets */}
@@ -1333,7 +1596,9 @@ function FrameCard({
               : "—"}
           </span>
           <span>/</span>
-          <span>{shortId(video.directorId)}</span>
+          <span className="min-w-0 truncate" title={video.director?.studioName || video.director?.username || video.directorId || "Director unavailable"}>
+            {video.director?.studioName || video.director?.username || "Director unavailable"}
+          </span>
         </div>
 
         <div className="mt-3.5 flex gap-2">
@@ -1374,10 +1639,10 @@ function FilmEmpty() {
   return (
     <div>
       <p className="text-sm text-[#71656a]">
-        No videos match the current search or status filter.
+        No videos match the current search, status, or feedback filter.
       </p>
       <p className="mt-2 text-[10px] text-[#51494d]">
-        Try adjusting your filter or search query.
+        Try adjusting your filters or search query.
       </p>
     </div>
   );

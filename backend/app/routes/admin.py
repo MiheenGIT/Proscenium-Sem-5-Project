@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database import (
     cast_collection,
     comments_collection,
+    video_reviews_collection,
     directors_collection,
     film_collection,
     notifications_collection,
@@ -24,6 +25,7 @@ from models.schemas import (
     RejectVideoRequest,
 )
 from utils.security import require_role
+from utils.moderation import check_comment_text
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -84,6 +86,56 @@ def _serialize_video(video: dict) -> dict:
     return _serialize_mongo(video)
 
 
+def _feedback_is_flagged(item: dict) -> bool:
+    return bool(item.get("moderationFlagged") or item.get("aiFlagged"))
+
+
+def _current_flagged_feedback():
+    """Return feedback that is flagged by the current moderation rules.
+
+    Existing records are re-checked so the Admin dashboard does not depend on
+    stale moderation fields written by an older moderation implementation.
+    Invalid/orphaned feedback records are ignored rather than breaking the
+    dashboard feed.
+    """
+    flagged_comments = []
+    flagged_reviews = []
+
+    for item in comments_collection.find({}):
+        try:
+            item = _refresh_moderation(comments_collection, item)
+            if _feedback_is_flagged(item):
+                flagged_comments.append(item)
+        except Exception:
+            continue
+
+    for item in video_reviews_collection.find({}):
+        try:
+            item = _refresh_moderation(video_reviews_collection, item)
+            if _feedback_is_flagged(item):
+                flagged_reviews.append(item)
+        except Exception:
+            continue
+
+    return flagged_comments, flagged_reviews
+
+
+def _flagged_feedback_counts(video_ids):
+    """Return current flagged comment/review counts keyed by video id."""
+    if not video_ids:
+        return {}
+
+    counts = {oid: 0 for oid in video_ids}
+    flagged_comments, flagged_reviews = _current_flagged_feedback()
+
+    for item in flagged_comments + flagged_reviews:
+        video_id = item.get("videoId")
+        if video_id in counts:
+            counts[video_id] += 1
+
+    return counts
+
+
 # ============================================================
 # LIST ALL VIDEOS
 # ============================================================
@@ -138,14 +190,51 @@ def list_all_videos(
         .sort("uploadedAt", sort_dir)
     )
 
-    serialized_videos = [
-        _serialize_video(video)
-        for video in videos
-    ]
+    # Keep catalogue summary independent from the active status filter.
+    # The cards can be filtered, but the KPI/tab counts must always describe
+    # the complete Admin catalogue.
+    summary_counts = {
+        "total": film_collection.count_documents({}),
+        "pending": film_collection.count_documents({"moderationStatus": "pending"}),
+        "approved": film_collection.count_documents({"moderationStatus": "approved"}),
+        "rejected": film_collection.count_documents({"moderationStatus": "rejected"}),
+    }
+
+    all_video_ids = [doc.get("_id") for doc in film_collection.find({}, {"_id": 1}) if doc.get("_id")]
+    all_flagged_counts = _flagged_feedback_counts(all_video_ids)
+    flagged_total = sum(1 for count in all_flagged_counts.values() if count > 0)
+
+    # Resolve director display information in one query so Admin cards don't
+    # expose opaque ObjectIds as the primary identity.
+    director_ids = [video.get("directorId") for video in videos if video.get("directorId")]
+    directors = {}
+    if director_ids:
+        directors = {
+            doc["_id"]: _serialize_mongo(doc)
+            for doc in directors_collection.find(
+                {"_id": {"$in": director_ids}},
+                {"username": 1, "studioName": 1, "avatarUrl": 1, "accountStatus": 1},
+            )
+        }
+
+    flagged_counts = _flagged_feedback_counts([video.get("_id") for video in videos if video.get("_id")])
+    serialized_videos = []
+    for video in videos:
+        item = _serialize_video(video)
+        flagged_count = flagged_counts.get(video.get("_id"), 0)
+        item["flaggedFeedbackCount"] = flagged_count
+        item["hasFlaggedFeedback"] = flagged_count > 0
+        director = directors.get(video.get("directorId"))
+        item["director"] = director
+        serialized_videos.append(item)
 
     return {
         "count": len(serialized_videos),
         "videos": serialized_videos,
+        "summary": {
+            **summary_counts,
+            "flaggedVideos": flagged_total,
+        },
     }
 
 
@@ -693,7 +782,41 @@ def bulk_reject_videos(
 # COMMENT MODERATION
 # ============================================================
 
+def _refresh_moderation(collection, item: dict) -> dict:
+    """Re-check feedback text so older records also use current rules.
+
+    This keeps the Admin queue accurate after moderation rules are expanded,
+    without requiring a manual database migration. The current moderation
+    result is persisted only when it differs from the stored metadata.
+    """
+    result = check_comment_text(item.get("text", ""))
+    current = {
+        "moderationFlagged": bool(item.get("moderationFlagged") or item.get("aiFlagged")),
+        "moderationCategories": item.get("moderationCategories", item.get("aiFlagCategories", [])),
+        "moderationMatchedTerms": item.get("moderationMatchedTerms", []),
+        "moderationLanguages": item.get("moderationLanguages", []),
+        "moderationLanguageCodes": item.get("moderationLanguageCodes", []),
+        "moderationSeverity": item.get("moderationSeverity", "low"),
+        "moderationCheckFailed": item.get("moderationCheckFailed", item.get("aiCheckFailed", False)),
+    }
+    updated = {
+        "moderationFlagged": result["flagged"],
+        "moderationCategories": result["categories"],
+        "moderationMatchedTerms": result["matchedTerms"],
+        "moderationLanguages": result["languages"],
+        "moderationLanguageCodes": result["languageCodes"],
+        "moderationSeverity": result["severity"],
+        "moderationCheckFailed": result["checkFailed"],
+    }
+    if current != updated and item.get("_id"):
+        collection.update_one({"_id": item["_id"]}, {"$set": updated})
+        item.update(updated)
+    else:
+        item.update(updated)
+    return item
+
 def _serialize_admin_comment(c: dict) -> dict:
+    c = _refresh_moderation(comments_collection, c)
     viewer = viewers_collection.find_one(
         {"_id": c.get("viewerId")},
         {"username": 1, "avatarUrl": 1},
@@ -701,7 +824,15 @@ def _serialize_admin_comment(c: dict) -> dict:
 
     video = film_collection.find_one(
         {"_id": c.get("videoId")},
-        {"title": 1, "directorId": 1},
+        {
+            "title": 1,
+            "directorId": 1,
+            "thumbnailUrl": 1,
+            "hlsManifestUrl": 1,
+            "description": 1,
+            "moderationStatus": 1,
+            "status": 1,
+        },
     ) if c.get("videoId") else None
 
     director = directors_collection.find_one(
@@ -709,10 +840,26 @@ def _serialize_admin_comment(c: dict) -> dict:
         {"username": 1, "studioName": 1},
     ) if video and video.get("directorId") else None
 
+    video_payload = None
+    if video:
+        video_payload = {
+            "id": video.get("_id"),
+            "title": video.get("title", "Untitled film"),
+            "thumbnailUrl": video.get("thumbnailUrl"),
+            "hlsManifestUrl": video.get("hlsManifestUrl"),
+            "description": video.get("description"),
+            "moderationStatus": video.get("moderationStatus"),
+            "status": video.get("status"),
+        }
+
     return _serialize_mongo({
         "id": c.get("_id"),
         "videoId": c.get("videoId"),
         "videoTitle": video.get("title", "Untitled film") if video else "Unknown film",
+        "videoDescription": video.get("description", "") if video else "",
+        "videoThumbnailUrl": video.get("thumbnailUrl") if video else None,
+        "videoStreamUrl": video.get("hlsManifestUrl") if video else None,
+        "video": video_payload,
         "viewerId": c.get("viewerId"),
         "viewerUsername": viewer.get("username", "Viewer") if viewer else "Viewer",
         "viewerAvatarUrl": viewer.get("avatarUrl") if viewer else None,
@@ -720,7 +867,7 @@ def _serialize_admin_comment(c: dict) -> dict:
         "text": c.get("text", ""),
         "parentId": c.get("parentId"),
         "moderationStatus": c.get("moderationStatus", "visible"),
-        "moderationFlagged": c.get("moderationFlagged", c.get("aiFlagged", False)),
+        "moderationFlagged": bool(c.get("moderationFlagged") or c.get("aiFlagged")),
         "moderationCategories": c.get("moderationCategories", c.get("aiFlagCategories", [])),
         "moderationMatchedTerms": c.get("moderationMatchedTerms", []),
         "moderationLanguages": c.get("moderationLanguages", []),
@@ -735,6 +882,154 @@ def _serialize_admin_comment(c: dict) -> dict:
     })
 
 
+def _serialize_admin_review(review: dict) -> dict:
+    review = _refresh_moderation(video_reviews_collection, review)
+    viewer = viewers_collection.find_one(
+        {"_id": review.get("viewerId")},
+        {"username": 1, "avatarUrl": 1},
+    ) if review.get("viewerId") else None
+
+    video = film_collection.find_one(
+        {"_id": review.get("videoId")},
+        {"title": 1, "description": 1, "thumbnailUrl": 1, "hlsManifestUrl": 1, "directorId": 1},
+    ) if review.get("videoId") else None
+
+    director = directors_collection.find_one(
+        {"_id": video.get("directorId")},
+        {"username": 1, "studioName": 1},
+    ) if video and video.get("directorId") else None
+
+    return _serialize_mongo({
+        "id": review.get("_id"),
+        "videoId": review.get("videoId"),
+        "videoTitle": video.get("title", "Untitled film") if video else "Unknown film",
+        "videoDescription": video.get("description", "") if video else "",
+        "videoThumbnailUrl": video.get("thumbnailUrl") if video else None,
+        "videoStreamUrl": video.get("hlsManifestUrl") if video else None,
+        "viewerId": review.get("viewerId"),
+        "viewerUsername": viewer.get("username", "Viewer") if viewer else "Viewer",
+        "viewerAvatarUrl": viewer.get("avatarUrl") if viewer else None,
+        "directorId": video.get("directorId") if video else None,
+        "directorUsername": director.get("username") if director else None,
+        "rating": float(review.get("rating", 0) or 0),
+        "text": review.get("text", ""),
+        "moderationStatus": review.get("moderationStatus", "visible"),
+        "moderationFlagged": bool(review.get("moderationFlagged") or review.get("aiFlagged")),
+        "moderationCategories": review.get("moderationCategories", review.get("aiFlagCategories", [])),
+        "moderationMatchedTerms": review.get("moderationMatchedTerms", []),
+        "moderationLanguages": review.get("moderationLanguages", []),
+        "moderationLanguageCodes": review.get("moderationLanguageCodes", []),
+        "moderationSeverity": review.get("moderationSeverity", "low"),
+        "moderationCheckFailed": review.get("moderationCheckFailed", review.get("aiCheckFailed", False)),
+        "moderatedBy": review.get("moderatedBy"),
+        "moderatedAt": review.get("moderatedAt"),
+        "moderationHistory": review.get("moderationHistory", []),
+        "createdAt": review.get("createdAt"),
+        "updatedAt": review.get("updatedAt"),
+    })
+
+
+@router.get("/feedback/flagged")
+def get_flagged_feedback_summary(
+    payload: dict = Depends(require_role("admin")),
+):
+    """Return the live flagged-feedback totals used by the Admin dashboard.
+
+    This endpoint intentionally does not accept a video id. It scans comments
+    and reviews directly, refreshes moderation metadata, and ignores orphaned
+    records so one malformed feedback document cannot break the dashboard.
+    """
+    flagged_comments, flagged_reviews = _current_flagged_feedback()
+    return {
+        "comments": len(flagged_comments),
+        "reviews": len(flagged_reviews),
+        "count": len(flagged_comments) + len(flagged_reviews),
+    }
+
+
+@router.get("/reviews")
+def list_admin_reviews(
+    status: str = Query("all"),
+    video_id: str | None = Query(None),
+    payload: dict = Depends(require_role("admin")),
+):
+    allowed = {"all", "flagged", "visible", "removed", "auto_hidden", "hidden"}
+    if status not in allowed:
+        raise HTTPException(status_code=400, detail=f"status must be one of {sorted(allowed)}")
+
+    query = {}
+    if status != "all" and status != "flagged":
+        query["moderationStatus"] = status
+
+    if video_id:
+        try:
+            query["videoId"] = ObjectId(video_id)
+        except (InvalidId, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid video id")
+
+    reviews = list(
+        video_reviews_collection.find(query)
+        .sort("updatedAt", -1)
+    )
+    serialized = [_serialize_admin_review(r) for r in reviews]
+    if status == "flagged":
+        serialized = [item for item in serialized if item.get("moderationFlagged")]
+    return {"count": len(serialized), "reviews": serialized}
+
+
+@router.get("/reviews/flagged")
+def list_flagged_reviews(
+    payload: dict = Depends(require_role("admin")),
+):
+    return list_admin_reviews(status="flagged", payload=payload)
+
+
+def _serialize_feedback_item(item: dict, kind: str) -> dict:
+    serialized = (
+        _serialize_admin_comment(item)
+        if kind == "comment"
+        else _serialize_admin_review(item)
+    )
+    serialized["feedbackType"] = kind
+    serialized["isFlagged"] = bool(
+        item.get("moderationFlagged") or item.get("aiFlagged")
+    )
+    return serialized
+
+
+@router.get("/videos/{video_id}/feedback")
+def list_video_feedback(
+    video_id: str,
+    payload: dict = Depends(require_role("admin")),
+):
+    oid, _ = _get_video_or_404(video_id)
+
+    comments = list(comments_collection.find({"videoId": oid}).sort("createdAt", -1))
+    reviews = list(video_reviews_collection.find({"videoId": oid}).sort("updatedAt", -1))
+
+    items = [
+        _serialize_feedback_item(item, "comment")
+        for item in comments
+    ] + [
+        _serialize_feedback_item(item, "review")
+        for item in reviews
+    ]
+
+    # Flagged feedback always comes first. Within each group, newest first.
+    items.sort(
+        key=lambda item: (
+            0 if item.get("isFlagged") else 1,
+            item.get("updatedAt") or item.get("createdAt") or "",
+        )
+    )
+    return {
+        "videoId": video_id,
+        "count": len(items),
+        "flaggedCount": sum(1 for item in items if item.get("isFlagged")),
+        "feedback": items,
+    }
+
+
 @router.get("/comments")
 def list_comments(
     status: str = Query("all"),
@@ -746,9 +1041,7 @@ def list_comments(
         raise HTTPException(status_code=400, detail=f"status must be one of {sorted(allowed)}")
 
     query = {}
-    if status == "flagged":
-        query["moderationFlagged"] = True
-    elif status != "all":
+    if status != "all" and status != "flagged":
         query["moderationStatus"] = status
 
     if video_id:
@@ -763,6 +1056,8 @@ def list_comments(
     )
 
     serialized = [_serialize_admin_comment(c) for c in comments]
+    if status == "flagged":
+        serialized = [item for item in serialized if item.get("moderationFlagged")]
     return {"count": len(serialized), "comments": serialized}
 
 
@@ -770,17 +1065,17 @@ def list_comments(
 def list_flagged_comments(
     payload: dict = Depends(require_role("admin")),
 ):
+    # Show every comment that is currently flagged, including legacy
+    # comments that were flagged by the older aiFlagged field.
+    # Do not use a permanent "ever flagged" field: editing a comment
+    # re-runs moderation and a clean edit should leave this queue.
     comments = list(
-        comments_collection.find({
-            "$or": [
-                {"moderationFlagged": True},
-                {"aiFlagged": True},
-            ]
-        })
+        comments_collection.find({})
         .sort("createdAt", -1)
     )
 
     serialized = [_serialize_admin_comment(c) for c in comments]
+    serialized = [item for item in serialized if item.get("moderationFlagged")]
     return {"count": len(serialized), "comments": serialized}
 
 
@@ -889,6 +1184,107 @@ def admin_remove_comment(
         )
 
     return {"message": "Comment removed", "commentId": comment_id}
+
+
+def _recalculate_review_stats(video_id):
+    stats = list(video_reviews_collection.aggregate([
+        {"$match": {"videoId": video_id, "moderationStatus": {"$ne": "removed"}}},
+        {"$group": {"_id": None, "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
+    ]))
+    avg = round(float(stats[0]["avg"]), 1) if stats else 0.0
+    count = int(stats[0]["count"]) if stats else 0
+    film_collection.update_one(
+        {"_id": video_id},
+        {"$set": {"avgRating": avg, "reviewCount": count}},
+    )
+    return avg, count
+
+
+@router.post("/reviews/{review_id}/restore")
+def restore_review(
+    review_id: str,
+    payload: dict = Depends(require_role("admin")),
+):
+    try:
+        oid = ObjectId(review_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid review id")
+
+    review = video_reviews_collection.find_one({"_id": oid})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    now = datetime.utcnow()
+    moderator_id = ObjectId(payload["user_id"])
+    video_id = review.get("videoId")
+
+    video_reviews_collection.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "moderationStatus": "visible",
+                "moderatedBy": moderator_id,
+                "moderatedAt": now,
+            },
+            "$push": {
+                "moderationHistory": {
+                    "action": "restored_by_admin",
+                    "moderatedBy": moderator_id,
+                    "moderatedAt": now,
+                }
+            },
+        },
+    )
+
+    if video_id:
+        _recalculate_review_stats(video_id)
+
+    return {"message": "Review restored", "reviewId": review_id}
+
+
+@router.post("/reviews/{review_id}/remove")
+def admin_remove_review(
+    review_id: str,
+    payload: dict = Depends(require_role("admin")),
+):
+    try:
+        oid = ObjectId(review_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid review id")
+
+    review = video_reviews_collection.find_one({"_id": oid})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    if review.get("moderationStatus") == "removed":
+        return {"message": "Review already removed", "reviewId": review_id}
+
+    now = datetime.utcnow()
+    moderator_id = ObjectId(payload["user_id"])
+    video_id = review.get("videoId")
+
+    video_reviews_collection.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "moderationStatus": "removed",
+                "moderatedBy": moderator_id,
+                "moderatedAt": now,
+            },
+            "$push": {
+                "moderationHistory": {
+                    "action": "removed_by_admin",
+                    "moderatedBy": moderator_id,
+                    "moderatedAt": now,
+                }
+            },
+        },
+    )
+
+    if video_id:
+        _recalculate_review_stats(video_id)
+
+    return {"message": "Review removed", "reviewId": review_id}
 
 
 # ============================================================
