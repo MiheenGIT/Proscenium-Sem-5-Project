@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { deleteRequest, getRequest } from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import {EmptyState,ErrorState,PageLoading,} from "../../components/common/States.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 const pct = (video) =>
   Math.min(
@@ -17,6 +18,7 @@ export default function ViewerHistoryPro() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [confirmClear, setConfirmClear] = useState(false);
 
   async function load() {
     try {
@@ -37,14 +39,7 @@ export default function ViewerHistoryPro() {
   }, []);
 
   async function clear() {
-    if (
-      !window.confirm(
-        "Clear your entire watch history?"
-      )
-    ) {
-      return;
-    }
-
+    setConfirmClear(false);
     try {
       await deleteRequest("/viewer/history");
       setRows([]);
@@ -81,7 +76,7 @@ export default function ViewerHistoryPro() {
 
           {rows.length > 0 && (
             <button
-              onClick={clear}
+              onClick={() => setConfirmClear(true)}
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-[10px] text-[#a79b9f] hover:border-red-300/20 hover:text-[#e08a6b]"
             >
               <Trash2 size={13} />
@@ -172,6 +167,15 @@ export default function ViewerHistoryPro() {
           </div>
         )}
       </main>
+      <ConfirmDialog
+        open={confirmClear}
+        title="Clear Watch History?"
+        message="Are you sure you want to clear your entire watch history? This action cannot be undone."
+        confirmLabel="Clear History"
+        danger={true}
+        onConfirm={clear}
+        onCancel={() => setConfirmClear(false)}
+      />
     </DashboardLayout>
   );
 }

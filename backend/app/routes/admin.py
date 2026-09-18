@@ -200,8 +200,12 @@ def list_all_videos(
         "rejected": film_collection.count_documents({"moderationStatus": "rejected"}),
     }
 
-    all_video_ids = [doc.get("_id") for doc in film_collection.find({}, {"_id": 1}) if doc.get("_id")]
-    all_flagged_counts = _flagged_feedback_counts(all_video_ids)
+    flagged_comments, flagged_reviews = _current_flagged_feedback()
+    all_flagged_counts = {}
+    for item in flagged_comments + flagged_reviews:
+        video_id = item.get("videoId")
+        if video_id:
+            all_flagged_counts[video_id] = all_flagged_counts.get(video_id, 0) + 1
     flagged_total = sum(1 for count in all_flagged_counts.values() if count > 0)
 
     # Resolve director display information in one query so Admin cards don't
@@ -217,7 +221,7 @@ def list_all_videos(
             )
         }
 
-    flagged_counts = _flagged_feedback_counts([video.get("_id") for video in videos if video.get("_id")])
+    flagged_counts = all_flagged_counts
     serialized_videos = []
     for video in videos:
         item = _serialize_video(video)
@@ -783,36 +787,19 @@ def bulk_reject_videos(
 # ============================================================
 
 def _refresh_moderation(collection, item: dict) -> dict:
-    """Re-check feedback text so older records also use current rules.
+    """Trust stored moderation fields on read.
 
-    This keeps the Admin queue accurate after moderation rules are expanded,
-    without requiring a manual database migration. The current moderation
-    result is persisted only when it differs from the stored metadata.
+    Moderation now runs only at write time (comment/review creation), not on
+    every read. This avoids re-running text matching across the whole
+    comments/reviews collection on every admin page load.
     """
-    result = check_comment_text(item.get("text", ""))
-    current = {
-        "moderationFlagged": bool(item.get("moderationFlagged") or item.get("aiFlagged")),
-        "moderationCategories": item.get("moderationCategories", item.get("aiFlagCategories", [])),
-        "moderationMatchedTerms": item.get("moderationMatchedTerms", []),
-        "moderationLanguages": item.get("moderationLanguages", []),
-        "moderationLanguageCodes": item.get("moderationLanguageCodes", []),
-        "moderationSeverity": item.get("moderationSeverity", "low"),
-        "moderationCheckFailed": item.get("moderationCheckFailed", item.get("aiCheckFailed", False)),
-    }
-    updated = {
-        "moderationFlagged": result["flagged"],
-        "moderationCategories": result["categories"],
-        "moderationMatchedTerms": result["matchedTerms"],
-        "moderationLanguages": result["languages"],
-        "moderationLanguageCodes": result["languageCodes"],
-        "moderationSeverity": result["severity"],
-        "moderationCheckFailed": result["checkFailed"],
-    }
-    if current != updated and item.get("_id"):
-        collection.update_one({"_id": item["_id"]}, {"$set": updated})
-        item.update(updated)
-    else:
-        item.update(updated)
+    item.setdefault("moderationFlagged", bool(item.get("aiFlagged")))
+    item.setdefault("moderationCategories", item.get("aiFlagCategories", []))
+    item.setdefault("moderationMatchedTerms", [])
+    item.setdefault("moderationLanguages", [])
+    item.setdefault("moderationLanguageCodes", [])
+    item.setdefault("moderationSeverity", "low")
+    item.setdefault("moderationCheckFailed", item.get("aiCheckFailed", False))
     return item
 
 def _serialize_admin_comment(c: dict) -> dict:

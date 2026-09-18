@@ -549,13 +549,11 @@ export default function Review() {
                 </span>
               </div>
 
-              {/* Theater Video Player */}
-              <div className="relative flex-1 flex items-center justify-center p-3 sm:p-5 bg-gradient-to-b from-black via-[#0e0a0e] to-black min-h-[220px]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(217,166,83,0.06),transparent_70%)] pointer-events-none" />
-
-                <div className="w-full max-w-[500px] relative z-10 shadow-2xl rounded-xl overflow-hidden border border-white/10">
+              {/* Theater Video Player Container */}
+              <div className="p-3 sm:p-4 bg-gradient-to-b from-black via-[#0e0a0e] to-black shrink-0 border-b border-white/[0.06]">
+                <div className="w-full aspect-video rounded-xl overflow-hidden border border-white/10 bg-black shadow-2xl relative">
                   {watchLoading ? (
-                    <div className="grid aspect-video place-items-center bg-black">
+                    <div className="grid h-full w-full place-items-center bg-black">
                       <div className="flex items-center gap-2 text-xs text-[#8b7c82]">
                         <RefreshCw size={15} className="animate-spin text-[#d9a653]" />
                         <span>Loading secure stream…</span>
@@ -568,7 +566,7 @@ export default function Review() {
                       title={activeVideo?.title}
                     />
                   ) : (
-                    <div className="grid aspect-video place-items-center bg-black/80 p-4 text-center">
+                    <div className="grid h-full w-full place-items-center bg-black/80 p-4 text-center">
                       <p className="text-xs text-[#8b7c82]">
                         The backend did not return a stream URL.
                       </p>
@@ -578,7 +576,7 @@ export default function Review() {
               </div>
 
               {/* Player Metadata Strip */}
-              <div className="px-4 py-2.5 border-t border-white/[0.06] bg-white/[0.015] flex flex-wrap items-center justify-between gap-2 font-[var(--font-mono)] text-[9px] text-[#71656a]">
+              <div className="px-4 py-2.5 border-b border-white/[0.06] bg-white/[0.015] flex flex-wrap items-center justify-between gap-2 font-[var(--font-mono)] text-[9px] text-[#71656a] shrink-0">
                 <div className="truncate max-w-[200px]">
                   ID: <span className="text-[#b8acb0]">{selected._id}</span>
                 </div>

@@ -4,12 +4,14 @@ import { useNavigate } from "react-router-dom";
 import { deleteRequest, getRequest } from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import {EmptyState,PageLoading,} from "../../components/common/States.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 export default function ViewerReviewsPro() {
   const nav = useNavigate();
 
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reviewToDelete, setReviewToDelete] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -25,8 +27,10 @@ export default function ViewerReviewsPro() {
     load();
   }, []);
 
-  async function remove(r) {
-    if (!window.confirm("Delete this review?")) return;
+  async function remove() {
+    if (!reviewToDelete) return;
+    const r = reviewToDelete;
+    setReviewToDelete(null);
 
     try {
       await deleteRequest(`/viewer/videos/${r.videoId}/reviews`);
@@ -97,7 +101,7 @@ export default function ViewerReviewsPro() {
                   </span>
 
                   <button
-                    onClick={() => remove(r)}
+                    onClick={() => setReviewToDelete(r)}
                     className="inline-flex items-center gap-1 text-[#8f8388] hover:text-[#e08a6b]"
                   >
                     <Trash2 size={12} />
@@ -109,6 +113,16 @@ export default function ViewerReviewsPro() {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={!!reviewToDelete}
+        title="Delete Review?"
+        message="Are you sure you want to delete your review for this film? This cannot be undone."
+        confirmLabel="Delete Review"
+        danger={true}
+        onConfirm={remove}
+        onCancel={() => setReviewToDelete(null)}
+      />
     </DashboardLayout>
   );
 }

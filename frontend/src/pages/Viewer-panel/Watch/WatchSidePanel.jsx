@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Star, Trash2 } from "lucide-react";
 import { deleteRequest, postJson } from "../../../api/client.js";
+import ConfirmDialog from "../../../components/ConfirmDialog.jsx";
 
 const fmtDate = (value) =>
   value
@@ -18,6 +19,7 @@ export default function WatchSidePanel({ video, videoId, onReviewSaved, onReview
   const [text, setText] = useState(myReview?.text || "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
 
   if (!video?.hasWatched) {
@@ -83,8 +85,7 @@ export default function WatchSidePanel({ video, videoId, onReviewSaved, onReview
   }
 
   async function remove() {
-    if (!window.confirm("Delete your review?")) return;
-
+    setConfirmDelete(false);
     setDeleting(true);
     setError("");
 
@@ -167,15 +168,25 @@ export default function WatchSidePanel({ video, videoId, onReviewSaved, onReview
 
         {myReview && (
           <button
-            onClick={remove}
+            onClick={() => setConfirmDelete(true)}
             disabled={deleting}
-            className="grid h-10 w-10 place-items-center rounded-xl border border-[#e08a6b]/40 text-[#e08a6b]"
+            className="grid h-10 w-10 place-items-center rounded-xl border border-[#e08a6b]/40 text-[#e08a6b] hover:bg-[#e08a6b]/10 transition"
             aria-label="Delete review"
           >
             <Trash2 size={15} />
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete Review?"
+        message="Are you sure you want to delete your review? This action cannot be undone."
+        confirmLabel="Delete Review"
+        danger={true}
+        onConfirm={remove}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </aside>
   );
 }

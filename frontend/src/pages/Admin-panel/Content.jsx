@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { getRequest, postEmpty, postJson, putJson } from "../../api/client.js";
 import AdminVideoPlayer from "../../components/admin/AdminVideoPlayer.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 function normalizeVideos(data) {
   if (Array.isArray(data)) return data;
@@ -129,6 +130,9 @@ export default function Content() {
   const [feedback, setFeedback] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackBusy, setFeedbackBusy] = useState({});
+  const [feedbackConfirm, setFeedbackConfirm] = useState(null);
+  const [suspendModal, setSuspendModal] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
 
   async function load() {
     setLoading(true);
@@ -195,18 +199,30 @@ export default function Content() {
     }
   }
 
-  async function moderateFeedbackItem(item, action) {
+  function askModerateFeedback(item, action) {
     const id = item?.id;
     if (!id) return;
 
     const isRestore = action === "restore";
     const label = item.feedbackType === "review" ? "review" : "comment";
-    const confirmed = window.confirm(
-      isRestore
-        ? `Restore this ${label}?`
-        : `Remove this ${label} from public view?`
-    );
-    if (!confirmed) return;
+    setFeedbackConfirm({
+      item,
+      action,
+      title: isRestore ? `Restore ${label}?` : `Remove ${label}?`,
+      message: isRestore
+        ? `Restore this ${label} to public view?`
+        : `Remove this ${label} from public view?`,
+      confirmLabel: isRestore ? "Restore" : "Remove",
+      danger: !isRestore,
+    });
+  }
+
+  async function executeModerateFeedback() {
+    if (!feedbackConfirm) return;
+    const { item, action } = feedbackConfirm;
+    const id = item?.id;
+    const label = item.feedbackType === "review" ? "review" : "comment";
+    setFeedbackConfirm(null);
 
     setFeedbackBusy((current) => ({ ...current, [id]: true }));
     try {
@@ -236,6 +252,7 @@ export default function Content() {
 
     setFeedback([]);
     setFeedbackLoading(true);
+    setError("");
 
     const [detailResult, watchResult, notesResult, directorResult, feedbackResult] =
       await Promise.allSettled([
@@ -306,6 +323,7 @@ export default function Content() {
     setDirectorDetail(null);
     setFeedback([]);
     setFeedbackLoading(false);
+    setError("");
   }
 
   function askModeration(kind, video) {
@@ -454,10 +472,12 @@ export default function Content() {
     }
   }
 
-  async function suspendDirector() {
+  async function submitSuspendDirector() {
     if (!directorDetail?.director?._id) return;
-    const reason = window.prompt("Reason for suspending this director:");
-    if (!reason || reason.trim().length < 3) return;
+    if (!suspendReason || suspendReason.trim().length < 3) {
+      setError("A suspension reason must contain at least 3 characters.");
+      return;
+    }
 
     setDirectorBusy(true);
     setError("");
@@ -465,13 +485,15 @@ export default function Content() {
     try {
       await postJson(
         `/admin/directors/${directorDetail.director._id}/suspend`,
-        { reason: reason.trim() },
+        { reason: suspendReason.trim() },
       );
 
       const updated = await getRequest(
         `/admin/directors/${directorDetail.director._id}`,
       );
       setDirectorDetail(updated);
+      setSuspendModal(false);
+      setSuspendReason("");
     } catch (err) {
       setError(err.message || "Unable to suspend director.");
     } finally {
@@ -879,13 +901,11 @@ export default function Content() {
                 />
               </div>
 
-              {/* Theater Video Player (Compact fit for 100% scale) */}
-              <div className="relative flex-1 flex items-center justify-center p-3 sm:p-5 bg-gradient-to-b from-black via-[#0e0a0e] to-black min-h-[220px]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(217,166,83,0.06),transparent_70%)] pointer-events-none" />
-
-                <div className="w-full max-w-[500px] relative z-10 shadow-2xl rounded-xl overflow-hidden border border-white/10">
+              {/* Theater Video Player Container */}
+              <div className="p-3 sm:p-4 bg-gradient-to-b from-black via-[#0e0a0e] to-black shrink-0 border-b border-white/[0.06]">
+                <div className="w-full aspect-video rounded-xl overflow-hidden border border-white/10 bg-black shadow-2xl relative">
                   {watchLoading ? (
-                    <div className="grid aspect-video place-items-center bg-black">
+                    <div className="grid h-full w-full place-items-center bg-black">
                       <div className="flex items-center gap-2 text-xs text-[#8b7c82]">
                         <RefreshCw size={15} className="animate-spin text-[#d9a653]" />
                         <span>Loading stream…</span>
@@ -898,7 +918,7 @@ export default function Content() {
                       title={selectedDetail?.title || selected.title}
                     />
                   ) : (
-                    <div className="grid aspect-video place-items-center bg-black/80 p-4 text-center">
+                    <div className="grid h-full w-full place-items-center bg-black/80 p-4 text-center">
                       <p className="text-xs text-[#8b7c82]">
                         No stream available for preview.
                       </p>
@@ -908,7 +928,7 @@ export default function Content() {
               </div>
 
               {/* Player Metadata Strip */}
-              <div className="px-4 py-2.5 border-t border-white/[0.06] bg-white/[0.015] flex flex-wrap items-center justify-between gap-2 font-[var(--font-mono)] text-[9px] text-[#71656a]">
+              <div className="px-4 py-2.5 border-b border-white/[0.06] bg-white/[0.015] flex flex-wrap items-center justify-between gap-2 font-[var(--font-mono)] text-[9px] text-[#71656a] shrink-0">
                 <div className="truncate max-w-[200px]">
                   ID: <span className="text-[#b8acb0]">{selected._id}</span>
                 </div>
@@ -1034,16 +1054,16 @@ export default function Content() {
                                 {(removed || hidden) ? (
                                   <button
                                     disabled={busy}
-                                    onClick={() => moderateFeedbackItem(item, "restore")}
-                                    className="rounded-lg border border-[#7fc59b]/25 px-2 py-1 text-[7.5px] uppercase tracking-wider text-[#7fc59b] disabled:opacity-50"
+                                    onClick={() => askModerateFeedback(item, "restore")}
+                                    className="rounded-lg border border-[#7fc59b]/25 px-2 py-1 text-[7.5px] uppercase tracking-wider text-[#7fc59b] disabled:opacity-50 hover:bg-[#7fc59b]/10 transition"
                                   >
                                     Restore
                                   </button>
                                 ) : (
                                   <button
                                     disabled={busy}
-                                    onClick={() => moderateFeedbackItem(item, "remove")}
-                                    className="rounded-lg border border-[#e08a6b]/25 px-2 py-1 text-[7.5px] uppercase tracking-wider text-[#e08a6b] disabled:opacity-50"
+                                    onClick={() => askModerateFeedback(item, "remove")}
+                                    className="rounded-lg border border-[#e08a6b]/25 px-2 py-1 text-[7.5px] uppercase tracking-wider text-[#e08a6b] disabled:opacity-50 hover:bg-[#e08a6b]/10 transition"
                                   >
                                     Remove
                                   </button>
@@ -1372,7 +1392,10 @@ export default function Content() {
                       ) : (
                         <button
                           disabled={directorBusy}
-                          onClick={suspendDirector}
+                          onClick={() => {
+                            setSuspendReason("");
+                            setSuspendModal(true);
+                          }}
                           className="rounded-lg border border-[#e08a6b]/30 px-2.5 py-1 text-[8.5px] uppercase tracking-wider text-[#e08a6b] hover:bg-[#e08a6b]/10 disabled:opacity-50 transition"
                         >
                           Suspend
@@ -1483,6 +1506,82 @@ export default function Content() {
             }
           }}
         />
+      )}
+
+      {feedbackConfirm && (
+        <ConfirmDialog
+          open={!!feedbackConfirm}
+          title={feedbackConfirm.title}
+          message={feedbackConfirm.message}
+          confirmLabel={feedbackConfirm.confirmLabel}
+          danger={feedbackConfirm.danger}
+          onConfirm={executeModerateFeedback}
+          onCancel={() => setFeedbackConfirm(null)}
+        />
+      )}
+
+      {suspendModal && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!directorBusy) setSuspendModal(false);
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#171216] p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[9px] uppercase tracking-[.18em] text-[#e08a6b]">
+                  Account Action
+                </p>
+                <h3 className="mt-1 font-[var(--font-display)] text-xl text-[#efe7da]">
+                  Suspend Director
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setSuspendModal(false)}
+                disabled={directorBusy}
+                className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.04] text-[#b8acb0] hover:text-white"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <p className="mt-2 text-xs text-[#8b7c82]">
+              Suspending <strong className="text-[#efe7da]">{directorDetail?.director?.username || "this director"}</strong> will immediately restrict their ability to manage films.
+            </p>
+
+            <textarea
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="Reason for suspension (min 3 characters)…"
+              className="mt-4 w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 text-xs text-[#efe7da] outline-none focus:border-[#e08a6b]/40"
+            />
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                disabled={directorBusy}
+                onClick={() => setSuspendModal(false)}
+                className="rounded-xl border border-white/[0.08] px-4 py-2.5 text-[10px] uppercase tracking-[.1em] text-[#b8acb0] hover:text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={directorBusy || suspendReason.trim().length < 3}
+                onClick={submitSuspendDirector}
+                className="rounded-xl bg-[#e08a6b] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[.1em] text-[#100d10] hover:brightness-110 disabled:opacity-40 transition"
+              >
+                {directorBusy ? "Suspending…" : "Suspend Director"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

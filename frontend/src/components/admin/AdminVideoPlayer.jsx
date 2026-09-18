@@ -167,13 +167,13 @@ export default function AdminVideoPlayer({ src, poster, title }) {
   }, [src]);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl [--plyr-color-main:#d9a653] [--plyr-video-control-color:#efe7da] [--plyr-video-control-color-hover:#100d10] [--plyr-video-control-background-hover:#d9a653] [--plyr-menu-background:#171216] [--plyr-menu-color:#efe7da] [--plyr-menu-border-color:rgba(255,255,255,0.08)] [--plyr-menu-radius:12px] [--plyr-menu-shadow:0_15px_35px_rgba(0,0,0,0.85)]">
+    <div className="relative w-full aspect-video overflow-hidden rounded-xl bg-black shadow-2xl [--plyr-color-main:#d9a653] [--plyr-video-control-color:#efe7da] [--plyr-video-control-color-hover:#100d10] [--plyr-video-control-background-hover:#d9a653] [--plyr-menu-background:#171216] [--plyr-menu-color:#efe7da] [--plyr-menu-border-color:rgba(255,255,255,0.08)] [--plyr-menu-radius:12px] [--plyr-menu-shadow:0_15px_35px_rgba(0,0,0,0.85)]">
       <video
         ref={videoRef}
         playsInline
         preload="metadata"
         poster={poster || undefined}
-        className="aspect-video w-full bg-black"
+        className="h-full w-full bg-black object-contain"
         aria-label={title || "Video player"}
       />
 

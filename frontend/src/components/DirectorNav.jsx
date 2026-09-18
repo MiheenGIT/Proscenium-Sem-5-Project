@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 
 const navItems = [
   { to: "/director", label: "My Films", end: true },
@@ -10,16 +11,14 @@ const navItems = [
 
 export default function DirectorNav({ confirmBeforeLeave = false }) {
   const { auth, logout } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [pendingPath, setPendingPath] = useState(null);
 
-  function guardedNavigate(event) {
+  function handleNavClick(event, to) {
     if (!confirmBeforeLeave) return;
-
-    const shouldLeave = window.confirm(
-      "You have unsaved changes. Leave without saving?"
-    );
-
-    if (!shouldLeave) event.preventDefault();
+    event.preventDefault();
+    setPendingPath(to);
   }
 
   const navClass = ({ isActive }) =>
@@ -49,7 +48,7 @@ export default function DirectorNav({ confirmBeforeLeave = false }) {
               key={item.to}
               to={item.to}
               end={item.end}
-              onClick={guardedNavigate}
+              onClick={(e) => handleNavClick(e, item.to)}
               className={navClass}
             >
               {item.label}
@@ -99,7 +98,7 @@ export default function DirectorNav({ confirmBeforeLeave = false }) {
               to={item.to}
               end={item.end}
               onClick={(event) => {
-                guardedNavigate(event);
+                handleNavClick(event, item.to);
                 setOpen(false);
               }}
               className={({ isActive }) =>
@@ -124,6 +123,20 @@ export default function DirectorNav({ confirmBeforeLeave = false }) {
           </button>
         </nav>
       )}
+
+      <ConfirmDialog
+        open={!!pendingPath}
+        title="Unsaved changes"
+        message="You have unsaved changes on this page. Leave without saving?"
+        confirmLabel="Leave Page"
+        danger={true}
+        onConfirm={() => {
+          const to = pendingPath;
+          setPendingPath(null);
+          if (to) navigate(to);
+        }}
+        onCancel={() => setPendingPath(null)}
+      />
     </header>
   );
 }

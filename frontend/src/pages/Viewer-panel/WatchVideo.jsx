@@ -10,6 +10,7 @@ import "./WatchVideo.css";
 
 import { deleteRequest, getRequest, postJson, putJson } from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
+import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 const duration = (seconds) => {
   const value = Math.max(
@@ -57,6 +58,9 @@ function CommentItem({
 
   const [error, setError] =
     useState("");
+
+  const [confirmDelete, setConfirmDelete] =
+    useState(false);
 
   const [likes, setLikes] =
     useState(
@@ -181,14 +185,7 @@ function CommentItem({
   }
 
   async function remove() {
-    if (
-      !window.confirm(
-        "Delete this comment and its replies?"
-      )
-    ) {
-      return;
-    }
-
+    setConfirmDelete(false);
     setBusy(true);
 
     try {
@@ -321,7 +318,7 @@ function CommentItem({
               </button>
 
               <button
-                onClick={remove}
+                onClick={() => setConfirmDelete(true)}
                 disabled={busy}
               >
                 <Trash2 size={12} />
@@ -330,6 +327,17 @@ function CommentItem({
             </>
           )}
         </div>
+
+        <ConfirmDialog
+          open={confirmDelete}
+          title="Delete Comment"
+          message="Are you sure you want to delete this comment and its replies?"
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          danger={true}
+          onConfirm={remove}
+          onCancel={() => setConfirmDelete(false)}
+        />
 
         {showReplies && (
           <div>
