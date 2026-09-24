@@ -189,6 +189,7 @@ def browse_videos(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     genre: Optional[str] = Query(None),
+    excludeId: Optional[str] = Query(None),
     payload: dict = Depends(require_role("viewer")),
 ):
     viewer = _viewer_or_404(payload)
@@ -200,6 +201,11 @@ def browse_videos(
             "$regex": f"^{genre.strip()}$",
             "$options": "i",
         }
+    if excludeId:
+        try:
+            query["_id"] = {"$ne": ObjectId(excludeId)}
+        except (InvalidId, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid excludeId")
 
     total = film_collection.count_documents(query)
     skip = (page - 1) * limit

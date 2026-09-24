@@ -1,35 +1,74 @@
-import React, { useEffect, useRef, useState,} from "react";
-import { useNavigate,useParams,} from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Plyr from "plyr";
 import Hls from "hls.js";
-import {ArrowLeft,Bookmark,Check,Edit3, Heart, MessageCircle, Send, Star, ThumbsDown, ThumbsUp, Trash2, X,} from "lucide-react";
+import {
+  ArrowLeft,
+  Bookmark,
+  Check,
+  Edit3,
+  Heart,
+  MessageCircle,
+  Play,
+  Send,
+  Share2,
+  Sparkles,
+  Star,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  X,
+  Film,
+} from "lucide-react";
 
 import WatchSidePanel from "./Watch/WatchSidePanel.jsx";
 import "plyr/dist/plyr.css";
 import "./WatchVideo.css";
 
-import { deleteRequest, getRequest, postJson, putJson } from "../../api/client.js";
+import {
+  deleteRequest,
+  getRequest,
+  postJson,
+  putJson,
+} from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
 
 const duration = (seconds) => {
-  const value = Math.max(
-    0,
-    Math.round(Number(seconds) || 0)
-  );
-
-  const hours = Math.floor(
-    value / 3600
-  );
-
-  const minutes = Math.floor(
-    (value % 3600) / 60
-  );
-
-  return hours
-    ? `${hours}h ${minutes}m`
-    : `${minutes}m`;
+  const value = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 };
+
+function RecThumbnail({ rec }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [rec?.thumbnailUrl]);
+
+  if (!rec?.thumbnailUrl || failed) {
+    return (
+      <div className="rec-fallback">
+        <div className="rec-fallback-icon">
+          <Play size={14} fill="currentColor" />
+        </div>
+        <span className="rec-fallback-brand">Proscenium</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={rec.thumbnailUrl}
+      alt={rec.title || "Film"}
+      onError={() => setFailed(true)}
+      className="rec-img"
+    />
+  );
+}
 
 function CommentItem({
   comment,
@@ -38,92 +77,46 @@ function CommentItem({
   onChanged,
   depth = 0,
 }) {
-  const [replies, setReplies] =
-    useState([]);
+  const [replies, setReplies] = useState([]);
+  const [showReplies, setShowReplies] = useState(false);
+  const [reply, setReply] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(comment.text);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [likes, setLikes] = useState(Number(comment.likes || 0));
+  const [dislikes, setDislikes] = useState(Number(comment.dislikes || 0));
+  const [reaction, setReaction] = useState(comment.reaction || null);
 
-  const [showReplies, setShowReplies] =
-    useState(false);
-
-  const [reply, setReply] =
-    useState("");
-
-  const [editing, setEditing] =
-    useState(false);
-
-  const [text, setText] =
-    useState(comment.text);
-
-  const [busy, setBusy] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [confirmDelete, setConfirmDelete] =
-    useState(false);
-
-  const [likes, setLikes] =
-    useState(
-      Number(comment.likes || 0)
-    );
-
-  const [dislikes, setDislikes] =
-    useState(
-      Number(comment.dislikes || 0)
-    );
-
-  const [reaction, setReaction] =
-    useState(
-      comment.reaction || null
-    );
-
-  const owner =
-    comment.viewerId ===
-    currentViewerId;
+  const owner = comment.viewerId === currentViewerId;
 
   async function loadReplies() {
     try {
-      const data =
-        await getRequest(
-          `/viewer/videos/${videoId}/comments/${comment.id}/replies?limit=100`
-        );
-
-      setReplies(
-        data.replies || []
+      const data = await getRequest(
+        `/viewer/videos/${videoId}/comments/${comment.id}/replies?limit=100`
       );
-
+      setReplies(data.replies || []);
       setShowReplies(true);
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to load replies."
-      );
+      setError(err.message || "Unable to load replies.");
     }
   }
 
   async function sendReply() {
     if (!reply.trim()) return;
-
     setBusy(true);
 
     try {
       await postJson(
         `/viewer/videos/${videoId}/comments/${comment.id}/reply`,
-        {
-          text: reply.trim(),
-        }
+        { text: reply.trim() }
       );
-
       setReply("");
-
       await loadReplies();
-
       onChanged();
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to post reply."
-      );
+      setError(err.message || "Unable to post reply.");
     } finally {
       setBusy(false);
     }
@@ -131,54 +124,31 @@ function CommentItem({
 
   async function react(type) {
     try {
-      const data =
-        await postJson(
-          `/viewer/videos/${videoId}/comments/${comment.id}/react`,
-          {
-            type,
-          }
-        );
-
-      setLikes(
-        Number(data.likes || 0)
+      const data = await postJson(
+        `/viewer/videos/${videoId}/comments/${comment.id}/react`,
+        { type }
       );
-
-      setDislikes(
-        Number(data.dislikes || 0)
-      );
-
-      setReaction(
-        data.reaction || null
-      );
+      setLikes(Number(data.likes || 0));
+      setDislikes(Number(data.dislikes || 0));
+      setReaction(data.reaction || null);
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to update comment reaction."
-      );
+      setError(err.message || "Unable to update comment reaction.");
     }
   }
 
   async function edit() {
     if (!text.trim()) return;
-
     setBusy(true);
 
     try {
       await putJson(
         `/viewer/videos/${videoId}/comments/${comment.id}`,
-        {
-          text: text.trim(),
-        }
+        { text: text.trim() }
       );
-
       setEditing(false);
-
       onChanged();
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to edit comment."
-      );
+      setError(err.message || "Unable to edit comment.");
     } finally {
       setBusy(false);
     }
@@ -192,72 +162,54 @@ function CommentItem({
       await deleteRequest(
         `/viewer/videos/${videoId}/comments/${comment.id}`
       );
-
       onChanged();
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to delete comment."
-      );
+      setError(err.message || "Unable to delete comment.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div
-      className={
-        depth
-          ? "comment reply"
-          : "comment"
-      }
-    >
+    <div className={depth ? "comment reply" : "comment"}>
       <div className="avatar">
         {comment.viewerAvatarUrl ? (
-          <img
-            src={comment.viewerAvatarUrl}
-            alt=""
-          />
+          <img src={comment.viewerAvatarUrl} alt="" />
         ) : (
-          comment.viewerUsername
-            ?.charAt(0)
-            ?.toUpperCase()
+          comment.viewerUsername?.charAt(0)?.toUpperCase()
         )}
       </div>
 
       <div className="comment-body">
         <div className="comment-head">
-          <b>
-            {comment.viewerUsername}
-          </b>
+          <b>{comment.viewerUsername}</b>
+          {comment.createdAt && (
+            <span className="comment-time">
+              {new Date(comment.createdAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+          )}
         </div>
 
         {editing ? (
           <div className="edit-row">
             <input
               value={text}
-              onChange={(event) =>
-                setText(
-                  event.target.value
-                )
-              }
+              onChange={(e) => setText(e.target.value)}
               maxLength={1000}
             />
-
-            <button
-              onClick={edit}
-              disabled={busy}
-            >
-              <Check size={15} />
+            <button onClick={edit} disabled={busy}>
+              <Check size={14} />
             </button>
-
             <button
               onClick={() => {
                 setEditing(false);
                 setText(comment.text);
               }}
             >
-              <X size={15} />
+              <X size={14} />
             </button>
           </div>
         ) : (
@@ -266,38 +218,24 @@ function CommentItem({
 
         <div className="comment-actions">
           <button
-            className={
-              reaction === "like"
-                ? "selected"
-                : ""
-            }
-            onClick={() =>
-              react("like")
-            }
+            className={reaction === "like" ? "selected" : ""}
+            onClick={() => react("like")}
           >
             <ThumbsUp size={12} />
-            {likes}
+            {likes > 0 && <span>{likes}</span>}
           </button>
 
           <button
-            className={
-              reaction === "dislike"
-                ? "selected"
-                : ""
-            }
-            onClick={() =>
-              react("dislike")
-            }
+            className={reaction === "dislike" ? "selected" : ""}
+            onClick={() => react("dislike")}
           >
             <ThumbsDown size={12} />
-            {dislikes}
+            {dislikes > 0 && <span>{dislikes}</span>}
           </button>
 
           <button
             onClick={() =>
-              showReplies
-                ? setShowReplies(false)
-                : loadReplies()
+              showReplies ? setShowReplies(false) : loadReplies()
             }
           >
             Reply
@@ -308,15 +246,10 @@ function CommentItem({
 
           {owner && (
             <>
-              <button
-                onClick={() =>
-                  setEditing(true)
-                }
-              >
+              <button onClick={() => setEditing(true)}>
                 <Edit3 size={12} />
                 Edit
               </button>
-
               <button
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
@@ -340,18 +273,14 @@ function CommentItem({
         />
 
         {showReplies && (
-          <div>
+          <div className="replies-wrapper">
             {replies.map((item) => (
               <CommentItem
                 key={item.id}
                 comment={item}
                 videoId={videoId}
-                currentViewerId={
-                  currentViewerId
-                }
-                onChanged={
-                  loadReplies
-                }
+                currentViewerId={currentViewerId}
+                onChanged={loadReplies}
                 depth={depth + 1}
               />
             ))}
@@ -362,32 +291,20 @@ function CommentItem({
           <div className="reply-box">
             <input
               value={reply}
-              onChange={(event) =>
-                setReply(
-                  event.target.value
-                )
-              }
+              onChange={(e) => setReply(e.target.value)}
               placeholder="Write a reply…"
               maxLength={1000}
             />
-
             <button
               onClick={sendReply}
-              disabled={
-                busy ||
-                !reply.trim()
-              }
+              disabled={busy || !reply.trim()}
             >
-              <Send size={15} />
+              <Send size={14} />
             </button>
           </div>
         )}
 
-        {error && (
-          <small className="watch-error">
-            {error}
-          </small>
-        )}
+        {error && <small className="watch-error">{error}</small>}
       </div>
     </div>
   );
@@ -395,81 +312,54 @@ function CommentItem({
 
 export default function ViewerWatchVideo() {
   const { id } = useParams();
-
   const navigate = useNavigate();
 
-  const [video, setVideo] =
-    useState(null);
+  const [video, setVideo] = useState(null);
+  const [stream, setStream] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [posting, setPosting] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [showRecs, setShowRecs] = useState(false);
+  const [dismissedRecs, setDismissedRecs] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [activeTab, setActiveTab] = useState("discussion");
 
-  const [stream, setStream] =
-    useState(null);
-
-  const [comments, setComments] =
-    useState([]);
-
-  const [reviews, setReviews] =
-    useState([]);
-
-  const [comment, setComment] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [posting, setPosting] =
-    useState(false);
-
-  const [watching, setWatching] =
-    useState(false);
+  const [plyrContainer, setPlyrContainer] = useState(null);
 
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const hlsRef = useRef(null);
-  const heartbeatRef =
-    useRef(null);
+  const heartbeatRef = useRef(null);
 
   const auth = JSON.parse(
-    localStorage.getItem(
-      "proscenium_auth"
-    ) || "null"
+    localStorage.getItem("proscenium_auth") || "null"
   );
-
   const viewerId = auth?.userId;
 
   async function loadComments() {
     try {
-      const data =
-        await getRequest(
-          `/viewer/videos/${id}/comments?limit=100`
-        );
-
-      setComments(
-        data.comments || []
+      const data = await getRequest(
+        `/viewer/videos/${id}/comments?limit=100`
       );
+      setComments(data.comments || []);
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to load comments."
-      );
+      setError(err.message || "Unable to load comments.");
     }
   }
 
-  async function loadReviews() {
+  async function loadRecommendations() {
     try {
-      const data =
-        await getRequest(
-          `/viewer/videos/${id}/reviews`
-        );
-
-      setReviews(data.reviews || []);
-    } catch (err) {
-      setError(
-        err.message ||
-          "Unable to load reviews."
+      const data = await getRequest(
+        `/viewer/videos?limit=4&excludeId=${id}`
       );
+      setRecommendations(data.videos || []);
+    } catch {
+      setRecommendations([]);
     }
   }
 
@@ -478,44 +368,22 @@ export default function ViewerWatchVideo() {
     setError("");
 
     try {
-      /*
-       * Detail endpoint remains protected by
-       * the existing backend moderation rules.
-       */
-      const [
-        videoData,
-        commentsData,
-        watchData,
-        reviewsData,
-      ] = await Promise.all([
-        getRequest(
-          `/viewer/videos/${id}`
-        ),
-        getRequest(
-          `/viewer/videos/${id}/comments?limit=100`
-        ),
-        getRequest(
-          `/viewer/videos/${id}/watch`
-        ),
-        getRequest(
-          `/viewer/videos/${id}/reviews`
-        ),
-      ]);
+      const [videoData, commentsData, watchData, reviewsData] =
+        await Promise.all([
+          getRequest(`/viewer/videos/${id}`),
+          getRequest(`/viewer/videos/${id}/comments?limit=100`),
+          getRequest(`/viewer/videos/${id}/watch`),
+          getRequest(`/viewer/videos/${id}/reviews`),
+        ]);
 
       setVideo(videoData);
-
-      setComments(
-        commentsData.comments || []
-      );
-
+      setComments(commentsData.comments || []);
       setStream(watchData);
-
       setReviews(reviewsData.reviews || []);
+
+      loadRecommendations();
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to load this film."
-      );
+      setError(err.message || "Unable to load this film.");
     } finally {
       setLoading(false);
     }
@@ -525,26 +393,21 @@ export default function ViewerWatchVideo() {
     load();
 
     return () => {
-      clearInterval(
-        heartbeatRef.current
-      );
-
+      clearInterval(heartbeatRef.current);
       playerRef.current?.destroy();
       hlsRef.current?.destroy();
+      setPlyrContainer(null);
+      setShowRecs(false);
+      setDismissedRecs(false);
     };
   }, [id]);
 
   useEffect(() => {
-    if (
-      !stream?.stream_url ||
-      !videoRef.current
-    ) {
+    if (!stream?.stream_url || !videoRef.current) {
       return;
     }
 
-    const element =
-      videoRef.current;
-
+    const element = videoRef.current;
     let plyr;
     let hls;
 
@@ -564,140 +427,86 @@ export default function ViewerWatchVideo() {
 
     const setupPlayer = (player) => {
       player.once("ready", () => {
-        const resume =
-          Number(
-            stream.resumeTimeSec || 0
-          );
+        const resume = Number(stream.resumeTimeSec || 0);
+        const total = Number(video?.durationSec || 0);
 
-        const total =
-          Number(
-            video?.durationSec || 0
-          );
+        if (resume > 5 && (!total || resume < total - 5)) {
+          player.currentTime = resume;
+        }
 
-        if (
-          resume > 5 &&
-          (!total ||
-            resume < total - 5)
-        ) {
-          player.currentTime =
-            resume;
+        setPlyrContainer(player.elements.container);
+      });
+
+      player.on("play", () => {
+        setWatching(true);
+        setShowRecs(false);
+        setDismissedRecs(false);
+      });
+
+      player.on("pause", () => {
+        setWatching(false);
+        if (!dismissedRecs) {
+          setShowRecs(true);
         }
       });
 
-      player.on("play", () =>
-        setWatching(true)
-      );
-
-      player.on("pause", () =>
-        setWatching(false)
-      );
-
-      player.on("ended", () =>
-        setWatching(false)
-      );
+      player.on("ended", () => {
+        setWatching(false);
+        setShowRecs(true);
+        setDismissedRecs(false);
+      });
     };
 
     if (Hls.isSupported()) {
       hls = new Hls();
-
       hlsRef.current = hls;
-
       hls.attachMedia(element);
 
-      hls.on(
-        Hls.Events.MEDIA_ATTACHED,
-        () => {
-          hls.loadSource(
-            stream.stream_url
-          );
-        }
-      );
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(stream.stream_url);
+      });
 
-      hls.on(
-        Hls.Events.MANIFEST_PARSED,
-        () => {
-          const qualities = hls.levels
-            .map(
-              (level) =>
-                level.height
-            )
-            .filter(Boolean)
-            .sort(
-              (a, b) => a - b
-            );
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        const qualities = hls.levels
+          .map((level) => level.height)
+          .filter(Boolean)
+          .sort((a, b) => a - b);
 
-          const options = {
-            ...baseOptions,
-            settings: [
-              "quality",
-              "speed",
-            ],
+        const options = {
+          ...baseOptions,
+          settings: ["quality", "speed"],
+        };
+
+        if (qualities.length) {
+          options.quality = {
+            default: qualities[qualities.length - 1],
+            options: qualities,
+            forced: true,
+            onChange: (quality) => {
+              const level = hls.levels.findIndex(
+                (item) => item.height === quality
+              );
+              if (level >= 0) {
+                hls.currentLevel = level;
+              }
+            },
           };
-
-          if (qualities.length) {
-            options.quality = {
-              default:
-                qualities[
-                  qualities.length -
-                    1
-                ],
-              options: qualities,
-              forced: true,
-
-              onChange: (quality) => {
-                const level =
-                  hls.levels.findIndex(
-                    (item) =>
-                      item.height ===
-                      quality
-                  );
-
-                if (level >= 0) {
-                  hls.currentLevel =
-                    level;
-                }
-              },
-            };
-          }
-
-          plyr = new Plyr(
-            element,
-            options
-          );
-
-          playerRef.current =
-            plyr;
-
-          setupPlayer(plyr);
         }
-      );
 
-      hls.on(
-        Hls.Events.ERROR,
-        (_, data) => {
-          if (data.fatal) {
-            setError(
-              "Playback error — the stream failed to load."
-            );
-          }
+        plyr = new Plyr(element, options);
+        playerRef.current = plyr;
+        setupPlayer(plyr);
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          setError("Playback error — the stream failed to load.");
         }
-      );
-    } else if (
-      element.canPlayType(
-        "application/vnd.apple.mpegurl"
-      )
-    ) {
-      element.src =
-        stream.stream_url;
-
-      plyr = new Plyr(
-        element,
-        baseOptions
-      );
-
-      playerRef.current =
-        plyr;
-
+      });
+    } else if (element.canPlayType("application/vnd.apple.mpegurl")) {
+      element.src = stream.stream_url;
+      plyr = new Plyr(element, baseOptions);
+      playerRef.current = plyr;
       setupPlayer(plyr);
     }
 
@@ -709,70 +518,38 @@ export default function ViewerWatchVideo() {
     stream?.stream_url,
     stream?.resumeTimeSec,
     video?.durationSec,
+    dismissedRecs,
   ]);
 
   useEffect(() => {
-    if (!watching) {
-      return;
-    }
+    if (!watching) return;
 
-    heartbeatRef.current =
-      setInterval(() => {
-        const currentTime =
-          playerRef.current
-            ?.currentTime;
+    heartbeatRef.current = setInterval(() => {
+      const currentTime = playerRef.current?.currentTime;
+      if (typeof currentTime === "number") {
+        postJson(`/viewer/videos/${id}/heartbeat`, {
+          currentTimeSec: currentTime,
+        }).catch(() => {});
+      }
+    }, 5000);
 
-        if (
-          typeof currentTime ===
-          "number"
-        ) {
-          postJson(
-            `/viewer/videos/${id}/heartbeat`,
-            {
-              currentTimeSec:
-                currentTime,
-            }
-          ).catch(() => {});
-        }
-      }, 5000);
-
-    return () =>
-      clearInterval(
-        heartbeatRef.current
-      );
+    return () => clearInterval(heartbeatRef.current);
   }, [watching, id]);
 
-  useEffect(
-    () => () => {
-      const currentTime =
-        playerRef.current
-          ?.currentTime;
-
-      if (
-        typeof currentTime ===
-        "number"
-      ) {
-        postJson(
-          `/viewer/videos/${id}/heartbeat`,
-          {
-            currentTimeSec:
-              currentTime,
-          }
-        ).catch(() => {});
-      }
-    },
-    [id]
-  );
+  useEffect(() => () => {
+    const currentTime = playerRef.current?.currentTime;
+    if (typeof currentTime === "number") {
+      postJson(`/viewer/videos/${id}/heartbeat`, {
+        currentTimeSec: currentTime,
+      }).catch(() => {});
+    }
+  }, [id]);
 
   async function react(type) {
     try {
-      const data =
-        await postJson(
-          `/viewer/videos/${id}/react`,
-          {
-            type,
-          }
-        );
+      const data = await postJson(`/viewer/videos/${id}/react`, {
+        type,
+      });
 
       setVideo((current) => ({
         ...current,
@@ -781,66 +558,47 @@ export default function ViewerWatchVideo() {
         dislikes: data.dislikes,
       }));
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to update reaction."
-      );
+      setError(err.message || "Unable to update reaction.");
     }
   }
 
   async function save() {
     try {
-      const data =
-        await postJson(
-          `/viewer/videos/${id}/watchlist`,
-          {
-            saved: !video.saved,
-          }
-        );
+      const data = await postJson(`/viewer/videos/${id}/watchlist`, {
+        saved: !video.saved,
+      });
 
       setVideo((current) => ({
         ...current,
         saved: data.saved,
       }));
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to update watchlist."
-      );
+      setError(err.message || "Unable to update watchlist.");
     }
   }
 
-  async function postComment() {
-    if (!comment.trim()) {
-      return;
-    }
+  function handleShare() {
+    navigator.clipboard.writeText(window.location.href);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  }
 
+  async function postComment() {
+    if (!comment.trim()) return;
     setPosting(true);
 
     try {
-      await postJson(
-        `/viewer/videos/${id}/comments`,
-        {
-          text: comment.trim(),
-        }
-      );
-
+      await postJson(`/viewer/videos/${id}/comments`, {
+        text: comment.trim(),
+      });
       setComment("");
-
       await loadComments();
-
       setVideo((current) => ({
         ...current,
-        commentCount:
-          Number(
-            current.commentCount || 0
-          ) + 1,
+        commentCount: Number(current.commentCount || 0) + 1,
       }));
     } catch (err) {
-      setError(
-        err.message ||
-          "Unable to post comment."
-      );
+      setError(err.message || "Unable to post comment.");
     } finally {
       setPosting(false);
     }
@@ -870,7 +628,8 @@ export default function ViewerWatchVideo() {
       <DashboardLayout>
         <div className="watch-page">
           <div className="watch-loading">
-            Loading film…
+            <div className="loading-spinner" />
+            <span>Loading film…</span>
           </div>
         </div>
       </DashboardLayout>
@@ -882,8 +641,7 @@ export default function ViewerWatchVideo() {
       <DashboardLayout>
         <div className="watch-page">
           <div className="watch-loading watch-error">
-            {error ||
-              "Film not found."}
+            {error || "Film not found."}
           </div>
         </div>
       </DashboardLayout>
@@ -894,439 +652,460 @@ export default function ViewerWatchVideo() {
     <DashboardLayout>
       <div className="watch-page">
         <main className="watch-main">
-          <button
-            className="back-button"
-            onClick={() =>
-              navigate(-1)
-            }
-          >
-            <ArrowLeft size={15} />
-            Back
-          </button>
+          {/* Top Navigation */}
+          <div className="watch-top-bar">
+            <button className="back-button" onClick={() => navigate(-1)}>
+              <ArrowLeft size={14} />
+              <span>Back to Browse</span>
+            </button>
+          </div>
 
           {error && (
             <div className="watch-alert">
-              {error}
-
-              <button
-                onClick={() =>
-                  setError("")
-                }
-              >
+              <span>{error}</span>
+              <button onClick={() => setError("")}>
                 <X size={14} />
               </button>
             </div>
           )}
 
+          {/* Hero Player & Side Card Layout */}
           <section className="watch-hero">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="min-w-0">
+            <div className="watch-hero-grid">
+              <div className="watch-player-col">
                 <div className="watch-player">
                   <video
                     ref={videoRef}
                     title={video.title}
                     playsInline
                   />
-                </div>
 
-                <div className="watch-title">
-              <div>
-                <span className="eyebrow">
-                  PROSCENIUM / NOW PLAYING
-                </span>
+                  {/* YouTube-Style In-Player Recommendations Dock */}
+                  {plyrContainer &&
+                    showRecs &&
+                    recommendations.length > 0 &&
+                    createPortal(
+                      <div className="rec-overlay-dock">
+                        <div className="rec-dock-header">
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles size={12} className="text-[#d9a653]" />
+                            <span className="rec-dock-title">
+                              More to Watch
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="rec-dock-close"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowRecs(false);
+                              setDismissedRecs(true);
+                            }}
+                            title="Close suggestions"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
 
-                <h1>{video.title}</h1>
-
-                <div className="watch-meta">
-                  <span>
-                    <Star
-                      size={13}
-                      fill="currentColor"
-                    />
-
-                    {Number(
-                      video.avgRating ||
-                        0
-                    ).toFixed(1)}
-                  </span>
-
-                  <span>
-                    {video.releaseYear ||
-                      ""}
-                  </span>
-
-                  <span>
-                    {video.language ||
-                      ""}
-                  </span>
-
-                  <span>
-                    {duration(
-                      video.durationSec
+                        <div className="rec-dock-shelf">
+                          {recommendations.slice(0, 4).map((rec) => (
+                            <div
+                              key={rec.id}
+                              className="rec-dock-card"
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/viewer/videos/${rec.id}`);
+                              }}
+                            >
+                              <div className="rec-dock-thumb">
+                                <RecThumbnail rec={rec} />
+                                {rec.durationSec ? (
+                                  <span className="rec-dock-duration">
+                                    {duration(rec.durationSec)}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="rec-dock-film-title">{rec.title}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>,
+                      plyrContainer
                     )}
-                  </span>
-
-                  <span>
-                    {video.views || 0} views
-                  </span>
                 </div>
-              </div>
 
-              <button
-                className={`save-button ${
-                  video.saved
-                    ? "saved"
-                    : ""
-                }`}
-                onClick={save}
-              >
-                {video.saved ? (
-                  <Check size={16} />
-                ) : (
-                  <Bookmark size={16} />
+                {/* Film Title & Action Toolbar */}
+                <div className="watch-header-card">
+                  <div className="watch-header-left">
+                    <div className="watch-eyebrow-row">
+                      <span className="eyebrow">PROSCENIUM / NOW STREAMING</span>
+                      {video.ageRestricted && (
+                        <span className="mature-badge">18+</span>
+                      )}
+                    </div>
+
+                    <h1 className="watch-title-text">{video.title}</h1>
+
+                    <div className="watch-meta-pills">
+                      {Number(video.avgRating || 0) > 0 && (
+                        <span className="meta-pill rating-pill">
+                          <Star size={12} fill="currentColor" />
+                          <b>{Number(video.avgRating).toFixed(1)}</b>
+                          {video.reviewCount ? ` (${video.reviewCount})` : ""}
+                        </span>
+                      )}
+
+                      {video.releaseYear && (
+                        <span className="meta-pill">{video.releaseYear}</span>
+                      )}
+
+                      {video.durationSec && (
+                        <span className="meta-pill">
+                          {duration(video.durationSec)}
+                        </span>
+                      )}
+
+                      {video.language && (
+                        <span className="meta-pill">{video.language}</span>
+                      )}
+
+                      <span className="meta-pill">
+                        {(video.views || 0).toLocaleString()} views
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="watch-header-actions">
+                    <div className="action-button-group">
+                      <button
+                        type="button"
+                        className={`action-btn ${
+                          video.reaction === "like" ? "active-like" : ""
+                        }`}
+                        onClick={() => react("like")}
+                        title="Like this film"
+                      >
+                        <ThumbsUp size={15} fill={video.reaction === "like" ? "currentColor" : "none"} />
+                        <span>{video.likes || 0}</span>
+                      </button>
+
+                      <div className="action-btn-divider" />
+
+                      <button
+                        type="button"
+                        className={`action-btn ${
+                          video.reaction === "dislike" ? "active-dislike" : ""
+                        }`}
+                        onClick={() => react("dislike")}
+                        title="Dislike"
+                      >
+                        <ThumbsDown size={15} fill={video.reaction === "dislike" ? "currentColor" : "none"} />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`watchlist-btn ${video.saved ? "is-saved" : ""}`}
+                      onClick={save}
+                    >
+                      {video.saved ? <Check size={15} /> : <Bookmark size={15} />}
+                      <span>{video.saved ? "Saved" : "Watchlist"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="share-btn"
+                      onClick={handleShare}
+                      title="Share Film"
+                    >
+                      <Share2 size={15} />
+                      <span>{copiedLink ? "Copied!" : "Share"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Below-Player Recommendations Shelf */}
+                {recommendations.length > 0 && (
+                  <div className="watch-rec-shelf-section">
+                    <div className="watch-rec-shelf-header">
+                      <div className="flex items-center gap-2">
+                        <Film size={14} className="text-[#d9a653]" />
+                        <span className="rec-section-title">
+                          Recommended For You
+                        </span>
+                      </div>
+                      <span className="rec-section-sub">
+                        More curated indie cinema
+                      </span>
+                    </div>
+
+                    <div className="watch-rec-grid">
+                      {recommendations.map((rec) => (
+                        <div
+                          key={rec.id}
+                          className="watch-rec-item"
+                          onClick={() => navigate(`/viewer/videos/${rec.id}`)}
+                        >
+                          <div className="watch-rec-thumb-wrap">
+                            <RecThumbnail rec={rec} />
+                            {rec.durationSec ? (
+                              <span className="rec-badge">
+                                {duration(rec.durationSec)}
+                              </span>
+                            ) : null}
+                            <div className="watch-rec-play-overlay">
+                              <Play size={18} fill="currentColor" />
+                            </div>
+                          </div>
+                          <div className="watch-rec-info">
+                            <p className="watch-rec-name">{rec.title}</p>
+                            <span className="watch-rec-meta">
+                              {rec.directorName || rec.director || "Independent"}
+                              {rec.releaseYear ? ` • ${rec.releaseYear}` : ""}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-
-                {video.saved
-                  ? "Saved"
-                  : "Watchlist"}
-              </button>
-            </div>
-
-            <div className="reaction-row">
-              <button
-                className={
-                  video.reaction ===
-                  "like"
-                    ? "selected"
-                    : ""
-                }
-                onClick={() =>
-                  react("like")
-                }
-              >
-                <ThumbsUp size={16} />
-                {video.likes || 0}
-              </button>
-
-              <button
-                className={
-                  video.reaction ===
-                  "dislike"
-                    ? "selected"
-                    : ""
-                }
-                onClick={() =>
-                  react("dislike")
-                }
-              >
-                <ThumbsDown size={16} />
-                {video.dislikes || 0}
-              </button>
-            </div>
-
               </div>
 
-              <WatchSidePanel
-                video={video}
-                videoId={id}
-                onReviewSaved={(review) => {
-                  setReviews((current) => [
-                    review,
-                    ...current.filter((item) => item.viewerId !== viewerId),
-                  ]);
+              {/* Side Review / Synopsis Panel */}
+              <div className="watch-side-col">
+                <WatchSidePanel
+                  video={video}
+                  videoId={id}
+                  onReviewSaved={(review) => {
+                    setReviews((current) => [
+                      review,
+                      ...current.filter((item) => item.viewerId !== viewerId),
+                    ]);
 
-                  setVideo((current) => ({
-                    ...current,
-                    avgRating: review.avgRating ?? current.avgRating,
-                    reviewCount: review.reviewCount ?? current.reviewCount,
-                    myReview: review,
-                  }));
-                }}
-                onReviewDeleted={(data) => {
-                  setReviews((current) =>
-                    current.filter((item) => item.viewerId !== viewerId)
-                  );
+                    setVideo((current) => ({
+                      ...current,
+                      avgRating: review.avgRating ?? current.avgRating,
+                      reviewCount: review.reviewCount ?? current.reviewCount,
+                      myReview: review,
+                    }));
+                  }}
+                  onReviewDeleted={(data) => {
+                    setReviews((current) =>
+                      current.filter((item) => item.viewerId !== viewerId)
+                    );
 
-                  setVideo((current) => ({
-                    ...current,
-                    avgRating: data.avgRating,
-                    reviewCount: data.reviewCount,
-                    myReview: null,
-                  }));
-                }}
-              />
+                    setVideo((current) => ({
+                      ...current,
+                      avgRating: data.avgRating,
+                      reviewCount: data.reviewCount,
+                      myReview: null,
+                    }));
+                  }}
+                />
+              </div>
             </div>
           </section>
 
-          <div className="watch-grid">
-            <section className="watch-section">
-              <div className="section-title">
-                <MessageCircle
-                  size={18}
-                />
-
-                <h2>Comments</h2>
-
-                <span>
-                  {video.commentCount ||
-                    comments.length}
-                </span>
-              </div>
-
-              <div className="comment-compose">
-                <textarea
-                  value={comment}
-                  onChange={(event) =>
-                    setComment(
-                      event.target.value
-                    )
-                  }
-                  maxLength={1000}
-                  rows={3}
-                  placeholder="Share your thoughts…"
-                />
+          {/* Bottom Content Grid */}
+          <div className="watch-content-grid">
+            <div className="watch-main-tabs-col">
+              {/* Tab Selector */}
+              <div className="watch-tab-bar">
+                <button
+                  className={`tab-btn ${activeTab === "discussion" ? "active" : ""}`}
+                  onClick={() => setActiveTab("discussion")}
+                >
+                  <MessageCircle size={15} />
+                  <span>Discussion</span>
+                  <span className="tab-count">{video.commentCount || comments.length}</span>
+                </button>
 
                 <button
-                  onClick={
-                    postComment
-                  }
-                  disabled={
-                    posting ||
-                    !comment.trim()
-                  }
+                  className={`tab-btn ${activeTab === "reviews" ? "active" : ""}`}
+                  onClick={() => setActiveTab("reviews")}
                 >
-                  <Send size={16} />
+                  <Star size={15} />
+                  <span>Reviews & Community</span>
+                  <span className="tab-count">{video.reviewCount || reviews.length}</span>
                 </button>
               </div>
 
-              {comments.length ? (
-                <div className="comments">
-                  {comments.map(
-                    (item) => (
-                      <CommentItem
-                        key={item.id}
-                        comment={item}
-                        videoId={id}
-                        currentViewerId={
-                          viewerId
-                        }
-                        onChanged={
-                          loadComments
-                        }
-                      />
-                    )
+              {/* TAB 1: Discussion / Comments */}
+              {activeTab === "discussion" && (
+                <section className="watch-tab-pane">
+                  <div className="comment-compose-card">
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      maxLength={1000}
+                      rows={3}
+                      placeholder="Add to the discussion…"
+                    />
+                    <div className="compose-footer">
+                      <span className="char-limit">{comment.length}/1000</span>
+                      <button
+                        onClick={postComment}
+                        disabled={posting || !comment.trim()}
+                        className="post-btn"
+                      >
+                        <Send size={14} />
+                        <span>{posting ? "Posting…" : "Comment"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {comments.length ? (
+                    <div className="comments-list">
+                      {comments.map((item) => (
+                        <CommentItem
+                          key={item.id}
+                          comment={item}
+                          videoId={id}
+                          currentViewerId={viewerId}
+                          onChanged={loadComments}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state">
+                      <MessageCircle size={24} className="text-[#695d63] mb-2" />
+                      <p>No comments yet.</p>
+                      <span>Share your perspective on this indie film.</span>
+                    </div>
                   )}
-                </div>
-              ) : (
-                <div className="empty-watch">
-                  No comments yet. Be
-                  the first.
-                </div>
+                </section>
               )}
-            </section>
 
-            <aside>
-              <section className="info-card">
-                <span className="eyebrow">
-                  FILM NOTES
-                </span>
+              {/* TAB 2: Reviews */}
+              {activeTab === "reviews" && (
+                <section className="watch-tab-pane">
+                  <div className="review-summary-banner">
+                    <div className="summary-score">
+                      <strong>{Number(video.avgRating || 0).toFixed(1)}</strong>
+                      <div className="summary-stars">
+                        {[1, 2, 3, 4, 5].map((val) => (
+                          <Star
+                            key={val}
+                            size={14}
+                            fill={
+                              val <= Math.round(Number(video.avgRating || 0))
+                                ? "currentColor"
+                                : "none"
+                            }
+                          />
+                        ))}
+                      </div>
+                      <span>Based on {video.reviewCount || reviews.length} reviews</span>
+                    </div>
+                  </div>
 
-                {video.contentWarnings
-                  ?.length ? (
-                  <p className="warning">
-                    {video.contentWarnings.join(
-                      " · "
+                  <div className="reviews-list">
+                    {reviews.map((rev) => (
+                      <article key={rev.id} className="review-card">
+                        <div className="review-card-head">
+                          <div className="avatar">
+                            {rev.viewerAvatarUrl ? (
+                              <img src={rev.viewerAvatarUrl} alt="" />
+                            ) : (
+                              rev.viewerUsername?.[0]?.toUpperCase()
+                            )}
+                          </div>
+                          <div className="review-user-info">
+                            <b>{rev.viewerUsername}</b>
+                            <div className="review-stars-row">
+                              <span className="stars-gold">
+                                {"★".repeat(Math.round(rev.rating))}
+                                {"☆".repeat(5 - Math.round(rev.rating))}
+                              </span>
+                              <span className="rating-num">
+                                {Number(rev.rating).toFixed(1)}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => toggleReviewLike(rev.id)}
+                            className={`review-like-btn ${rev.liked ? "liked" : ""}`}
+                          >
+                            <Heart size={13} fill={rev.liked ? "currentColor" : "none"} />
+                            <span>{rev.likes || 0}</span>
+                          </button>
+                        </div>
+                        <p className="review-text">{rev.text}</p>
+                      </article>
+                    ))}
+
+                    {!reviews.length && (
+                      <div className="empty-state">
+                        <Star size={24} className="text-[#695d63] mb-2" />
+                        <p>No community reviews yet.</p>
+                        <span>Watch this film to be the first to publish a review.</span>
+                      </div>
                     )}
-                  </p>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* Right Column: Film Notes, Warnings, Cast */}
+            <aside className="watch-sidebar-col">
+              <div className="film-notes-card">
+                <span className="eyebrow">FILM NOTES & CREDITS</span>
+
+                {video.contentWarnings?.length ? (
+                  <div className="warning-pill-box">
+                    <p className="warning-label">Content Notice</p>
+                    <p className="warning-text">
+                      {video.contentWarnings.join(" • ")}
+                    </p>
+                  </div>
                 ) : null}
 
-                <div className="info-grid">
-                  <div>
-                    <small>
-                      Production
-                    </small>
-
-                    <b>
-                      {video.productionCountry ||
-                        "—"}
-                    </b>
+                <div className="meta-stats-grid">
+                  <div className="meta-stat-item">
+                    <small>Director</small>
+                    <b>{video.directorName || video.director || "Independent"}</b>
                   </div>
-
-                  <div>
-                    <small>
-                      Unique viewers
-                    </small>
-
-                    <b>
-                      {video.uniqueViews ||
-                        0}
-                    </b>
+                  <div className="meta-stat-item">
+                    <small>Country</small>
+                    <b>{video.productionCountry || "Independent"}</b>
                   </div>
-
-                  <div>
-                    <small>
-                      Reviews
-                    </small>
-
-                    <b>
-                      {video.reviewCount ||
-                        0}
-                    </b>
+                  <div className="meta-stat-item">
+                    <small>Unique Viewers</small>
+                    <b>{(video.uniqueViews || 0).toLocaleString()}</b>
+                  </div>
+                  <div className="meta-stat-item">
+                    <small>Total Discussions</small>
+                    <b>{video.commentCount || comments.length}</b>
                   </div>
                 </div>
 
                 {video.cast?.length ? (
-                  <div className="cast">
-                    <h3>Cast</h3>
-
-                    {video.cast
-                      .slice(0, 5)
-                      .map(
-                        (
-                          cast,
-                          index
-                        ) => (
-                          <div
-                            key={
-                              cast.id ||
-                              index
-                            }
-                          >
-                            {cast.photoUrl ? (
-                              <img
-                                src={
-                                  cast.photoUrl
-                                }
-                                alt=""
-                              />
-                            ) : (
-                              <span />
-                            )}
-
-                            <p>
-                              {cast.name}
-
-                              <small>
-                                {
-                                  cast.characterName
-                                }
-                              </small>
-                            </p>
+                  <div className="cast-section">
+                    <h3>Featured Cast</h3>
+                    <div className="cast-list">
+                      {video.cast.slice(0, 6).map((c, idx) => (
+                        <div key={c.id || idx} className="cast-item">
+                          {c.photoUrl ? (
+                            <img src={c.photoUrl} alt="" className="cast-photo" />
+                          ) : (
+                            <div className="cast-photo-fallback">
+                              {c.name?.charAt(0)?.toUpperCase()}
+                            </div>
+                          )}
+                          <div className="cast-names">
+                            <p className="cast-real-name">{c.name}</p>
+                            <small className="cast-role">{c.characterName || "Cast"}</small>
                           </div>
-                        )
-                      )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
-              </section>
+              </div>
             </aside>
           </div>
-
-          <section className="review-section">
-            <div className="section-title">
-              <Star size={18} />
-
-              <h2>
-                Ratings & Reviews
-              </h2>
-
-              <span>
-                {video.reviewCount ||
-                  reviews.length}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-6 border-b border-white/[0.07] pb-[18px]">
-              <div className="review-score">
-                <strong>
-                  {Number(
-                    video.avgRating ||
-                      0
-                  ).toFixed(1)}
-                </strong>
-
-                <span>
-                  out of 5
-                </span>
-
-                <div>
-                  {[1, 2, 3, 4, 5].map(
-                    (value) => (
-                      <Star
-                        key={value}
-                        size={16}
-                        fill={
-                          value <=
-                          Math.round(
-                            Number(
-                              video.avgRating ||
-                                0
-                            )
-                          )
-                            ? "currentColor"
-                            : "none"
-                        }
-                      />
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="review-list">
-              {reviews.map((review) => (
-                <article
-                  key={review.id}
-                >
-                  <div className="review-avatar">
-                    {review.viewerAvatarUrl ? (
-                      <img
-                        src={
-                          review.viewerAvatarUrl
-                        }
-                        alt=""
-                      />
-                    ) : (
-                      review.viewerUsername?.[0]?.toUpperCase()
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <b>{review.viewerUsername}</b>
-
-                      <button
-                        onClick={() => toggleReviewLike(review.id)}
-                        className={`flex items-center gap-1 text-[10px] ${
-                          review.liked ? "text-[#d9a653]" : "text-[#8b7c82]"
-                        }`}
-                      >
-                        <Heart size={12} fill={review.liked ? "currentColor" : "none"} />
-                        {review.likes || 0}
-                      </button>
-                    </div>
-
-                    <div className="stars">
-                      {"★".repeat(Math.round(review.rating))}
-                      {"☆".repeat(5 - Math.round(review.rating))}
-                      <span className="ml-1 text-[9px] text-[#8b7c82]">
-                        {Number(review.rating).toFixed(2)}
-                      </span>
-                    </div>
-
-                    <p>
-                      {review.text}
-                    </p>
-                  </div>
-                </article>
-              ))}
-
-              {!reviews.length && (
-                <div className="empty-watch">
-                  No reviews yet.
-                </div>
-              )}
-            </div>
-          </section>
         </main>
       </div>
     </DashboardLayout>
