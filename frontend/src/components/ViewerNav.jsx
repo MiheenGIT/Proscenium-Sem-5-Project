@@ -123,6 +123,7 @@ export default function ViewerNav() {
   const library = [
     ["Watchlist", "/watchlist", Heart],
     ["History", "/history", Clock3],
+    ["Film Reviews", "/film-reviews", Film],
   ];
 
   const profileItems = [

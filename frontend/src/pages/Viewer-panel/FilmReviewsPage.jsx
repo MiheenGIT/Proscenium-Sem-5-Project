@@ -132,13 +132,13 @@ function PosterGridView({ onSelectFilm }) {
         <div>
           <div className="flex items-center gap-2 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.2em] text-[#d9a653]">
             <Film size={13} />
-            <span>Community Film Vault</span>
+            <span>FILM REVIEWS</span>
           </div>
           <h1 className="mt-2 font-[var(--font-display)] text-3xl sm:text-4xl lg:text-5xl text-[#efe7da] font-normal tracking-tight">
-            Film Reviews & Reception
+            Film Reviews
           </h1>
           <p className="mt-2 text-xs text-[#9c8e94] max-w-xl">
-            Browse through audience critiques, logs, and star ratings across the Proscenium library. Select any film poster to explore its full review ledger.
+            Explore films through viewer ratings, written reviews, and essential film metadata. Select a film to see its complete review page.
           </p>
         </div>
 
@@ -146,7 +146,7 @@ function PosterGridView({ onSelectFilm }) {
         <div className="flex items-center gap-4 font-[var(--font-mono)] text-[0.72rem] text-[#9c8e94]">
           <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2 text-center">
             <span className="block font-bold text-[#efe7da] text-base">{totalCount}</span>
-            <span className="text-[0.62rem] uppercase tracking-wider text-[#756a6f]">Films Cataloged</span>
+            <span className="text-[0.62rem] uppercase tracking-wider text-[#756a6f]">Films</span>
           </div>
         </div>
       </div>
@@ -355,7 +355,7 @@ function FilmReviewListView({ filmId, onBack }) {
         className="group inline-flex items-center gap-2 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[#9c8e94] transition hover:text-[#efe7da]"
       >
         <ArrowLeft size={13} className="transition group-hover:-translate-x-1" />
-        <span>Return to All Films</span>
+        <span>All Films</span>
       </button>
 
       {/* Film Header Banner & Score Distribution */}
@@ -487,7 +487,7 @@ function FilmReviewListView({ filmId, onBack }) {
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-[#d9a653]" />
           <h2 className="font-[var(--font-display)] text-xl text-[#efe7da]">
-            Review Ledger
+            Viewer Reviews
           </h2>
           <span className="rounded-full bg-white/[0.06] px-2.5 py-0.5 font-[var(--font-mono)] text-[0.65rem] text-[#9c8e94]">
             {data?.count ?? 0} shown
@@ -554,7 +554,7 @@ function FilmReviewListView({ filmId, onBack }) {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm text-[#efe7da]">{rev.viewerUsername}</span>
                       <span className="rounded bg-white/[0.05] px-1.5 py-0.2 font-[var(--font-mono)] text-[0.6rem] uppercase tracking-wider text-[#756a6f]">
-                        Verified Viewer
+                        Viewer
                       </span>
                     </div>
 
@@ -583,10 +583,6 @@ function FilmReviewListView({ filmId, onBack }) {
 
               {/* Bottom Actions & Meta */}
               <div className="mt-4 pt-3.5 border-t border-white/[0.04] flex items-center justify-between text-xs text-[#756a6f]">
-                <div className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-wider text-[#63575d]">
-                  Status: {rev.moderationStatus || "visible"}
-                </div>
-
                 <button
                   type="button"
                   onClick={() => toggleLike(rev.id)}
