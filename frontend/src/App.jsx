@@ -274,11 +274,13 @@ export default function App() {
         }
       />
 
+      {/* Discovery categories are sections of Home, not separate destinations.
+          Keep these legacy URLs working by returning viewers to the unified dashboard. */}
       <Route
         path="/explore"
         element={
           <ViewerOnly>
-            <LibraryPage mode="explore" />
+            <Navigate to="/viewer" replace />
           </ViewerOnly>
         }
       />
@@ -287,7 +289,7 @@ export default function App() {
         path="/trending"
         element={
           <ViewerOnly>
-            <LibraryPage mode="trending" />
+            <Navigate to="/viewer" replace />
           </ViewerOnly>
         }
       />
@@ -296,7 +298,7 @@ export default function App() {
         path="/for-you"
         element={
           <ViewerOnly>
-            <LibraryPage mode="for-you" />
+            <Navigate to="/viewer" replace />
           </ViewerOnly>
         }
       />

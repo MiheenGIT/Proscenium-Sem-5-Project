@@ -1,0 +1,63 @@
+/* =========================================================
+   PROSCENIUM VIEWER — SHARED PAGE SHELL
+   Keeps every viewer page inside the usable viewport and
+   reserves space for the desktop navigation rail.
+   ========================================================= */
+
+.viewer-shell {
+  --viewer-rail-space: var(--viewer-rail-collapsed, 72px);
+  min-height: 100dvh;
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  background: #10080b;
+  color: #efe7da;
+}
+
+.viewer-shell__main {
+  width: calc(100% - var(--viewer-rail-space));
+  max-width: none;
+  min-width: 0;
+  min-height: 100dvh;
+  margin-left: var(--viewer-rail-space);
+  overflow-x: clip;
+  transition: width 180ms ease, margin-left 180ms ease;
+}
+
+/* Stop long content from creating a second horizontal viewport. */
+.viewer-shell__main,
+.viewer-shell__main > *,
+.viewer-shell__main section,
+.viewer-shell__main article,
+.viewer-shell__main header,
+.viewer-shell__main footer {
+  min-width: 0;
+}
+
+.viewer-shell__main img,
+.viewer-shell__main video,
+.viewer-shell__main iframe,
+.viewer-shell__main canvas,
+.viewer-shell__main svg {
+  max-width: 100%;
+}
+
+.viewer-shell button,
+.viewer-shell input,
+.viewer-shell select,
+.viewer-shell textarea {
+  max-width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .viewer-shell__main {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 650px) {
+  .viewer-shell__main {
+    min-height: 100dvh;
+  }
+}

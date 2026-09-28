@@ -1,162 +1,273 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
-  timeout: 30000,
+  baseURL:
+    import.meta.env.VITE_API_BASE_URL ||
+    "http://localhost:8000",
 });
 
-API.interceptors.request.use((config) => {
-  try {
-    const raw = localStorage.getItem("proscenium_auth");
-    const auth = raw ? JSON.parse(raw) : null;
+// =========================================================
+// AUTO ATTACH AUTH TOKEN
+// =========================================================
 
-    if (auth?.token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${auth.token}`;
+API.interceptors.request.use((config) => {
+  const stored =
+    localStorage.getItem("proscenium_auth");
+
+  if (stored) {
+    try {
+      const { token } = JSON.parse(stored);
+
+      if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization =
+          `Bearer ${token}`;
+      }
+    } catch {
+      // Malformed storage.
+      // Request continues without authentication.
     }
-  } catch {
-    // Ignore invalid stored auth.
   }
 
   return config;
 });
 
-function getErrorMessage(error) {
-  const status = error?.response?.status;
-  const data = error?.response?.data;
 
-  if (!error?.response) {
-    return "Unable to connect to the server. Check that the backend is running.";
-  }
+// =========================================================
+// ERROR MESSAGE
+// =========================================================
 
-  if (status === 401) {
-    return "Your admin session has expired. Please sign in again.";
-  }
+function extractErrorMessage(
+  error,
+  fallback
+) {
+  const detail =
+    error?.response?.data?.detail;
 
-  if (status === 403) {
-    return "Access denied. Admin permission is required.";
-  }
-
-  if (status === 404) {
-    return "The requested resource was not found.";
-  }
-
-  if (status === 422) {
-    if (Array.isArray(data?.detail)) {
-      return data.detail
-        .map((item) => {
-          const field =
-            Array.isArray(item?.loc) && item.loc.length
-              ? item.loc[item.loc.length - 1]
-              : "field";
-
-          return `${field}: ${item.msg}`;
-        })
-        .join(" — ");
+  if (!detail) {
+    if (
+      error?.code === "ERR_NETWORK" ||
+      error?.message === "Network Error"
+    ) {
+      return (
+        "Unable to connect to the server. " +
+        "Make sure the FastAPI backend is running on port 8000."
+      );
     }
 
-    return data?.detail || "Validation failed.";
+    return fallback;
   }
 
-  if (status >= 500) {
-    return "The server encountered an error. Check the backend terminal.";
+  if (typeof detail === "string") {
+    return detail;
   }
 
-  if (typeof data === "string" && data.trim()) {
-    return data;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        const field =
+          Array.isArray(item?.loc)
+            ? item.loc[item.loc.length - 1]
+            : "field";
+
+        return `${field}: ${
+          item?.msg || "Invalid value"
+        }`;
+      })
+      .join(" — ");
   }
 
-  if (typeof data?.detail === "string") {
-    return data.detail;
-  }
-
-  return error?.message || `Request failed (${status || "unknown error"})`;
+  return fallback;
 }
+
+
+// =========================================================
+// GENERIC REQUEST
+// =========================================================
 
 async function request({
   onUploadProgress,
   ...config
 }) {
   try {
-    const response = await API.request({
-      ...config,
-      onUploadProgress: onUploadProgress
-        ? (event) => {
-            const total = event.total || event.loaded || 1;
-            onUploadProgress(
-              Math.round((event.loaded * 100) / total)
-            );
-          }
-        : undefined,
-    });
+    const response =
+      await API.request({
+        ...config,
+
+        onUploadProgress:
+          onUploadProgress
+            ? (event) => {
+                const total =
+                  event.total ||
+                  event.loaded ||
+                  1;
+
+                const percent =
+                  Math.round(
+                    (event.loaded * 100) /
+                      total
+                  );
+
+                onUploadProgress(
+                  percent
+                );
+              }
+            : undefined,
+      });
 
     return response.data;
   } catch (error) {
-    throw new Error(getErrorMessage(error));
+    throw new Error(
+      extractErrorMessage(
+        error,
+        `Request failed (${
+          error?.response?.status ??
+          "network error"
+        })`
+      )
+    );
   }
 }
 
+
+// =========================================================
+// GET
+// =========================================================
+
 export function getRequest(path) {
   return request({
+    url: path,
     method: "GET",
-    url: path,
   });
 }
 
-export function postJson(path, body) {
+
+// =========================================================
+// POST JSON
+// =========================================================
+
+export function postJson(
+  path,
+  body
+) {
   return request({
-    method: "POST",
     url: path,
+    method: "POST",
     data: body,
   });
 }
 
-export function postEmpty(path) {
+
+// =========================================================
+// POST FORM
+// =========================================================
+
+export function postForm(
+  path,
+  formData,
+  onUploadProgress
+) {
   return request({
+    url: path,
     method: "POST",
-    url: path,
-  });
-}
-
-export function putJson(path, body) {
-  return request({
-    method: "PUT",
-    url: path,
-    data: body,
-  });
-}
-
-export function patchJson(path, body) {
-  return request({
-    method: "PATCH",
-    url: path,
-    data: body,
-  });
-}
-
-export function deleteRequest(path) {
-  return request({
-    method: "DELETE",
-    url: path,
-  });
-}
-
-export function postForm(path, formData, onUploadProgress) {
-  return request({
-    method: "POST",
-    url: path,
     data: formData,
-    timeout: 0,
     onUploadProgress,
   });
 }
 
-export function putForm(path, formData) {
+
+// =========================================================
+// POST EMPTY
+// =========================================================
+
+export function postEmpty(path) {
   return request({
-    method: "PUT",
     url: path,
+    method: "POST",
+  });
+}
+
+
+// =========================================================
+// PUT JSON
+// =========================================================
+
+export function putJson(
+  path,
+  body
+) {
+  return request({
+    url: path,
+    method: "PUT",
+    data: body,
+  });
+}
+
+
+// =========================================================
+// PUT FORM
+// =========================================================
+
+export function putForm(
+  path,
+  formData
+) {
+  return request({
+    url: path,
+    method: "PUT",
     data: formData,
   });
 }
+
+
+// =========================================================
+// PATCH JSON
+// IMPORTANT:
+// AccountPages.jsx uses this.
+// =========================================================
+
+export function patchJson(
+  path,
+  body
+) {
+  return request({
+    url: path,
+    method: "PATCH",
+    data: body,
+  });
+}
+
+
+// =========================================================
+// PATCH FORM
+// =========================================================
+
+export function patchForm(
+  path,
+  formData
+) {
+  return request({
+    url: path,
+    method: "PATCH",
+    data: formData,
+  });
+}
+
+
+// =========================================================
+// DELETE
+// =========================================================
+
+export function deleteRequest(path) {
+  return request({
+    url: path,
+    method: "DELETE",
+  });
+}
+
+
+// =========================================================
+// DEFAULT AXIOS INSTANCE
+// =========================================================
 
 export default API;

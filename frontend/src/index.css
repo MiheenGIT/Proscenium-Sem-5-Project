@@ -160,3 +160,22 @@ html {
 ::-webkit-scrollbar-corner {
   background: var(--stage);
 }
+/* =========================================================
+   VIEWER OTT NAVIGATION
+   The rail stays compact and expands over content on hover.
+   It intentionally does not push the dashboard horizontally.
+   ========================================================= */
+
+.viewer-sidebar {
+  will-change: width;
+}
+
+.viewer-sidebar:hover .sidebar-label {
+  transition-delay: 70ms;
+}
+
+@media (max-width: 1023px) {
+  .viewer-sidebar {
+    display: none;
+  }
+}

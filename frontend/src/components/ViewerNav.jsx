@@ -1,296 +1,650 @@
-import React, { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
-import {Bookmark,Film,History,LogOut,Menu,Search,User,X,} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Bell,
+  ChevronRight,
+  Clock3,
+  Film,
+  Heart,
+  HelpCircle,
+  Home,
+  Languages,
+  LogOut,
+  MessageSquare,
+  Search,
+  Settings,
+  Sparkles,
+  UserRound,
+  X,
+  PlayCircle,
+} from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { getRequest } from "../api/client.js";
+import "./ViewerNav.css";
 
 export default function ViewerNav() {
-  const { auth, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { auth, logout } = useAuth();
 
-  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [unread, setUnread] = useState(0);
+  const [profileOpen, setProfileOpen] = useState(false);
 
-  const items = [
-    ["Home", "/viewer", Film],
-    ["History", "/history", History],
-    ["Watchlist", "/watchlist", Bookmark],
-    ["Profile", "/profile", User],
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  const inputRef = useRef(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    Promise.allSettled([
+      getRequest("/viewer/profile"),
+      getRequest("/viewer/notifications"),
+    ]).then(([profileResult, notificationResult]) => {
+      if (!mounted) return;
+
+      if (profileResult.status === "fulfilled") {
+        setProfile(profileResult.value);
+      }
+
+      if (notificationResult.status === "fulfilled") {
+        setUnread(Number(notificationResult.value?.unread || 0));
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    return () => clearTimeout(timerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing =
+        ["INPUT", "TEXTAREA"].includes(e.target?.tagName) ||
+        e.target?.isContentEditable;
+
+      if (e.key === "/" && !typing && !searchOpen) {
+        e.preventDefault();
+        openSearch();
+      }
+
+      if (e.key === "Escape" && searchOpen) {
+        closeSearch();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [searchOpen]);
+
+  const username =
+    profile?.username ||
+    profile?.name ||
+    auth?.username ||
+    auth?.name ||
+    "Viewer";
+
+  const avatar =
+    profile?.avatarUrl ||
+    profile?.avatar ||
+    auth?.avatarUrl ||
+    auth?.avatar;
+
+  const viewerId =
+    profile?.id ||
+    profile?._id ||
+    profile?.userId ||
+    auth?.userId ||
+    auth?.id;
+
+  /*
+   * Keep the rail focused on destinations.
+   * Trending, For You, New Releases, Genres, etc.
+   * live on Home.
+   */
+  const main = [
+    ["Home", "/viewer", Home],
   ];
 
-  function signOut() {
-    logout();
-    navigate("/login", { replace: true });
+  const library = [
+    ["Watchlist", "/watchlist", Heart],
+    ["History", "/history", Clock3],
+  ];
+
+  const profileItems = [
+    ["Profile", "/profile", UserRound],
+    ["Liked Videos", "/liked", Heart],
+    ["My Reviews", "/reviews", MessageSquare],
+    ["Notifications", "/notifications", Bell],
+    ["Genres", "/preferences/genres", Sparkles],
+    ["Languages", "/preferences/languages", Languages],
+    ["Settings", "/settings", Settings],
+    ["Help", "/help", HelpCircle],
+  ];
+
+  const isActive = (path) => {
+    if (path === "/viewer") {
+      return [
+        "/viewer",
+        "/dashboard",
+        "/viewer/dashboard",
+      ].includes(location.pathname);
+    }
+
+    return (
+      location.pathname === path ||
+      location.pathname.startsWith(`${path}/`)
+    );
+  };
+
+  function go(path) {
+    setProfileOpen(false);
+    navigate(path);
   }
 
-  function closeMobileMenu() {
-    setOpen(false);
+  function openSearch() {
+    setSearchOpen(true);
+
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 30);
+  }
+
+  function closeSearch() {
+    setSearchOpen(false);
+    setQuery("");
+    setResults([]);
+    setSearchError("");
+  }
+
+  function changeQuery(value) {
+    setQuery(value);
+
+    clearTimeout(timerRef.current);
+
+    if (!value.trim()) {
+      setResults([]);
+      setSearchError("");
+      return;
+    }
+
+    timerRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      setSearchError("");
+
+      try {
+        const data = await getRequest(
+          `/viewer/videos/search?q=${encodeURIComponent(
+            value.trim()
+          )}&limit=20`
+        );
+
+        setResults(
+          Array.isArray(data?.videos)
+            ? data.videos
+            : Array.isArray(data)
+              ? data
+              : []
+        );
+      } catch (err) {
+        setResults([]);
+        setSearchError(
+          err?.message ||
+            "Search is temporarily unavailable."
+        );
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 280);
+  }
+
+  async function signOut() {
+    setProfileOpen(false);
+
+    await Promise.resolve(logout?.());
+
+    navigate("/login", {
+      replace: true,
+    });
   }
 
   return (
-    <header
-      className="
-        sticky top-0 z-50
-        border-b border-white/10
-        bg-[rgba(16,13,16,0.96)]
-        backdrop-blur
-      "
-    >
-      <div
-        className="
-          mx-auto
-          flex max-w-7xl
-          items-center justify-between
-          gap-4
-          px-5 py-4
-          lg:px-8
-        "
+    <>
+      <aside
+        className={`viewer-rail ${
+          expanded ? "viewer-rail--expanded" : ""
+        }`}
+        onMouseEnter={() => setExpanded(true)}
+        onMouseLeave={() => setExpanded(false)}
       >
-        {/* -------------------------------------------------
-            BRAND
-        ------------------------------------------------- */}
+        {/* ================================================== */}
+        {/* PROSCENIUM - ALWAYS AT THE TOP */}
+        {/* ================================================== */}
 
         <button
-          type="button"
-          onClick={() => navigate("/viewer")}
-          className="flex items-center gap-3 text-left"
-          aria-label="Go to Viewer Home"
+          className="viewer-brand"
+          onClick={() => go("/viewer")}
+          aria-label="Proscenium Home"
         >
-          <span
-            className="
-              grid h-9 w-9
-              shrink-0
-              place-items-center
-              rounded-[3px]
-              bg-(--velvet)
-              text-(--gold)
-            "
-          >
+          <span className="viewer-brand__mark">
             <Film size={18} />
           </span>
 
-          <span>
-            <span
-              className="
-                block
-                font-(--font-display)
-                text-xl
-                text-(--parchment)
-              "
-            >
-              Proscenium
-            </span>
-
-            <span
-              className="
-                block
-                font-(--font-mono)
-                text-[0.58rem]
-                uppercase
-                tracking-[0.14em]
-                text-(--mauve)
-              "
-            >
-              The Viewer House
-            </span>
+          <span className="viewer-brand__text">
+            PROSCENIUM
           </span>
         </button>
 
-        {/* -------------------------------------------------
-            DESKTOP NAVIGATION
-        ------------------------------------------------- */}
+        {/* ================================================== */}
+        {/* CENTER NAVIGATION */}
+        {/* ================================================== */}
 
-        <nav className="hidden items-center gap-1 md:flex">
-          {items.map(([label, to, Icon]) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/viewer"}
-              className={({ isActive }) =>
-                [
-                  "flex items-center gap-2",
-                  "rounded-[3px]",
-                  "px-3 py-2",
-                  "font-(--font-mono)",
-                  "text-[0.68rem]",
-                  "uppercase",
-                  "tracking-[0.08em]",
-                  "transition-colors",
-                  "duration-200",
+        <div className="viewer-nav-center">
+          {/* Primary Navigation */}
 
-                  isActive
-                    ? "bg-(--velvet) text-(--gold-soft)"
-                    : "text-(--mauve) hover:text-(--parchment)",
-                ].join(" ")
-              }
-            >
-              <Icon size={15} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </nav>
+          <nav
+            className="viewer-nav-group"
+            aria-label="Primary navigation"
+          >
+            {main.map(([label, path, Icon]) => (
+              <button
+                key={path}
+                className={`viewer-nav-item ${
+                  isActive(path) ? "is-active" : ""
+                }`}
+                onClick={() => go(path)}
+                title={!expanded ? label : undefined}
+              >
+                <span className="viewer-nav-icon">
+                  <Icon
+                    size={19}
+                    strokeWidth={1.65}
+                  />
+                </span>
 
-        {/* -------------------------------------------------
-            DESKTOP ACTIONS
-        ------------------------------------------------- */}
+                <span className="viewer-nav-label">
+                  {label}
+                </span>
 
-        <div className="hidden items-center gap-3 md:flex">
+                {isActive(path) && (
+                  <span className="viewer-nav-active" />
+                )}
+              </button>
+            ))}
+          </nav>
+
           {/* Search */}
 
           <button
-            type="button"
-            onClick={() => navigate("/viewer?focus=search")}
-            className="
-              rounded-[3px]
-              border border-white/10
-              p-2
-              text-(--mauve)
-              transition-colors
-              duration-200
-              hover:border-(--gold)
-              hover:text-(--gold-soft)
-            "
-            aria-label="Search"
+            className="viewer-nav-item viewer-search-trigger"
+            onClick={openSearch}
+            title={!expanded ? "Search" : undefined}
           >
-            <Search size={17} />
+            <span className="viewer-nav-icon">
+              <Search
+                size={19}
+                strokeWidth={1.65}
+              />
+            </span>
+
+            <span className="viewer-nav-label">
+              Search
+            </span>
+
+            <span className="viewer-search-key">
+              /
+            </span>
           </button>
 
-          {/* Username */}
+          <div className="viewer-divider" />
 
-          <button
-            type="button"
-            onClick={() => navigate("/viewer/profile")}
-            className="
-              max-w-32
-              truncate
-              text-sm
-              text-(--parchment)
-              transition-colors
-              duration-200
-              hover:text-(--gold-soft)
-            "
-            title={auth?.username || "Profile"}
+          {/* Library */}
+
+          <nav
+            className="viewer-nav-group"
+            aria-label="Library"
           >
-            {auth?.username || "Profile"}
-          </button>
+            {library.map(([label, path, Icon]) => (
+              <button
+                key={path}
+                className={`viewer-nav-item ${
+                  isActive(path) ? "is-active" : ""
+                }`}
+                onClick={() => go(path)}
+                title={!expanded ? label : undefined}
+              >
+                <span className="viewer-nav-icon">
+                  <Icon
+                    size={19}
+                    strokeWidth={1.65}
+                  />
+                </span>
 
-          {/* Sign out */}
+                <span className="viewer-nav-label">
+                  {label}
+                </span>
 
-          <button
-            type="button"
-            onClick={signOut}
-            className="
-              flex items-center gap-2
-              rounded-[3px]
-              border border-white/10
-              px-3 py-2
-              font-(--font-mono)
-              text-[0.64rem]
-              uppercase
-              tracking-[0.08em]
-              text-(--mauve)
-              transition-colors
-              duration-200
-              hover:border-(--gold)
-              hover:text-(--parchment)
-            "
-          >
-            <LogOut size={14} />
-            <span>Sign out</span>
-          </button>
+                {isActive(path) && (
+                  <span className="viewer-nav-active" />
+                )}
+              </button>
+            ))}
+          </nav>
         </div>
 
-        {/* -------------------------------------------------
-            MOBILE MENU BUTTON
-        ------------------------------------------------- */}
+        {/* ================================================== */}
+        {/* PROFILE - ALWAYS AT THE BOTTOM */}
+        {/* ================================================== */}
+
+        <div className="viewer-rail-bottom">
+          <div className="viewer-divider" />
+
+          <div className="viewer-profile-wrap">
+            {profileOpen && (
+              <div className="viewer-profile-menu">
+                <div className="viewer-profile-head">
+                  <strong>{username}</strong>
+
+                  <small>
+                    Viewer ID ·{" "}
+                    {viewerId
+                      ? String(viewerId).slice(-8)
+                      : "—"}
+                  </small>
+                </div>
+
+                {profileItems.map(
+                  ([label, path, Icon]) => (
+                    <button
+                      key={path}
+                      className="viewer-profile-item"
+                      onClick={() => go(path)}
+                    >
+                      <Icon
+                        size={16}
+                        strokeWidth={1.5}
+                      />
+
+                      <span>{label}</span>
+
+                      {label === "Notifications" &&
+                        unread > 0 && (
+                          <b>{unread}</b>
+                        )}
+                    </button>
+                  )
+                )}
+
+                <button
+                  className="viewer-profile-item viewer-profile-logout"
+                  onClick={signOut}
+                >
+                  <LogOut
+                    size={16}
+                    strokeWidth={1.5}
+                  />
+
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
+
+            <button
+              className={`viewer-profile-button ${
+                isActive("/profile")
+                  ? "is-active"
+                  : ""
+              }`}
+              onClick={() =>
+                setProfileOpen((v) => !v)
+              }
+              title={!expanded ? "Profile" : undefined}
+            >
+              {avatar ? (
+                <img
+                  src={avatar}
+                  alt=""
+                  className="viewer-avatar"
+                />
+              ) : (
+                <span className="viewer-avatar viewer-avatar--fallback">
+                  <UserRound size={17} />
+                </span>
+              )}
+
+              <span className="viewer-profile-copy">
+                <strong>{username}</strong>
+                <small>Viewer</small>
+              </span>
+
+              <ChevronRight
+                size={15}
+                className={`viewer-profile-chevron ${
+                  profileOpen ? "open" : ""
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* ================================================== */}
+      {/* TOP RIGHT UTILITY */}
+      {/* ================================================== */}
+
+      <div className="viewer-top-utility">
+        <button
+          onClick={() => go("/notifications")}
+          aria-label="Notifications"
+          className="viewer-utility-button"
+        >
+          <Bell size={18} />
+
+          {unread > 0 && (
+            <span>
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </button>
 
         <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="
-            rounded-[3px]
-            p-2
-            text-(--parchment)
-            transition-colors
-            duration-200
-            hover:bg-(--velvet)
-            md:hidden
-          "
-          aria-label="Toggle navigation"
-          aria-expanded={open}
+          onClick={() => go("/profile")}
+          aria-label="Profile"
+          className="viewer-utility-avatar"
         >
-          {open ? <X size={22} /> : <Menu size={22} />}
+          {avatar ? (
+            <img src={avatar} alt="" />
+          ) : (
+            <UserRound size={17} />
+          )}
         </button>
       </div>
 
-      {/* -------------------------------------------------
-          MOBILE NAVIGATION
-      ------------------------------------------------- */}
+      {/* ================================================== */}
+      {/* SEARCH OVERLAY */}
+      {/* ================================================== */}
 
-      {open && (
-        <nav
-          className="
-            border-t border-white/10
-            px-5 py-3
-            md:hidden
-          "
-        >
-          <div className="space-y-1">
-            {items.map(([label, to, Icon]) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === "/viewer"}
-                onClick={closeMobileMenu}
-                className={({ isActive }) =>
-                  [
-                    "flex items-center gap-3",
-                    "rounded-[3px]",
-                    "px-3 py-3",
-                    "font-(--font-mono)",
-                    "text-[0.7rem]",
-                    "uppercase",
-                    "tracking-[0.08em]",
-                    "transition-colors",
-                    "duration-200",
-
-                    isActive
-                      ? "bg-(--velvet) text-(--gold-soft)"
-                      : "text-(--mauve) hover:bg-white/5 hover:text-(--parchment)",
-                  ].join(" ")
-                }
-              >
-                <Icon size={16} />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </div>
-
-          {/* Mobile Sign Out */}
-
+      {searchOpen && (
+        <div className="viewer-search-overlay">
           <button
-            type="button"
-            onClick={signOut}
-            className="
-              mt-2
-              flex w-full
-              items-center gap-3
-              rounded-[3px]
-              px-3 py-3
-              font-(--font-mono)
-              text-[0.7rem]
-              uppercase
-              tracking-[0.08em]
-              text-(--mauve)
-              transition-colors
-              duration-200
-              hover:bg-white/5
-              hover:text-(--parchment)
-            "
-          >
-            <LogOut size={16} />
-            <span>Sign out</span>
-          </button>
-        </nav>
+            className="viewer-search-backdrop"
+            onClick={closeSearch}
+            aria-label="Close search"
+          />
+
+          <section className="viewer-search-panel">
+            <header className="viewer-search-head">
+              <div>
+                <span>
+                  PROSCENIUM DISCOVERY
+                </span>
+
+                <h1>
+                  What do you want to watch today?
+                </h1>
+              </div>
+
+              <button
+                onClick={closeSearch}
+                className="viewer-search-close"
+                aria-label="Close search"
+              >
+                <X size={19} />
+              </button>
+            </header>
+
+            <div className="viewer-search-box">
+              <Search size={22} />
+
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) =>
+                  changeQuery(e.target.value)
+                }
+                placeholder="Search films, videos, titles..."
+                autoComplete="off"
+              />
+
+              {query && (
+                <button
+                  onClick={() => changeQuery("")}
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+
+              <kbd>ESC</kbd>
+            </div>
+
+            <div className="viewer-search-content">
+              {!query.trim() &&
+                !searchLoading && (
+                  <div className="viewer-search-empty">
+                    <Search size={30} />
+
+                    <h2>
+                      Search the Proscenium library
+                    </h2>
+
+                    <p>
+                      Search directly by video or film
+                      name.
+                    </p>
+                  </div>
+                )}
+
+              {searchLoading && (
+                <div className="viewer-search-empty">
+                  <span className="viewer-spinner" />
+
+                  <h2>Searching…</h2>
+                </div>
+              )}
+
+              {searchError && (
+                <p className="viewer-search-error">
+                  {searchError}
+                </p>
+              )}
+
+              {!searchLoading &&
+                !searchError &&
+                query.trim() &&
+                !results.length && (
+                  <div className="viewer-search-empty">
+                    <Film size={30} />
+
+                    <h2>
+                      No results found
+                    </h2>
+
+                    <p>
+                      Try another film or video name.
+                    </p>
+                  </div>
+                )}
+
+              {!!results.length && (
+                <div>
+                  <p className="viewer-results-count">
+                    {results.length} result
+                    {results.length === 1
+                      ? ""
+                      : "s"}
+                  </p>
+
+                  <div className="viewer-search-grid">
+                    {results.map((video) => {
+                      const id =
+                        video.id || video._id;
+
+                      return (
+                        <button
+                          key={id}
+                          className="viewer-search-card"
+                          onClick={() => {
+                            closeSearch();
+
+                            navigate(
+                              `/viewer/videos/${id}`
+                            );
+                          }}
+                        >
+                          <div className="viewer-search-thumb">
+                            {video.thumbnailUrl ||
+                            video.thumbnail ? (
+                              <img
+                                src={
+                                  video.thumbnailUrl ||
+                                  video.thumbnail
+                                }
+                                alt=""
+                              />
+                            ) : (
+                              <Film size={25} />
+                            )}
+
+                            <span>
+                              <PlayCircle
+                                size={30}
+                              />
+                            </span>
+                          </div>
+
+                          <h3>
+                            {video.title ||
+                              "Untitled video"}
+                          </h3>
+
+                          <small>
+                            {video.releaseYear || ""}
+                          </small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       )}
-    </header>
+    </>
   );
 }

@@ -1,37 +1,12 @@
-import React, { useState } from "react";
-import Sidebar from "./Sidebar.jsx";
-import TopBar from "./TopBar.jsx";
+import React from "react";
+import ViewerNav from "../ViewerNav.jsx";
+import "./DashboardLayout.css";
 
 export default function DashboardLayout({ children }) {
-  const [collapsed, setCollapsed] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
   return (
-    <div className="min-h-screen bg-[#100d10] text-[#efe7da]">
-      <Sidebar
-        collapsed={collapsed}
-        setCollapsed={setCollapsed}
-        mobileOpen={mobileOpen}
-        setMobileOpen={setMobileOpen}
-      />
-
-      <div
-        className={`min-h-screen transition-[padding] duration-300 ${
-          collapsed
-            ? "lg:pl-[76px]"
-            : "lg:pl-[240px]"
-        }`}
-      >
-        <TopBar
-  collapsed={collapsed}
-  onMenu={() => setMobileOpen(true)}
-/>
-
-       <main className="pt-[76px]">
-  {children}
-</main>
-
-      </div>
+    <div className="viewer-shell">
+      <ViewerNav />
+      <main className="viewer-shell__main">{children}</main>
     </div>
   );
 }

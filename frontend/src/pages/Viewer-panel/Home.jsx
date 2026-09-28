@@ -36,21 +36,20 @@ function yearOf(video) {
 }
 
 function progressOf(video) {
-  const progress = num(video.progress);
+  const progress = num(video?.progress);
 
-  if (progress) {
-    return Math.min(100, Math.round(progress * 100));
+  if (progress > 0) {
+    return Math.min(
+      100,
+      Math.round(progress <= 1 ? progress * 100 : progress)
+    );
   }
 
-  const duration = num(video.durationSec);
+  const duration = num(video?.durationSec);
+  const current = num(video?.currentTimeSec);
 
-  return duration
-    ? Math.min(
-        100,
-        Math.round(
-          (num(video.currentTimeSec) / duration) * 100
-        )
-      )
+  return duration && current
+    ? Math.min(100, Math.round((current / duration) * 100))
     : 0;
 }
 
@@ -87,8 +86,6 @@ function FilmCard({
   onSave,
   reason,
 }) {
-  const progress = progressOf(video);
-
   return (
     <article className="group w-[190px] shrink-0 sm:w-[210px] lg:w-[220px]">
       <div className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-[#171216] shadow-[0_14px_45px_rgba(0,0,0,.2)] transition duration-300 group-hover:-translate-y-1 group-hover:border-[#d9a653]/40 group-hover:shadow-[0_18px_55px_rgba(0,0,0,.34)]">
@@ -118,16 +115,6 @@ function FilmCard({
             />
           </span>
 
-          {progress > 0 && (
-            <span className="absolute bottom-0 left-0 h-1 w-full bg-white/10">
-              <i
-                className="block h-full bg-[#d9a653]"
-                style={{
-                  width: `${progress}%`,
-                }}
-              />
-            </span>
-          )}
         </button>
 
         <button

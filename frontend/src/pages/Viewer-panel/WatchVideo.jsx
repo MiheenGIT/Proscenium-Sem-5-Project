@@ -335,11 +335,24 @@ export default function ViewerWatchVideo() {
   const playerRef = useRef(null);
   const hlsRef = useRef(null);
   const heartbeatRef = useRef(null);
+  const lastSavedTimeRef = useRef(-1);
+  const resumeAppliedRef = useRef(false);
+  const mediaReadyRef = useRef(false);
+  // Mirrors `dismissedRecs` so the "pause" handler (bound once, inside the
+  // player-setup useEffect below) can read the latest value without that
+  // effect needing to depend on `dismissedRecs` and rebuild the player.
+  const dismissedRecsRef = useRef(false);
 
   const auth = JSON.parse(
     localStorage.getItem("proscenium_auth") || "null"
   );
   const viewerId = auth?.userId;
+
+  // Keep the ref in sync with state so the pause handler can read the latest value
+  // without causing the player-setup effect to depend on dismissedRecs
+  useEffect(() => {
+    dismissedRecsRef.current = dismissedRecs;
+  }, [dismissedRecs]);
 
   async function loadComments() {
     try {
@@ -389,18 +402,95 @@ export default function ViewerWatchVideo() {
     }
   }
 
+  const resumeStorageKey = `proscenium_resume_${viewerId || "viewer"}_${id}`;
+
+  const getCurrentPlaybackTime = () => {
+    const currentTime = playerRef.current?.currentTime ?? videoRef.current?.currentTime;
+    return Number.isFinite(currentTime) && currentTime >= 0 ? currentTime : null;
+  };
+
+  const saveLocalResume = (currentTime) => {
+    if (!Number.isFinite(currentTime) || currentTime < 0) return;
+    try {
+      localStorage.setItem(
+        resumeStorageKey,
+        JSON.stringify({ currentTimeSec: currentTime, savedAt: Date.now() })
+      );
+    } catch {}
+  };
+
+  const clearLocalResume = () => {
+    try {
+      localStorage.removeItem(resumeStorageKey);
+    } catch {}
+  };
+
+  const savePlaybackPosition = async (currentTime, { keepalive = false } = {}) => {
+    if (!Number.isFinite(currentTime) || currentTime < 0) return;
+
+    saveLocalResume(currentTime);
+    lastSavedTimeRef.current = currentTime;
+
+    const body = JSON.stringify({ currentTimeSec: currentTime });
+
+    if (keepalive) {
+      try {
+        const raw = localStorage.getItem("proscenium_auth");
+        const storedAuth = raw ? JSON.parse(raw) : null;
+        const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+        fetch(`${apiBase}/viewer/videos/${id}/heartbeat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(storedAuth?.token
+              ? { Authorization: `Bearer ${storedAuth.token}` }
+              : {}),
+          },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+        return;
+      } catch {}
+    }
+
+    try {
+      await postJson(`/viewer/videos/${id}/heartbeat`, {
+        currentTimeSec: currentTime,
+      });
+    } catch {}
+  };
+
+  // Load video data and save the last playback position when leaving the page.
   useEffect(() => {
     load();
 
+    const saveBeforeLeave = () => {
+      const currentTime = getCurrentPlaybackTime();
+      if (currentTime !== null) savePlaybackPosition(currentTime, { keepalive: true });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") saveBeforeLeave();
+    };
+
+    window.addEventListener("pagehide", saveBeforeLeave);
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
+      saveBeforeLeave();
+      window.removeEventListener("pagehide", saveBeforeLeave);
+      document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(heartbeatRef.current);
       playerRef.current?.destroy();
       hlsRef.current?.destroy();
+      playerRef.current = null;
+      hlsRef.current = null;
       setPlyrContainer(null);
       setShowRecs(false);
       setDismissedRecs(false);
     };
-  }, [id]);
+  }, [id, viewerId]);
 
   useEffect(() => {
     if (!stream?.stream_url || !videoRef.current) {
@@ -410,6 +500,9 @@ export default function ViewerWatchVideo() {
     const element = videoRef.current;
     let plyr;
     let hls;
+
+    resumeAppliedRef.current = false;
+    mediaReadyRef.current = false;
 
     const baseOptions = {
       controls: [
@@ -427,15 +520,44 @@ export default function ViewerWatchVideo() {
 
     const setupPlayer = (player) => {
       player.once("ready", () => {
-        const resume = Number(stream.resumeTimeSec || 0);
-        const total = Number(video?.durationSec || 0);
-
-        if (resume > 5 && (!total || resume < total - 5)) {
-          player.currentTime = resume;
-        }
-
         setPlyrContainer(player.elements.container);
       });
+
+      const applyResumePosition = () => {
+        if (resumeAppliedRef.current || !element.duration || !Number.isFinite(element.duration)) {
+          return;
+        }
+
+        const serverResume = Number(stream.resumeTimeSec || 0);
+        let localResume = 0;
+        try {
+          const stored = JSON.parse(localStorage.getItem(resumeStorageKey) || "null");
+          localResume = Number(stored?.currentTimeSec || 0);
+        } catch {}
+
+        // Prefer the newest/largest known checkpoint so a failed final server
+        // request cannot move the viewer backwards.
+        const resume = Math.max(serverResume, localResume);
+        const total = Number(element.duration || video?.durationSec || 0);
+
+        if (resume > 5 && resume < total - 5) {
+          try {
+            element.currentTime = resume;
+            player.currentTime = resume;
+            resumeAppliedRef.current = true;
+          } catch {}
+        } else if (resume <= 5 || resume >= total - 5) {
+          resumeAppliedRef.current = true;
+        }
+
+        mediaReadyRef.current = true;
+      };
+
+      element.addEventListener("loadedmetadata", applyResumePosition, { once: true });
+      if (element.readyState >= 1) applyResumePosition();
+
+      player.on("loadedmetadata", applyResumePosition);
+      player.on("canplay", applyResumePosition);
 
       player.on("play", () => {
         setWatching(true);
@@ -445,15 +567,37 @@ export default function ViewerWatchVideo() {
 
       player.on("pause", () => {
         setWatching(false);
-        if (!dismissedRecs) {
+        if (!dismissedRecsRef.current) {
           setShowRecs(true);
         }
+        // Save the exact paused position immediately.
+        const currentTime = getCurrentPlaybackTime();
+        if (currentTime !== null) savePlaybackPosition(currentTime);
+      });
+
+      player.on("timeupdate", () => {
+        if (mediaReadyRef.current) {
+          const currentTime = getCurrentPlaybackTime();
+          if (currentTime !== null) saveLocalResume(currentTime);
+        }
+      });
+
+      player.on("seeking", () => {
+        const currentTime = getCurrentPlaybackTime();
+        if (currentTime !== null) saveLocalResume(currentTime);
+      });
+
+      player.on("seeked", () => {
+        const currentTime = getCurrentPlaybackTime();
+        if (currentTime !== null) savePlaybackPosition(currentTime);
       });
 
       player.on("ended", () => {
         setWatching(false);
         setShowRecs(true);
         setDismissedRecs(false);
+        clearLocalResume();
+        savePlaybackPosition(Number(element.duration || video?.durationSec || 0));
       });
     };
 
@@ -514,36 +658,18 @@ export default function ViewerWatchVideo() {
       hls?.destroy();
       plyr?.destroy();
     };
-  }, [
-    stream?.stream_url,
-    stream?.resumeTimeSec,
-    video?.durationSec,
-    dismissedRecs,
-  ]);
+  }, [stream?.stream_url, stream?.resumeTimeSec, video?.durationSec]);
 
   useEffect(() => {
     if (!watching) return;
 
     heartbeatRef.current = setInterval(() => {
-      const currentTime = playerRef.current?.currentTime;
-      if (typeof currentTime === "number") {
-        postJson(`/viewer/videos/${id}/heartbeat`, {
-          currentTimeSec: currentTime,
-        }).catch(() => {});
-      }
+      const currentTime = getCurrentPlaybackTime();
+      if (currentTime !== null) savePlaybackPosition(currentTime);
     }, 5000);
 
     return () => clearInterval(heartbeatRef.current);
   }, [watching, id]);
-
-  useEffect(() => () => {
-    const currentTime = playerRef.current?.currentTime;
-    if (typeof currentTime === "number") {
-      postJson(`/viewer/videos/${id}/heartbeat`, {
-        currentTimeSec: currentTime,
-      }).catch(() => {});
-    }
-  }, [id]);
 
   async function react(type) {
     try {

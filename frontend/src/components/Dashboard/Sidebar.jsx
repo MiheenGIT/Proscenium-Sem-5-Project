@@ -1,52 +1,29 @@
 import React from "react";
-import {Bookmark,Compass,Film,Globe2,Heart,History,Home,Languages,LogOut,Sparkles,Star,TrendingUp,User,Settings,X,} from "lucide-react";
+import {
+  Bookmark,
+  Compass,
+  History,
+  Home,
+  LogOut,
+  Search,
+  Sparkles,
+  User,
+  X,
+  PlayCircle,
+} from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 
-const groups = [
-  [
-    "DISCOVER",
-    [
-      ["Home", "/viewer", Home],
-      ["For You", "/for-you", Sparkles],
-      ["Trending", "/trending", TrendingUp],
-      ["Explore", "/explore", Compass],
-      ["Film Reviews", "/film-reviews", Star],
-    ],
-  ],
-  [
-    "YOUR CINEMA",
-    [
-      ["Continue Watching", "/viewer", Film],
-      ["Watchlist", "/watchlist", Bookmark],
-      ["History", "/history", History],
-      ["Liked Videos", "/liked", Heart],
-      ["My Reviews", "/reviews", Star],
-    ],
-  ],
-  [
-    "PERSONALIZE",
-    [
-      ["Genre Preferences", "/preferences/genres", Sparkles],
-      ["Language Preferences", "/preferences/languages", Languages],
-    ],
-  ],
-  [
-    "ACCOUNT",
-    [
-      ["Profile", "/profile", User],
-      ["Settings", "/settings", Settings],
-      ["Help & Support", "/help", Globe2],
-    ],
-  ],
+const items = [
+  ["Home", "/viewer", Home],
+  ["Search", null, Search],
+  ["Discover", "/explore", Compass],
+  ["Continue Watching", "/continue-watching", PlayCircle],
+  ["Watchlist", "/watchlist", Bookmark],
+  ["History", "/history", History],
 ];
 
-export default function Sidebar({
-  collapsed,
-  setCollapsed,
-  mobileOpen,
-  setMobileOpen,
-}) {
+export default function Sidebar({ mobileOpen, setMobileOpen, onSearch }) {
   const { auth, logout } = useAuth();
   const navigate = useNavigate();
   const name = auth?.username || "Viewer";
@@ -56,162 +33,176 @@ export default function Sidebar({
     navigate("/login", { replace: true });
   }
 
+  const renderItem = ([label, to, Icon]) => {
+    const common =
+      "group relative flex h-11 w-full items-center rounded-xl text-[#a69a9f] transition-all duration-200 hover:bg-white/[0.055] hover:text-[#efe7da]";
+
+    if (!to) {
+      return (
+        <button
+          key={label}
+          type="button"
+          onClick={onSearch}
+          className={common}
+          aria-label="Search"
+        >
+          <span className="grid w-[64px] shrink-0 place-items-center">
+            <Icon size={21} strokeWidth={1.7} />
+          </span>
+          <span className="sidebar-label whitespace-nowrap text-[12px] font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            {label}
+          </span>
+        </button>
+      );
+    }
+
+    return (
+      <NavLink
+        key={label}
+        to={to}
+        end={to === "/viewer"}
+        onClick={() => setMobileOpen(false)}
+        className={({ isActive }) =>
+          `${common} ${
+            isActive
+              ? "bg-[#651322] text-[#e6c184] shadow-[inset_0_0_0_1px_rgba(217,166,83,.18)]"
+              : ""
+          }`
+        }
+      >
+        <span className="grid w-[64px] shrink-0 place-items-center">
+          <Icon size={21} strokeWidth={1.7} />
+        </span>
+        <span className="sidebar-label whitespace-nowrap text-[12px] font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          {label}
+        </span>
+      </NavLink>
+    );
+  };
+
+  const desktopRail = (
+    <aside className="viewer-sidebar group fixed inset-y-0 left-0 z-[100] hidden w-[76px] flex-col overflow-hidden border-r border-white/[0.07] bg-[#0c080a]/96 py-5 shadow-[12px_0_40px_rgba(0,0,0,.12)] backdrop-blur-2xl transition-[width] duration-200 hover:w-[218px] lg:flex">
+      <button
+        type="button"
+        onClick={() => navigate("/viewer")}
+        className="mb-8 flex h-14 w-full items-center text-left"
+        aria-label="Proscenium home"
+      >
+        <span className="grid w-[76px] shrink-0 place-items-center">
+          <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-[#641322] font-[var(--font-display)] text-xl font-bold text-[#d9a653] shadow-[0_8px_24px_rgba(92,18,32,.3)]">
+            P
+          </span>
+        </span>
+        <span className="sidebar-label whitespace-nowrap font-[var(--font-display)] text-[12px] font-semibold tracking-[0.16em] text-[#efe7da] opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          PROSCENIUM
+        </span>
+      </button>
+
+      <nav className="flex flex-1 flex-col gap-1 px-3">
+        {items.map(renderItem)}
+      </nav>
+
+      <div className="border-t border-white/[0.07] px-3 pt-3">
+        <button
+          type="button"
+          onClick={() => navigate("/profile")}
+          className="group relative flex h-11 w-full items-center rounded-xl text-[#a69a9f] transition hover:bg-white/[0.055] hover:text-[#efe7da]"
+        >
+          <span className="grid w-[64px] shrink-0 place-items-center">
+            <Avatar src={auth?.avatarUrl} name={name} />
+          </span>
+          <span className="sidebar-label whitespace-nowrap text-[12px] font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            {name}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={signOut}
+          className="group relative mt-1 flex h-10 w-full items-center rounded-xl text-[#806f75] transition hover:bg-white/[0.045] hover:text-[#e08a6b]"
+        >
+          <span className="grid w-[64px] shrink-0 place-items-center">
+            <LogOut size={18} />
+          </span>
+          <span className="sidebar-label whitespace-nowrap text-[12px] opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            Sign out
+          </span>
+        </button>
+      </div>
+    </aside>
+  );
+
   return (
     <>
-      <aside
-        className={`fixed left-0 top-0 z-[80] hidden h-screen flex-col border-r border-white/[0.07] bg-[#100d10]/95 backdrop-blur-xl transition-all duration-300 lg:flex ${
-          collapsed ? "w-[76px]" : "w-[240px]"
-        }`}
-      >
-        <Brand
-          collapsed={collapsed}
-          onToggle={() => setCollapsed((value) => !value)}
-          onNavigate={() => navigate("/viewer")}
-        />
-
-        <div className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {groups.map(([title, items]) => (
-            <div
-              key={title}
-              className="mb-6"
-            >
-              <p
-                className={`mb-2 px-3 text-[8px] font-bold tracking-[.2em] text-[#6f6468] ${
-                  collapsed ? "text-center" : ""
-                }`}
-              >
-                {collapsed ? title.slice(0, 2) : title}
-              </p>
-
-              {items.map(([label, to, Icon]) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={to === "/viewer"}
-                  title={collapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    `group mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[11px] transition ${
-                      isActive
-                        ? "bg-[#5c1220] text-[#e6c184] shadow-[inset_0_0_0_1px_rgba(217,166,83,.12)]"
-                        : "text-[#95898e] hover:bg-white/[0.04] hover:text-[#efe7da]"
-                    } ${collapsed ? "justify-center" : ""}`
-                  }
-                >
-                  <Icon size={16} />
-
-                  {!collapsed && (
-                    <span className="truncate">
-                      {label}
-                    </span>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        <div className="border-t border-white/[0.07] p-3">
-          <button
-            onClick={() => navigate("/profile")}
-            className={`flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-white/[0.04] ${
-              collapsed ? "justify-center" : ""
-            }`}
-          >
-            <Avatar
-              src={auth?.avatarUrl}
-              name={name}
-            />
-
-            {!collapsed && (
-              <span className="min-w-0">
-                <b className="block truncate text-[11px] text-[#efe7da]">
-                  {name}
-                </b>
-
-                <small className="text-[8px] uppercase tracking-[.16em] text-[#d9a653]">
-                  Viewer
-                </small>
-              </span>
-            )}
-          </button>
-
-          {!collapsed && (
-            <button
-              onClick={signOut}
-              className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[10px] text-[#8f8388] hover:bg-white/[0.04] hover:text-[#efe7da]"
-            >
-              <LogOut size={14} />
-              Sign out
-            </button>
-          )}
-        </div>
-      </aside>
+      {desktopRail}
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-[90] bg-black/70 lg:hidden"
+          className="fixed inset-0 z-[200] bg-black/75 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
         >
           <aside
             onClick={(event) => event.stopPropagation()}
-            className="h-full w-[85vw] max-w-[285px] border-r border-white/10 bg-[#100d10] p-4"
+            className="h-full w-[270px] border-r border-white/10 bg-[#10080b] p-4"
           >
             <div className="flex items-center justify-between">
-              <Brand
-                collapsed={false}
-                onNavigate={() => {
+              <button
+                type="button"
+                onClick={() => {
                   navigate("/viewer");
                   setMobileOpen(false);
                 }}
-              />
-
+                className="flex items-center gap-3"
+              >
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#641322] font-[var(--font-display)] text-xl font-bold text-[#d9a653]">
+                  P
+                </span>
+                <span className="font-[var(--font-display)] text-sm tracking-[0.14em] text-[#efe7da]">
+                  PROSCENIUM
+                </span>
+              </button>
               <button
+                type="button"
                 onClick={() => setMobileOpen(false)}
-                className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.05]"
+                className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.05] text-[#efe7da]"
+                aria-label="Close navigation"
               >
                 <X size={17} />
               </button>
             </div>
 
-            <div className="mt-6">
-              {groups.map(([title, items]) => (
-                <div
-                  key={title}
-                  className="mb-5"
-                >
-                  <p className="mb-2 px-3 text-[8px] font-bold tracking-[.2em] text-[#6f6468]">
-                    {title}
-                  </p>
-
-                  {items.map(([label, to, Icon]) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={to === "/viewer"}
-                      onClick={() => setMobileOpen(false)}
-                      className={({ isActive }) =>
-                        `mb-1 flex items-center gap-3 rounded-xl px-3 py-3 text-[11px] ${
-                          isActive
-                            ? "bg-[#5c1220] text-[#e6c184]"
-                            : "text-[#95898e] hover:bg-white/[0.04]"
-                        }`
-                      }
-                    >
-                      <Icon size={16} />
-                      {label}
-                    </NavLink>
-                  ))}
-                </div>
-              ))}
+            <div className="mt-8 space-y-1">
+              {items.map(([label, to, Icon]) =>
+                to ? (
+                  <NavLink
+                    key={label}
+                    to={to}
+                    end={to === "/viewer"}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 rounded-xl px-4 py-3 text-[12px] ${
+                        isActive
+                          ? "bg-[#641322] text-[#e6c184]"
+                          : "text-[#9b8d92] hover:bg-white/[0.04] hover:text-[#efe7da]"
+                      }`
+                    }
+                  >
+                    <Icon size={18} />
+                    {label}
+                  </NavLink>
+                ) : (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={onSearch}
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-[12px] text-[#9b8d92] hover:bg-white/[0.04] hover:text-[#efe7da]"
+                  >
+                    <Icon size={18} />
+                    {label}
+                  </button>
+                )
+              )}
             </div>
-
-            <button
-              onClick={signOut}
-              className="flex items-center gap-2 rounded-xl px-3 py-3 text-[11px] text-[#95898e]"
-            >
-              <LogOut size={15} />
-              Sign out
-            </button>
           </aside>
         </div>
       )}
@@ -219,56 +210,20 @@ export default function Sidebar({
   );
 }
 
-function Brand({ collapsed, onToggle, onNavigate }) {
-  return (
-    <div
-      className={`flex h-[76px] items-center gap-3 border-b border-white/[0.07] px-4 ${
-        collapsed ? "justify-center" : ""
-      }`}
-    >
-      <button
-        onClick={onToggle || onNavigate}
-        title={onToggle ? (collapsed ? "Expand sidebar" : "Collapse sidebar") : undefined}
-        aria-label={onToggle ? "Toggle sidebar" : "Proscenium home"}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#5c1220] text-[#d9a653] transition hover:bg-[#6d1627]"
-      >
-        <Film size={17} />
-      </button>
-
-      {!collapsed && (
-        <button
-          onClick={onNavigate}
-          className="text-left"
-        >
-          <b className="block font-[var(--font-display)] text-lg text-[#efe7da]">
-            Proscenium
-          </b>
-
-          <small className="font-[var(--font-mono)] text-[7px] uppercase tracking-[.18em] text-[#71656a]">
-            The Viewer House
-          </small>
-        </button>
-      )}
-    </div>
-  );
-}
-
-function Avatar({ src, name }) {
+export function Avatar({ src, name }) {
   if (src) {
     return (
       <img
         src={src}
         alt=""
-        className="h-8 w-8 rounded-full object-cover"
+        className="h-8 w-8 rounded-full border border-white/10 object-cover"
       />
     );
   }
 
   return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#5c1220] text-xs font-bold text-[#e6c184]">
-      {name?.[0]?.toUpperCase() || "V"}
+    <span className="grid h-8 w-8 place-items-center rounded-full border border-[#d9a653]/25 bg-[#5c1220] text-[10px] font-semibold text-[#d9a653]">
+      {(name || "V").trim().charAt(0).toUpperCase()}
     </span>
   );
 }
-
-export { Avatar };

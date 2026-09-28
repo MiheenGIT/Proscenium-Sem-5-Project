@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 
 import HeroBanner from "../../components/Dashboard/HeroBanner.jsx";
 import MovieRow from "../../components/Dashboard/MovieRow.jsx";
-import ActivityPanel from "../../components/Dashboard/ActivityPanel.jsx";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import TopReviewsModal from "../../components/Dashboard/TopReviewsModal.jsx";
 
@@ -431,9 +430,8 @@ function HomeInner() {
       : null;
 
   return (
-    <div>
-      <div className="grid xl:grid-cols-[minmax(0,1fr)_280px]">
-        <main className="min-w-0 overflow-hidden">
+    <div className="min-w-0">
+      <main className="min-w-0 overflow-hidden">
           <HeroBanner
             video={currentHero}
             saved={
@@ -472,7 +470,7 @@ function HomeInner() {
             }
           />
 
-          <div className="sticky top-[76px] z-30 border-b border-white/[0.06] bg-[#100d10]/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+          <div className="sticky top-[72px] z-30 lg:top-[112px] lg:z-30 border-b border-white/[0.06] bg-[#100d10]/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
             <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 onClick={() => setGenre("")}
@@ -592,7 +590,7 @@ function HomeInner() {
               <button
                 onClick={() =>
                   navigate(
-                    "/viewer/watchlist"
+                    "/watchlist"
                   )
                 }
                 className="text-[9px] uppercase tracking-[.16em] text-[#d9a653]"
@@ -601,17 +599,84 @@ function HomeInner() {
               </button>
             }
           />
-        </main>
 
-        <ActivityPanel
-          profile={profile}
-          history={history}
-          watchlist={watchlist}
-          liked={liked}
-          reviews={reviews}
-          onPlay={play}
-        />
-      </div>
+          <section className="mx-auto max-w-[1680px] px-4 pb-12 sm:px-6 lg:px-10">
+            <div className="overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-br from-[#5c1220]/35 via-white/[0.02] to-transparent p-5 sm:p-6">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[8px] font-bold uppercase tracking-[.2em] text-[#d9a653]">
+                    Your cinema
+                  </p>
+                  <h2 className="mt-1 font-[var(--font-display)] text-2xl text-[#efe7da]">
+                    {profile?.username ? `Welcome back, ${profile.username}` : "Your viewing space"}
+                  </h2>
+                  <p className="mt-1 text-[10px] text-[#8f8388]">
+                    Everything you save, like, review, and watch stays connected to your profile.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    ["Watched", history.length, "/history"],
+                    ["Saved", watchlist.length, "/watchlist"],
+                    ["Liked", liked.length, "/liked"],
+                    ["Reviews", reviews.length, "/reviews"],
+                  ].map(([label, value, to]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => navigate(to)}
+                      className="min-w-[105px] rounded-2xl border border-white/[0.07] bg-black/20 px-4 py-3 text-left transition hover:border-[#d9a653]/25 hover:bg-white/[0.04]"
+                    >
+                      <b className="block text-lg text-[#efe7da]">{value}</b>
+                      <span className="text-[8px] uppercase tracking-[.15em] text-[#756a6f]">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {watchlist.length > 0 && (
+                <div className="mt-5 border-t border-white/[0.06] pt-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bdb1b4]">
+                      Saved for later
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/watchlist")}
+                      className="text-[9px] text-[#d9a653] hover:text-[#e6c184]"
+                    >
+                      Open watchlist →
+                    </button>
+                  </div>
+
+                  <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {watchlist.slice(0, 6).map((video) => (
+                      <button
+                        key={video.id}
+                        type="button"
+                        onClick={() => play(video)}
+                        className="group flex w-[210px] shrink-0 items-center gap-3 rounded-2xl border border-white/[0.06] bg-black/20 p-2 text-left transition hover:border-[#d9a653]/25"
+                      >
+                        <img
+                          src={video.thumbnailUrl}
+                          alt=""
+                          className="h-12 w-20 rounded-xl object-cover transition group-hover:scale-[1.03]"
+                        />
+                        <span className="min-w-0">
+                          <b className="block truncate text-[10px] text-[#ded4d6]">{video.title}</b>
+                          <small className="mt-1 block truncate text-[8px] text-[#756a6f]">
+                            {(video.genres || []).slice(0, 2).join(" • ") || "Film"}
+                          </small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+      </main>
 
       {selectedReviewVideo && (
         <TopReviewsModal

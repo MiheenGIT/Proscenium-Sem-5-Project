@@ -1,11 +1,15 @@
-import React, {useEffect,useState,} from "react";
-import {useLocation,useNavigate,} from "react-router-dom";
-import {Search,} from "lucide-react";
-import { getRequest,} from "../../api/client.js";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Search } from "lucide-react";
+import { getRequest } from "../../api/client.js";
 
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import MovieCard from "../../components/Dashboard/MovieCard.jsx";
-import {EmptyState,ErrorState,MovieCardSkeleton,} from "../../components/common/States.jsx";
+import {
+  EmptyState,
+  ErrorState,
+  MovieCardSkeleton,
+} from "../../components/common/States.jsx";
 
 export function LibraryPage({
   mode = "all",
@@ -15,9 +19,7 @@ export function LibraryPage({
   const navigate = useNavigate();
   const location = useLocation();
 
-  const params = new URLSearchParams(
-    location.search
-  );
+  const params = new URLSearchParams(location.search);
 
   const [videos, setVideos] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
@@ -54,13 +56,12 @@ export function LibraryPage({
        * Your backend decides which videos are
        * approved/public.
        */
-      const results =
-        await Promise.allSettled([
-          getRequest(videoUrl),
-          getRequest("/viewer/watchlist"),
-          getRequest("/viewer/liked"),
-          getRequest("/viewer/genres"),
-        ]);
+      const results = await Promise.allSettled([
+        getRequest(videoUrl),
+        getRequest("/viewer/watchlist"),
+        getRequest("/viewer/liked"),
+        getRequest("/viewer/genres"),
+      ]);
 
       const [
         videosResult,
@@ -69,10 +70,7 @@ export function LibraryPage({
         genresResult,
       ] = results;
 
-      if (
-        videosResult.status ===
-        "rejected"
-      ) {
+      if (videosResult.status === "rejected") {
         throw videosResult.reason;
       }
 
@@ -81,26 +79,20 @@ export function LibraryPage({
       );
 
       setWatchlist(
-        watchlistResult.status ===
-          "fulfilled"
-          ? watchlistResult.value?.videos ||
-              []
+        watchlistResult.status === "fulfilled"
+          ? watchlistResult.value?.videos || []
           : []
       );
 
       setLiked(
-        likedResult.status ===
-          "fulfilled"
-          ? likedResult.value?.videos ||
-              []
+        likedResult.status === "fulfilled"
+          ? likedResult.value?.videos || []
           : []
       );
 
       setGenres(
-        genresResult.status ===
-          "fulfilled"
-          ? genresResult.value?.genres ||
-              []
+        genresResult.status === "fulfilled"
+          ? genresResult.value?.genres || []
           : []
       );
     } catch (err) {
@@ -118,10 +110,9 @@ export function LibraryPage({
   }, [genre]);
 
   useEffect(() => {
-    const next =
-      new URLSearchParams(
-        location.search
-      );
+    const next = new URLSearchParams(
+      location.search
+    );
 
     if (genre) {
       next.set("genre", genre);
@@ -206,6 +197,16 @@ export function LibraryPage({
     );
   }
 
+  const isWatchlist = mode === "watchlist";
+
+  const pageTitle = isWatchlist
+    ? "Watchlist"
+    : title;
+
+  const pageSubtitle = isWatchlist
+    ? "Your saved films, ready whenever you are."
+    : subtitle;
+
   const savedIds = new Set(
     watchlist.map((video) => video.id)
   );
@@ -240,105 +241,162 @@ export function LibraryPage({
 
   return (
     <DashboardLayout>
-      <main className="px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[1500px]">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-[9px] uppercase tracking-[.22em] text-[#d9a653]">
-                Proscenium / Library
-              </p>
+      <main className="w-full min-w-0 overflow-x-hidden px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
+        <div className="mx-auto w-full max-w-[1500px] min-w-0">
 
-              <h1 className="mt-2 font-[var(--font-display)] text-4xl text-[#efe7da]">
-                {title}
-              </h1>
+          {/* =========================
+              PAGE HEADER
+          ========================= */}
+          <header
+            className={`relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#151014] px-5 py-6 sm:px-7 sm:py-7 ${
+              isWatchlist
+                ? "shadow-[0_24px_70px_rgba(0,0,0,.22)]"
+                : ""
+            }`}
+          >
+            <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#d9a653]/[0.06] blur-3xl" />
 
-              <p className="mt-2 text-sm text-[#8f8388]">
-                {subtitle}
-              </p>
-            </div>
+            <div className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-[#5c1220]/[0.16] blur-3xl" />
 
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3">
-                <Search
-                  size={14}
-                  className="text-[#756a6f]"
-                />
+            <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
 
-                <input
-                  value={query}
+              {/* Header text */}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[9px] uppercase tracking-[.24em] text-[#d9a653]">
+                    Proscenium /{" "}
+                    {isWatchlist
+                      ? "Your collection"
+                      : "Library"}
+                  </p>
+
+                  {isWatchlist && (
+                    <span className="rounded-full border border-[#d9a653]/20 bg-[#d9a653]/[0.08] px-2.5 py-1 text-[8px] uppercase tracking-[.16em] text-[#d9a653]">
+                      Saved for later
+                    </span>
+                  )}
+                </div>
+
+                <h1 className="mt-2 break-words font-[var(--font-display)] text-3xl leading-tight text-[#efe7da] sm:text-4xl">
+                  {pageTitle}
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#8f8388]">
+                  {pageSubtitle}
+                </p>
+
+                {isWatchlist &&
+                  !loading &&
+                  !error && (
+                    <p className="mt-4 text-[10px] uppercase tracking-[.16em] text-[#756a6f]">
+                      {watchlist.length}{" "}
+                      {watchlist.length === 1
+                        ? "film"
+                        : "films"}{" "}
+                      saved
+                    </p>
+                  )}
+              </div>
+
+              {/* Header controls */}
+              <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
+
+                {/* Search */}
+                <div className="flex min-w-0 items-center rounded-xl border border-white/10 bg-white/[0.03] px-3">
+                  <Search
+                    size={14}
+                    className="shrink-0 text-[#756a6f]"
+                  />
+
+                  <input
+                    value={query}
+                    onChange={(event) =>
+                      setQuery(
+                        event.target.value
+                      )
+                    }
+                    placeholder={
+                      isWatchlist
+                        ? "Search your watchlist"
+                        : "Search this collection"
+                    }
+                    className="w-[min(48vw,220px)] min-w-0 bg-transparent px-2 py-2.5 text-xs text-[#efe7da] outline-none placeholder:text-[#6f6468]"
+                  />
+                </div>
+
+                {/* Sort */}
+                <select
+                  value={sort}
                   onChange={(event) =>
-                    setQuery(
+                    setSort(
                       event.target.value
                     )
                   }
-                  placeholder="Search this collection"
-                  className="w-48 bg-transparent px-2 py-2.5 text-xs text-[#efe7da] outline-none placeholder:text-[#6f6468]"
-                />
+                  className="shrink-0 rounded-xl border border-white/10 bg-[#171216] px-3 py-2.5 text-xs text-[#cfc4c7] outline-none"
+                >
+                  <option value="recent">
+                    Recently added
+                  </option>
+
+                  <option value="rating">
+                    Highest rated
+                  </option>
+
+                  <option value="views">
+                    Most watched
+                  </option>
+
+                  <option value="title">
+                    A–Z
+                  </option>
+                </select>
               </div>
-
-              <select
-                value={sort}
-                onChange={(event) =>
-                  setSort(
-                    event.target.value
-                  )
-                }
-                className="rounded-xl border border-white/10 bg-[#171216] px-3 py-2.5 text-xs text-[#cfc4c7] outline-none"
-              >
-                <option value="recent">
-                  Recently added
-                </option>
-
-                <option value="rating">
-                  Highest rated
-                </option>
-
-                <option value="views">
-                  Most watched
-                </option>
-
-                <option value="title">
-                  A–Z
-                </option>
-              </select>
             </div>
-          </div>
+          </header>
 
-          <div className="mt-8 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              onClick={() =>
-                setGenre("")
-              }
-              className={`shrink-0 rounded-full border px-4 py-2 text-[9px] ${
-                !genre
-                  ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
-                  : "border-white/10 text-[#93878c]"
-              }`}
-            >
-              All
-            </button>
-
-            {genres.map((item) => (
+          {/* =========================
+              GENRE FILTERS
+          ========================= */}
+          {!isWatchlist && (
+            <div className="mt-8 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
-                key={item}
                 onClick={() =>
-                  setGenre(
-                    item === genre
-                      ? ""
-                      : item
-                  )
+                  setGenre("")
                 }
                 className={`shrink-0 rounded-full border px-4 py-2 text-[9px] ${
-                  genre === item
+                  !genre
                     ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
                     : "border-white/10 text-[#93878c]"
                 }`}
               >
-                {item}
+                All
               </button>
-            ))}
-          </div>
 
+              {genres.map((item) => (
+                <button
+                  key={item}
+                  onClick={() =>
+                    setGenre(
+                      item === genre
+                        ? ""
+                        : item
+                    )
+                  }
+                  className={`shrink-0 rounded-full border px-4 py-2 text-[9px] ${
+                    genre === item
+                      ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
+                      : "border-white/10 text-[#93878c]"
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* =========================
+              ERROR
+          ========================= */}
           {error ? (
             <div className="mt-8">
               <ErrorState
@@ -346,8 +404,13 @@ export function LibraryPage({
                 onRetry={load}
               />
             </div>
+
           ) : loading ? (
-            <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+
+            /* =========================
+               LOADING GRID
+            ========================= */
+            <div className="mt-8 grid w-full min-w-0 grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {Array.from(
                 { length: 12 },
                 (_, index) => (
@@ -357,7 +420,12 @@ export function LibraryPage({
                 )
               )}
             </div>
+
           ) : !list.length ? (
+
+            /* =========================
+               EMPTY STATE
+            ========================= */
             <div className="mt-8">
               <EmptyState
                 title={
@@ -367,12 +435,16 @@ export function LibraryPage({
                     ? "No liked films yet"
                     : "No results found"
                 }
-                message="Explore more stories and build your personal cinema."
+                message={
+                  mode === "watchlist"
+                    ? "Save films you want to watch later. They will stay here until you remove them."
+                    : "Explore more stories and build your personal cinema."
+                }
                 action={
                   <button
                     onClick={() =>
                       navigate(
-                        "/viewer/explore"
+                        "/explore"
                       )
                     }
                     className="mt-5 rounded-xl bg-[#d9a653] px-4 py-2 text-xs font-bold text-[#100d10]"
@@ -382,8 +454,13 @@ export function LibraryPage({
                 }
               />
             </div>
+
           ) : (
-            <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+
+            /* =========================
+               VIDEO GRID
+            ========================= */
+            <div className="mt-8 grid w-full min-w-0 grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {list.map((video) => (
                 <MovieCard
                   key={video.id}
@@ -400,6 +477,7 @@ export function LibraryPage({
                     )
                   }
                   onSaved={savedChange}
+                  className="w-full min-w-0"
                 />
               ))}
             </div>

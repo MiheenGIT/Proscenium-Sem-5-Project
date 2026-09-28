@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
-import {Camera,Heart,Mail,Save,Star,UserRound,} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { Camera, Heart, Mail, Save, Star, UserRound, Settings, Sparkles, Languages, HelpCircle } from "lucide-react";
 import { getRequest, postForm, putJson,} from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import { Avatar } from "../../components/Dashboard/Sidebar.jsx";
 import { PageLoading } from "../../components/common/States.jsx";
 
 export default function ViewerProfilePro() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [p, setP] = useState(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -187,6 +191,34 @@ export default function ViewerProfilePro() {
               {saving ? "Saving…" : "Save profile"}
             </button>
           </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+          <p className="text-[9px] uppercase tracking-[.22em] text-[#d9a653]">My account</p>
+          <h2 className="mt-1 font-[var(--font-display)] text-2xl text-[#efe7da]">Your Proscenium space</h2>
+          <p className="mt-2 text-xs leading-5 text-[#8f8388]">Manage your activity, notifications, preferences and account settings without cluttering the main navigation.</p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              [Heart, "Liked Videos", "My Activity", "/liked"],
+              [Star, "My Reviews", "My Activity", "/reviews"],
+              [Mail, "Notifications", "Updates", "/notifications"],
+              [Settings, "Settings", "Account", "/settings"],
+              [Sparkles, "Genre Preferences", "Preferences", "/preferences/genres"],
+              [Languages, "Language Preferences", "Preferences", "/preferences/languages"],
+              [HelpCircle, "Help & Support", "Support", "/help"],
+            ].map(([Icon, title, label, path]) => (
+              <button key={path} type="button" onClick={() => navigate(path)} className="group rounded-2xl border border-white/[0.07] bg-black/10 p-4 text-left transition hover:-translate-y-0.5 hover:border-[#d9a653]/30 hover:bg-[#5c1220]/20">
+                <Icon size={16} className="text-[#d9a653]" />
+                <span className="mt-3 block text-[8px] uppercase tracking-[.15em] text-[#756a6f]">{label}</span>
+                <b className="mt-1 block text-sm text-[#efe7da] group-hover:text-[#e6c184]">{title}</b>
+              </button>
+            ))}
+          </div>
+
+          <button type="button" onClick={async () => { await Promise.resolve(logout?.()); navigate("/login", { replace: true }); }} className="mt-5 inline-flex items-center rounded-xl border border-[#e08a6b]/20 px-4 py-2.5 text-xs text-[#e08a6b] hover:bg-[#e08a6b]/10">
+            Logout
+          </button>
         </section>
 
         <section className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">

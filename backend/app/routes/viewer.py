@@ -133,8 +133,8 @@ def _maturity_filter(payload: dict) -> dict:
     return {"ageRestricted": {"$ne": True}}
 
 
-def _serialize_summary(video: dict) -> dict:
-    return {
+def _serialize_summary(video: dict, viewer_id=None) -> dict:
+    item = {
         "id": str(video["_id"]),
         "title": video.get("title", "Untitled"),
         "description": video.get("description"),
@@ -153,6 +153,30 @@ def _serialize_summary(video: dict) -> dict:
         "commentCount": video.get("commentCount", 0),
         "publishedAt": video.get("publishedAt"),
     }
+
+    # Playback position for this viewer. The UI uses this to draw the same
+    # kind of thin progress indicator users expect from YouTube.
+    if viewer_id is not None:
+        history = watch_history_collection.find_one(
+            {"viewerId": viewer_id, "videoId": video["_id"]},
+            {"currentTimeSec": 1, "progress": 1, "completed": 1, "lastWatchedAt": 1},
+        )
+        if history:
+            item.update({
+                "currentTimeSec": float(history.get("currentTimeSec", 0) or 0),
+                "progress": float(history.get("progress", 0) or 0),
+                "completed": bool(history.get("completed", False)),
+                "lastWatchedAt": history.get("lastWatchedAt"),
+            })
+        else:
+            item.update({
+                "currentTimeSec": 0.0,
+                "progress": 0.0,
+                "completed": False,
+                "lastWatchedAt": None,
+            })
+
+    return item
 
 
 def _serialize_profile(viewer: dict) -> dict:
@@ -222,12 +246,12 @@ def browse_videos(
             .skip(skip)
             .limit(limit)
         )
-        return {"count": total, "page": page, "limit": limit, "videos": [_serialize_summary(v) for v in videos]}
+        return {"count": total, "page": page, "limit": limit, "videos": [_serialize_summary(v, viewer["_id"]) for v in videos]}
 
     candidates = list(film_collection.find(query).sort("publishedAt", -1).limit(500))
     candidates.sort(key=lambda v: _score_by_history(v, history_tags_genres), reverse=True)
     page_videos = candidates[skip: skip + limit]
-    return {"count": total, "page": page, "limit": limit, "videos": [_serialize_summary(v) for v in page_videos]}
+    return {"count": total, "page": page, "limit": limit, "videos": [_serialize_summary(v, viewer["_id"]) for v in page_videos]}
 
 
 @router.get("/genres")
@@ -248,50 +272,121 @@ def list_genres(payload: dict = Depends(require_role("viewer"))):
     }
 
 
+# =========================================================
+# SEARCH VIDEOS
+# =========================================================
+
 @router.get("/videos/search")
 def search_videos(
-    q: str = Query(..., min_length=1, max_length=100),
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    genre: Optional[str] = Query(None),
-    payload: dict = Depends(require_role("viewer")),
+    q: str = Query(
+        ...,
+        min_length=1,
+        max_length=100,
+    ),
+    page: int = Query(
+        1,
+        ge=1,
+    ),
+    limit: int = Query(
+        20,
+        ge=1,
+        le=100,
+    ),
+    payload: dict = Depends(
+        require_role("viewer")
+    ),
 ):
+    """
+    Search approved/public videos by title.
+
+    Only videos that are:
+      - moderationStatus = approved
+      - visibility = public
+
+    are returned.
+
+    Search is case-insensitive.
+    """
+
     import re
+
+    search_text = q.strip()
+
+    if not search_text:
+        return {
+            "count": 0,
+            "page": page,
+            "limit": limit,
+            "query": "",
+            "videos": [],
+        }
+
+    # -----------------------------------------------------
+    # BUILD SEARCH QUERY
+    # -----------------------------------------------------
 
     query = {
         "moderationStatus": "approved",
         "visibility": "public",
         "title": {
-            "$regex": re.escape(q.strip()),
+            "$regex": re.escape(search_text),
             "$options": "i",
         },
     }
 
-    query.update(_maturity_filter(payload))
+    # -----------------------------------------------------
+    # MATURITY FILTER
+    # -----------------------------------------------------
 
-    if genre:
-        query["genres"] = {
-            "$regex": f"^{re.escape(genre.strip())}$",
-            "$options": "i",
-        }
+    query.update(
+        _maturity_filter(payload)
+    )
 
-    skip = (page - 1) * limit
-    total = film_collection.count_documents(query)
+    # -----------------------------------------------------
+    # PAGINATION
+    # -----------------------------------------------------
+
+    skip = (
+        page - 1
+    ) * limit
+
+    # -----------------------------------------------------
+    # TOTAL RESULTS
+    # -----------------------------------------------------
+
+    total = film_collection.count_documents(
+        query
+    )
+
+    # -----------------------------------------------------
+    # FETCH VIDEOS
+    # -----------------------------------------------------
 
     videos = list(
-        film_collection.find(query)
-        .sort("publishedAt", -1)
+        film_collection.find(
+            query
+        )
+        .sort(
+            "publishedAt",
+            -1,
+        )
         .skip(skip)
         .limit(limit)
     )
+
+    # -----------------------------------------------------
+    # RESPONSE
+    # -----------------------------------------------------
 
     return {
         "count": total,
         "page": page,
         "limit": limit,
-        "query": q,
-        "genre": genre,
-        "videos": [_serialize_summary(v) for v in videos],
+        "query": search_text,
+        "videos": [
+            _serialize_summary(video)
+            for video in videos
+        ],
     }
 
 
@@ -1582,7 +1677,7 @@ def list_liked_videos(
     for row in rows:
         video = film_collection.find_one({"_id": row["videoId"], "moderationStatus": "approved", "visibility": "public"})
         if video:
-            videos.append(_serialize_summary(video))
+            videos.append(_serialize_summary(video, viewer["_id"]))
     return {"count": len(videos), "videos": videos}
 
 
@@ -1615,7 +1710,7 @@ def get_history(
         if not video:
             continue
 
-        item = _serialize_summary(video)
+        item = _serialize_summary(video, viewer["_id"])
 
         item.update({
             "currentTimeSec": float(
@@ -1686,7 +1781,7 @@ def get_watchlist(
         if not video:
             continue
 
-        item = _serialize_summary(video)
+        item = _serialize_summary(video, viewer["_id"])
 
         history = watch_history_collection.find_one({
             "viewerId": viewer["_id"],
