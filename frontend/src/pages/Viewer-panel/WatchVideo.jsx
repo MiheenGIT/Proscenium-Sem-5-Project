@@ -455,10 +455,12 @@ export default function ViewerWatchVideo() {
     }
 
     try {
-      await postJson(`/viewer/videos/${id}/heartbeat`, {
+      return await postJson(`/viewer/videos/${id}/heartbeat`, {
         currentTimeSec: currentTime,
       });
-    } catch {}
+    } catch {
+      return null;
+    }
   };
 
   // Load video data and save the last playback position when leaving the page.
@@ -665,7 +667,27 @@ export default function ViewerWatchVideo() {
 
     heartbeatRef.current = setInterval(() => {
       const currentTime = getCurrentPlaybackTime();
-      if (currentTime !== null) savePlaybackPosition(currentTime);
+      if (currentTime !== null) {
+        savePlaybackPosition(currentTime).then((data) => {
+          if (data?.counted) {
+            setVideo((current) =>
+              current?.hasWatched
+                ? current
+                : {
+                    ...current,
+                    hasWatched: true,
+                    watchStats: {
+                      firstWatchedAt:
+                        current?.watchStats?.firstWatchedAt ||
+                        new Date().toISOString(),
+                      lastWatchedAt: new Date().toISOString(),
+                      timesWatched: current?.watchStats?.timesWatched || 1,
+                    },
+                  }
+            );
+          }
+        });
+      }
     }, 5000);
 
     return () => clearInterval(heartbeatRef.current);

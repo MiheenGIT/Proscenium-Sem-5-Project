@@ -5,6 +5,7 @@ import { getRequest } from "../../api/client.js";
 
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import MovieCard from "../../components/Dashboard/MovieCard.jsx";
+import CustomSelect from "../../components/CustomSelect.jsx";
 import {
   EmptyState,
   ErrorState,
@@ -248,17 +249,19 @@ export function LibraryPage({
               PAGE HEADER
           ========================= */}
           <header
-            className={`relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#151014] px-5 py-6 sm:px-7 sm:py-7 ${
+            className={`relative rounded-[28px] border border-white/[0.07] bg-[#151014] px-5 py-6 sm:px-7 sm:py-7 ${
               isWatchlist
                 ? "shadow-[0_24px_70px_rgba(0,0,0,.22)]"
                 : ""
             }`}
           >
-            <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#d9a653]/[0.06] blur-3xl" />
+            {/* Background ambient lighting isolated in overflow-hidden so it does not clip dropdowns */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
+              <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#d9a653]/[0.06] blur-3xl" />
+              <div className="absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-[#5c1220]/[0.16] blur-3xl" />
+            </div>
 
-            <div className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-[#5c1220]/[0.16] blur-3xl" />
-
-            <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="relative z-10 flex min-w-0 flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
 
               {/* Header text */}
               <div className="min-w-0">
@@ -325,31 +328,19 @@ export function LibraryPage({
                 </div>
 
                 {/* Sort */}
-                <select
+                <CustomSelect
                   value={sort}
-                  onChange={(event) =>
-                    setSort(
-                      event.target.value
-                    )
-                  }
-                  className="shrink-0 rounded-xl border border-white/10 bg-[#171216] px-3 py-2.5 text-xs text-[#cfc4c7] outline-none"
-                >
-                  <option value="recent">
-                    Recently added
-                  </option>
-
-                  <option value="rating">
-                    Highest rated
-                  </option>
-
-                  <option value="views">
-                    Most watched
-                  </option>
-
-                  <option value="title">
-                    A–Z
-                  </option>
-                </select>
+                  onChange={(val) => setSort(val)}
+                  options={[
+                    { value: "recent", label: "Recently added" },
+                    { value: "rating", label: "Highest rated" },
+                    { value: "views", label: "Most watched" },
+                    { value: "title", label: "A–Z" },
+                  ]}
+                  size="md"
+                  align="right"
+                  className="shrink-0"
+                />
               </div>
             </div>
           </header>

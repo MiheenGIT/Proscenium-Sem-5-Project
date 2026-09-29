@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
 import { getRequest, postJson } from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import { EmptyState, ErrorState, PageLoading } from "../../components/common/States.jsx";
+import CustomSelect from "../../components/CustomSelect.jsx";
 
 /* -------------------------------------------------------------------------- */
 /*                                   HELPERS                                  */
@@ -171,16 +172,17 @@ function PosterGridView({ onSelectFilm }) {
           <span className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-wider text-[#756a6f]">
             Sort:
           </span>
-          <select
+          <CustomSelect
             value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="rounded-xl border border-white/[0.08] bg-[#140f14] px-3 py-1.5 font-[var(--font-mono)] text-xs text-[#efe7da] outline-none transition focus:border-[#d9a653]/50"
-          >
-            <option value="reviews">Most Reviewed</option>
-            <option value="rating">Highest Rated</option>
-            <option value="recent">Recently Added</option>
-            <option value="title">Alphabetical (A–Z)</option>
-          </select>
+            onChange={(val) => setSort(val)}
+            options={[
+              { value: "reviews", label: "Most Reviewed" },
+              { value: "rating", label: "Highest Rated" },
+              { value: "recent", label: "Recently Added" },
+              { value: "title", label: "Alphabetical (A–Z)" },
+            ]}
+            size="md"
+          />
         </div>
       </div>
 
@@ -498,16 +500,17 @@ function FilmReviewListView({ filmId, onBack }) {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 font-[var(--font-mono)] text-xs text-[#9c8e94]">
             <span className="text-[0.65rem] uppercase tracking-wider text-[#756a6f]">Sort by:</span>
-            <select
+            <CustomSelect
               value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              className="rounded-xl border border-white/[0.08] bg-[#140f14] px-3 py-1.5 font-[var(--font-mono)] text-xs text-[#efe7da] outline-none focus:border-[#d9a653]/50"
-            >
-              <option value="rating_desc">Highest Rating</option>
-              <option value="rating_asc">Lowest Rating</option>
-              <option value="recent">Most Recent</option>
-              <option value="oldest">Earliest Logged</option>
-            </select>
+              onChange={(val) => setSort(val)}
+              options={[
+                { value: "rating_desc", label: "Highest Rating" },
+                { value: "rating_asc", label: "Lowest Rating" },
+                { value: "recent", label: "Most Recent" },
+                { value: "oldest", label: "Earliest Logged" },
+              ]}
+              size="sm"
+            />
           </div>
         </div>
       </div>

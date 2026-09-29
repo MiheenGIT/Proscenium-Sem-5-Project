@@ -4,6 +4,7 @@ import {Check,Languages,Save,Star,} from "lucide-react";
 
 import {getRequest,patchJson,putJson,postJson,} from "../../api/client.js";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
+import CustomSelect from "../../components/CustomSelect.jsx";
 import {EmptyState,ErrorState,PageLoading,} from "../../components/common/States.jsx";
 
 const genres = [
@@ -324,45 +325,27 @@ export function SettingsPage() {
           />
 
           <div className="border-b border-white/[0.06] py-4">
-            <label className="text-xs text-[#ddd3d5]">
+            <span className="block text-xs text-[#ddd3d5] mb-2">
               Default quality
-
-              <select
-                value={
-                  settings.defaultQuality
-                }
-                onChange={(event) =>
-                  setSettings(
-                    (current) => ({
-                      ...current,
-                      defaultQuality:
-                        event.target.value,
-                    })
-                  )
-                }
-                className="mt-2 block w-full rounded-xl border border-white/10 bg-[#171216] px-3 py-3 text-xs text-[#cfc4c7] outline-none"
-              >
-                <option value="auto">
-                  Auto
-                </option>
-
-                <option value="1080">
-                  1080p
-                </option>
-
-                <option value="720">
-                  720p
-                </option>
-
-                <option value="480">
-                  480p
-                </option>
-
-                <option value="360">
-                  360p
-                </option>
-              </select>
-            </label>
+            </span>
+            <CustomSelect
+              value={settings.defaultQuality}
+              onChange={(val) =>
+                setSettings((current) => ({
+                  ...current,
+                  defaultQuality: val,
+                }))
+              }
+              options={[
+                { value: "auto", label: "Auto (Adaptive)" },
+                { value: "1080", label: "1080p (Full HD)" },
+                { value: "720", label: "720p (HD)" },
+                { value: "480", label: "480p (SD)" },
+                { value: "360", label: "360p (Low data)" },
+              ]}
+              size="lg"
+              className="w-full"
+            />
           </div>
 
           <Toggle

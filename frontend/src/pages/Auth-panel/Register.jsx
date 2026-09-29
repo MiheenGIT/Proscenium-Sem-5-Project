@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "../../components/AuthLayout.jsx";
+import CustomSelect from "../../components/CustomSelect.jsx";
 import { postForm } from "../../api/client";
 import "../../components/FormControls.css";
 
@@ -196,15 +197,17 @@ export default function Register() {
               <label className="field-label" htmlFor="maturity">
                 Maturity setting
               </label>
-              <select
+              <CustomSelect
                 id="maturity"
-                className="field-select"
                 value={maturitySetting}
-                onChange={(e) => setMaturitySetting(e.target.value)}
-              >
-                <option value="all">All audiences</option>
-                <option value="mature">Include mature content</option>
-              </select>
+                onChange={(val) => setMaturitySetting(val)}
+                options={[
+                  { value: "all", label: "All audiences" },
+                  { value: "mature", label: "Include mature content" },
+                ]}
+                size="lg"
+                className="w-full"
+              />
             </div>
           </>
         )}
