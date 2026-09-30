@@ -55,7 +55,9 @@ export default function ViewerNav() {
       }
 
       if (notificationResult.status === "fulfilled") {
-        setUnread(Number(notificationResult.value?.unread || 0));
+        setUnread(
+          Number(notificationResult.value?.unread || 0)
+        );
       }
     });
 
@@ -124,13 +126,19 @@ export default function ViewerNav() {
     ["Watchlist", "/watchlist", Heart],
     ["History", "/history", Clock3],
     ["Film Reviews", "/film-reviews", Film],
+
+    // Notifications stays permanently in the main left nav.
+    ["Notifications", "/notifications", Bell],
   ];
 
+  /*
+   * Notifications is intentionally NOT inside this menu.
+   * It is already available directly in the main left nav.
+   */
   const profileItems = [
     ["Profile", "/profile", UserRound],
     ["Liked Videos", "/liked", Heart],
     ["My Reviews", "/reviews", MessageSquare],
-    ["Notifications", "/notifications", Bell],
     ["Genres", "/preferences/genres", Sparkles],
     ["Languages", "/preferences/languages", Languages],
     ["Settings", "/settings", Settings],
@@ -203,6 +211,7 @@ export default function ViewerNav() {
         );
       } catch (err) {
         setResults([]);
+
         setSearchError(
           err?.message ||
             "Search is temporarily unavailable."
@@ -333,6 +342,14 @@ export default function ViewerNav() {
                     size={19}
                     strokeWidth={1.65}
                   />
+
+                  {/* Notification unread badge */}
+                  {label === "Notifications" &&
+                    unread > 0 && (
+                      <span className="viewer-nav-notification-badge">
+                        {unread > 9 ? "9+" : unread}
+                      </span>
+                    )}
                 </span>
 
                 <span className="viewer-nav-label">
@@ -381,11 +398,6 @@ export default function ViewerNav() {
                       />
 
                       <span>{label}</span>
-
-                      {label === "Notifications" &&
-                        unread > 0 && (
-                          <b>{unread}</b>
-                        )}
                     </button>
                   )
                 )}
@@ -444,36 +456,8 @@ export default function ViewerNav() {
       </aside>
 
       {/* ================================================== */}
-      {/* TOP RIGHT UTILITY */}
+      {/* NO TOP RIGHT PROFILE / NOTIFICATION */}
       {/* ================================================== */}
-
-      <div className="viewer-top-utility">
-        <button
-          onClick={() => go("/notifications")}
-          aria-label="Notifications"
-          className="viewer-utility-button"
-        >
-          <Bell size={18} />
-
-          {unread > 0 && (
-            <span>
-              {unread > 9 ? "9+" : unread}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => go("/profile")}
-          aria-label="Profile"
-          className="viewer-utility-avatar"
-        >
-          {avatar ? (
-            <img src={avatar} alt="" />
-          ) : (
-            <UserRound size={17} />
-          )}
-        </button>
-      </div>
 
       {/* ================================================== */}
       {/* SEARCH OVERLAY */}

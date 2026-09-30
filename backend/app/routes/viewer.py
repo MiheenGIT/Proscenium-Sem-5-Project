@@ -1741,6 +1741,32 @@ def get_history(
     }
 
 
+@router.delete("/history/{video_id}")
+def remove_history_item(
+    video_id: str,
+    payload: dict = Depends(require_role("viewer")),
+):
+    viewer = _viewer_or_404(payload)
+
+    try:
+        oid = ObjectId(video_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    result = watch_history_collection.delete_one({
+        "viewerId": viewer["_id"],
+        "videoId": oid,
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found in watch history")
+
+    return {
+        "message": "Video removed from watch history",
+        "videoId": video_id,
+    }
+
+
 @router.delete("/history")
 def clear_history(
     payload: dict = Depends(require_role("viewer")),

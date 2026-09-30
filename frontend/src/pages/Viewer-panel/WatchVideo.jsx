@@ -7,6 +7,8 @@ import {
   ArrowLeft,
   Bookmark,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Edit3,
   Heart,
   MessageCircle,
@@ -334,6 +336,7 @@ export default function ViewerWatchVideo() {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const hlsRef = useRef(null);
+  const recShelfRef = useRef(null);
   const heartbeatRef = useRef(null);
   const lastSavedTimeRef = useRef(-1);
   const resumeAppliedRef = useRef(false);
@@ -828,40 +831,81 @@ export default function ViewerWatchVideo() {
                     playsInline
                   />
 
-                  {/* YouTube-Style In-Player Recommendations Dock */}
+                  {/* ================================================== */}
+                  {/* IN-PLAYER MORE TO WATCH */}
+                  {/* ================================================== */}
                   {plyrContainer &&
                     showRecs &&
                     recommendations.length > 0 &&
                     createPortal(
                       <div className="rec-overlay-dock">
                         <div className="rec-dock-header">
-                          <div className="flex items-center gap-1.5">
-                            <Sparkles size={12} className="text-[#d9a653]" />
-                            <span className="rec-dock-title">
-                              More to Watch
+                          <div className="rec-dock-heading">
+                            <div className="rec-dock-title-row">
+                              <Sparkles size={14} />
+                              <span>More to Watch</span>
+                            </div>
+                            <span className="rec-dock-subtitle">
+                              Similar to this video
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            className="rec-dock-close"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowRecs(false);
-                              setDismissedRecs(true);
-                            }}
-                            title="Close suggestions"
-                          >
-                            <X size={13} />
-                          </button>
+
+                          <div className="rec-dock-actions">
+                            <button
+                              type="button"
+                              className="rec-dock-arrow"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                recShelfRef.current?.scrollBy({
+                                  left: -320,
+                                  behavior: "smooth",
+                                });
+                              }}
+                              aria-label="Previous recommendations"
+                            >
+                              <ChevronLeft size={17} />
+                            </button>
+
+                            <button
+                              type="button"
+                              className="rec-dock-arrow"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                recShelfRef.current?.scrollBy({
+                                  left: 320,
+                                  behavior: "smooth",
+                                });
+                              }}
+                              aria-label="Next recommendations"
+                            >
+                              <ChevronRight size={17} />
+                            </button>
+
+                            <button
+                              type="button"
+                              className="rec-dock-close"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowRecs(false);
+                                setDismissedRecs(true);
+                              }}
+                              title="Close suggestions"
+                              aria-label="Close suggestions"
+                            >
+                              <X size={15} />
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="rec-dock-shelf">
-                          {recommendations.slice(0, 4).map((rec) => (
-                            <div
+                        <div
+                          ref={recShelfRef}
+                          className="rec-dock-shelf"
+                        >
+                          {recommendations.map((rec) => (
+                            <button
                               key={rec.id}
+                              type="button"
                               className="rec-dock-card"
-                              role="button"
-                              tabIndex={0}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 navigate(`/viewer/videos/${rec.id}`);
@@ -869,14 +913,33 @@ export default function ViewerWatchVideo() {
                             >
                               <div className="rec-dock-thumb">
                                 <RecThumbnail rec={rec} />
+
+                                <div className="rec-dock-play">
+                                  <Play size={17} fill="currentColor" />
+                                </div>
+
                                 {rec.durationSec ? (
                                   <span className="rec-dock-duration">
                                     {duration(rec.durationSec)}
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="rec-dock-film-title">{rec.title}</p>
-                            </div>
+
+                              <div className="rec-dock-info">
+                                <p className="rec-dock-film-title">
+                                  {rec.title}
+                                </p>
+                                <span className="rec-dock-meta">
+                                  {[
+                                    rec.genres?.[0],
+                                    rec.releaseYear,
+                                    rec.language,
+                                  ]
+                                    .filter(Boolean)
+                                    .join("  ·  ")}
+                                </span>
+                              </div>
+                            </button>
                           ))}
                         </div>
                       </div>,

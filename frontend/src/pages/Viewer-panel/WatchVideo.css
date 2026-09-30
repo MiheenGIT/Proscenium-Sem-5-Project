@@ -116,101 +116,134 @@
 }
 
 /* ==========================================================================
-   IN-PLAYER RECOMMENDATIONS DOCK (COMPACT & NON-INTRUSIVE)
+   IN-PLAYER MORE TO WATCH
    ========================================================================== */
 
 .rec-overlay-dock {
   position: absolute !important;
-  bottom: 54px !important;
-  left: 14px !important;
-  right: 14px !important;
-  z-index: 10 !important;
-  padding: 10px 14px 12px !important;
-  border-radius: 12px !important;
-  background: rgba(14, 10, 14, 0.9) !important;
-  backdrop-filter: blur(10px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
-  animation: dockSlideUp 0.22s ease-out forwards;
+  left: 16px !important;
+  right: 16px !important;
+  bottom: 58px !important;
+  z-index: 20 !important;
+  padding: 16px 16px 14px !important;
+  border-radius: 14px !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  animation: recDockIn 0.22s ease-out both;
   pointer-events: auto !important;
 }
 
-@keyframes dockSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes recDockIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .rec-dock-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 14px;
+  margin-bottom: 12px;
 }
 
-.rec-dock-title {
-  font-size: 10px;
-  font-weight: 700;
+.rec-dock-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rec-dock-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d9a653;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #efe7da;
 }
 
+.rec-dock-title-row svg { flex-shrink: 0; }
+
+.rec-dock-subtitle {
+  padding-left: 21px;
+  color: rgba(239, 231, 218, 0.56);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.rec-dock-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-dock-arrow,
 .rec-dock-close {
-  all: unset;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #c5b8bd;
-  cursor: pointer;
-  transition: all 0.18s ease;
+  all: unset !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: rgba(239, 231, 218, 0.72) !important;
+  cursor: pointer !important;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease !important;
 }
 
+.rec-dock-arrow:hover,
 .rec-dock-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-  transform: scale(1.08);
+  background: rgba(217, 166, 83, 0.12) !important;
+  border-color: rgba(217, 166, 83, 0.35) !important;
+  color: #d9a653 !important;
+  transform: translateY(-1px);
 }
 
 .rec-dock-shelf {
-  display: grid !important;
-  grid-template-columns: repeat(4, 1fr) !important;
-  gap: 10px !important;
+  display: flex !important;
+  gap: 12px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  padding: 1px 1px 2px !important;
 }
 
-/* Reset to strictly override Plyr's button styling */
+.rec-dock-shelf::-webkit-scrollbar { display: none; }
+
 .rec-dock-card {
   all: unset !important;
+  position: relative !important;
+  flex: 0 0 calc(25% - 9px) !important;
+  min-width: 0 !important;
   display: flex !important;
   flex-direction: column !important;
   cursor: pointer !important;
-  border-radius: 8px !important;
-  background: rgba(255, 255, 255, 0.03) !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  background: rgba(255, 255, 255, 0.025) !important;
   border: 1px solid rgba(255, 255, 255, 0.07) !important;
-  padding: 5px !important;
   box-sizing: border-box !important;
-  transition: all 0.2s ease !important;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease !important;
 }
 
 .rec-dock-card:hover {
-  border-color: rgba(217, 166, 83, 0.6) !important;
-  background: rgba(217, 166, 83, 0.08) !important;
-  transform: translateY(-2px) !important;
+  transform: translateY(-3px) !important;
+  border-color: rgba(217, 166, 83, 0.42) !important;
+  background: rgba(217, 166, 83, 0.055) !important;
 }
 
 .rec-dock-thumb {
   position: relative !important;
   width: 100% !important;
-  height: 62px !important;
-  border-radius: 6px !important;
+  aspect-ratio: 16 / 9 !important;
+  height: auto !important;
   overflow: hidden !important;
   background: #191318 !important;
 }
@@ -220,32 +253,86 @@
   height: 100% !important;
   object-fit: cover !important;
   display: block !important;
+  transition: transform 0.35s ease, filter 0.35s ease;
+}
+
+.rec-dock-card:hover .rec-img {
+  transform: scale(1.045);
+  filter: brightness(0.72);
+}
+
+.rec-dock-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%) scale(0.8);
+  opacity: 0;
+  border-radius: 50%;
+  background: rgba(217, 166, 83, 0.94);
+  color: #171217;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.rec-dock-card:hover .rec-dock-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .rec-dock-duration,
 .rec-card-duration,
 .rec-badge {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.85);
+  right: 7px;
+  bottom: 7px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.82);
   color: #efe7da;
   font-size: 8px;
-  font-weight: 600;
-  line-height: 1.2;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rec-dock-info {
+  padding: 8px 9px 9px !important;
+  background: transparent !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .rec-dock-film-title {
-  margin: 5px 0 0 !important;
-  font-size: 9px !important;
-  font-weight: 600 !important;
-  line-height: 1.25 !important;
-  color: #efe7da !important;
+  display: block !important;
+  margin: 7px 2px 0 !important;
+  padding: 6px 8px !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: rgba(10, 8, 11, 0.78) !important;
+  border-radius: 5px !important;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.9) !important;
+  box-sizing: border-box !important;
+}
+
+.rec-dock-meta {
+  display: block;
+  margin-top: 4px;
+  color: rgba(197, 184, 189, 0.58);
+  font-size: 8px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rec-fallback {
@@ -259,19 +346,19 @@
 .rec-fallback-icon {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #9f8f96;
 }
 
 .rec-fallback-brand {
   position: absolute;
-  bottom: 3px;
-  left: 4px;
-  font-size: 6px;
+  bottom: 7px;
+  left: 8px;
+  font-size: 7px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1107,7 +1194,773 @@
     justify-content: space-between;
   }
 
+  .rec-dock-card {
+    flex: 0 0 48% !important;
+  }
+}
+
+/* In-player recommendation responsiveness */
+@media (max-width: 900px) {
+  .rec-overlay-dock {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 52px !important;
+    padding: 12px !important;
+  }
+
+  .rec-dock-card {
+    flex: 0 0 48% !important;
+  }
+
+  .rec-dock-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .rec-dock-card {
+    flex: 0 0 72% !important;
+  }
+
+  .rec-dock-title-row {
+    font-size: 10px;
+  }
+
+  .rec-dock-arrow {
+    display: none !important;
+  }
+}/* =========================================================
+   MORE TO WATCH
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   OUTER CONTAINER
+   --------------------------------------------------------- */
+
+.rec-overlay-dock {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+
+  opacity: 1 !important;
+}
+
+
+/* ---------------------------------------------------------
+   SHELF
+   --------------------------------------------------------- */
+
+.rec-dock-shelf {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 14px;
+
+  width: 100%;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  padding: 4px 3px 10px;
+
+  background: transparent !important;
+
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.rec-dock-shelf::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* ---------------------------------------------------------
+   RECOMMENDATION CARD
+   --------------------------------------------------------- */
+
+.rec-dock-card {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+
+  width: 220px;
+  min-width: 220px;
+
+  padding: 0;
+  margin: 0;
+
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+
+  /* LOW OPACITY CARD BACKGROUND */
+  background: rgba(18, 17, 20, 0.62) !important;
+
+  color: #ffffff;
+  text-align: left;
+
+  cursor: pointer;
+
+  opacity: 1 !important;
+
+  scroll-snap-align: start;
+
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+
+/* ---------------------------------------------------------
+   CARD HOVER
+   --------------------------------------------------------- */
+
+.rec-dock-card:hover {
+  transform: translateY(-3px) scale(1.015);
+
+  /* Slightly stronger on hover */
+  background: rgba(25, 23, 28, 0.72) !important;
+
+  border-color: rgba(255, 255, 255, 0.14);
+
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.28);
+
+  z-index: 5;
+}
+
+
+/* ---------------------------------------------------------
+   KEYBOARD FOCUS
+   --------------------------------------------------------- */
+
+.rec-dock-card:focus-visible {
+  outline: 2px solid var(--viewer-gold, #d9a653);
+  outline-offset: 3px;
+}
+
+
+/* =========================================================
+   THUMBNAIL
+   ========================================================= */
+
+.rec-dock-thumb {
+  position: relative;
+
+  width: 100%;
+
+  aspect-ratio: 16 / 9;
+
+  overflow: hidden;
+
+  background: #111111;
+
+  flex-shrink: 0;
+}
+
+
+/* Thumbnail image */
+
+.rec-dock-thumb img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+
+  opacity: 1 !important;
+
+  transition:
+    transform 280ms ease,
+    filter 280ms ease;
+}
+
+
+/* Thumbnail hover */
+
+.rec-dock-card:hover .rec-dock-thumb img {
+  transform: scale(1.045);
+
+  filter: brightness(0.92);
+}
+
+
+/* Thumbnail bottom gradient */
+
+.rec-dock-thumb::after {
+  content: "";
+
+  position: absolute;
+
+  inset: 0;
+
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 52%,
+    rgba(0, 0, 0, 0.38) 100%
+  );
+
+  pointer-events: none;
+
+  z-index: 1;
+}
+
+
+/* =========================================================
+   PLAY BUTTON
+   ========================================================= */
+
+.rec-dock-play {
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+
+  width: 42px;
+  height: 42px;
+
+  display: grid;
+  place-items: center;
+
+  transform:
+    translate(-50%, -50%)
+    scale(0.8);
+
+  border: none;
+  border-radius: 50%;
+
+  background: rgba(0, 0, 0, 0.72);
+
+  color: #ffffff;
+
+  opacity: 0;
+
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    background 180ms ease;
+
+  z-index: 3;
+
+  pointer-events: none;
+}
+
+
+/* Show play button */
+
+.rec-dock-card:hover .rec-dock-play {
+  opacity: 1;
+
+  transform:
+    translate(-50%, -50%)
+    scale(1);
+}
+
+
+/* Play button hover */
+
+.rec-dock-play:hover {
+  background: rgba(217, 166, 83, 0.95);
+}
+
+
+/* =========================================================
+   VIDEO DURATION
+   ========================================================= */
+
+.rec-dock-duration {
+  position: absolute;
+
+  right: 7px;
+  bottom: 7px;
+
+  padding: 3px 6px;
+
+  border-radius: 4px;
+
+  background: rgba(0, 0, 0, 0.82);
+
+  color: #ffffff;
+
+  font-size: 10px;
+  font-weight: 600;
+
+  line-height: 1;
+
+  white-space: nowrap;
+
+  z-index: 4;
+}
+
+
+/* =========================================================
+   CARD INFORMATION
+   ========================================================= */
+
+.rec-dock-info {
+  display: flex;
+  flex-direction: column;
+
+  width: 100%;
+
+  padding: 10px 11px 12px;
+
+  /*
+   * No separate title background.
+   * It inherits the card's low-opacity background.
+   */
+  background: transparent !important;
+
+  opacity: 1 !important;
+
+  box-sizing: border-box;
+}
+
+
+/* =========================================================
+   VIDEO TITLE
+   ========================================================= */
+
+.rec-dock-film-title {
+  display: -webkit-box;
+
+  width: 100%;
+
+  margin: 0;
+
+  color: #ffffff !important;
+
+  font-size: 13px;
+  font-weight: 650;
+
+  line-height: 1.35;
+
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  /* NO separate title background */
+  background: transparent !important;
+
+  text-shadow: none;
+
+  opacity: 1 !important;
+}
+
+
+/* =========================================================
+   META INFORMATION
+   ========================================================= */
+
+.rec-dock-meta {
+  display: block;
+
+  width: 100%;
+
+  margin-top: 5px;
+
+  color: rgba(255, 255, 255, 0.55);
+
+  font-size: 10px;
+  font-weight: 400;
+
+  line-height: 1.3;
+
+  white-space: nowrap;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  background: transparent !important;
+
+  opacity: 1 !important;
+}
+
+
+/* =========================================================
+   MORE TO WATCH TITLE
+   ========================================================= */
+
+.rec-dock-title {
+  margin: 0 0 10px;
+
+  color: #ffffff;
+
+  font-size: 15px;
+  font-weight: 650;
+
+  line-height: 1.3;
+
+  letter-spacing: 0.01em;
+
+  background: transparent !important;
+
+  opacity: 1 !important;
+}
+
+
+/* =========================================================
+   PREVIOUS / NEXT BUTTONS
+   ========================================================= */
+
+.rec-dock-prev,
+.rec-dock-next {
+  display: grid;
+  place-items: center;
+
+  width: 34px;
+  height: 34px;
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+
+  border-radius: 50%;
+
+  background: rgba(15, 15, 18, 0.85);
+
+  color: #ffffff;
+
+  cursor: pointer;
+
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.rec-dock-prev:hover,
+.rec-dock-next:hover {
+  background: rgba(35, 33, 39, 0.92);
+
+  border-color: rgba(255, 255, 255, 0.2);
+
+  transform: scale(1.05);
+}
+
+.rec-dock-prev:focus-visible,
+.rec-dock-next:focus-visible {
+  outline: 2px solid var(--viewer-gold, #d9a653);
+  outline-offset: 2px;
+}
+
+
+/* Disabled */
+
+.rec-dock-prev:disabled,
+.rec-dock-next:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+
+  transform: none;
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 1000px) {
+
+  .rec-dock-card {
+    width: 205px;
+    min-width: 205px;
+  }
+
   .rec-dock-shelf {
-    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px;
+  }
+}
+
+
+/* =========================================================
+   MOBILE
+   YouTube-style vertical layout
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  /* -------------------------------------------------------
+     SHELF
+     ------------------------------------------------------- */
+
+  .rec-dock-shelf {
+    display: flex;
+    flex-direction: column;
+
+    align-items: stretch;
+
+    gap: 18px;
+
+    width: 100%;
+
+    padding: 0;
+
+    overflow-x: hidden;
+    overflow-y: visible;
+
+    background: transparent !important;
+
+    scroll-snap-type: none;
+  }
+
+
+  /* -------------------------------------------------------
+     CARD
+     ------------------------------------------------------- */
+
+  .rec-dock-card {
+    display: flex;
+    flex-direction: column;
+
+    width: 100%;
+    min-width: 0;
+
+    padding: 0;
+    margin: 0;
+
+    overflow: visible;
+
+    border: none;
+    border-radius: 0;
+
+    /*
+     * Transparent like YouTube mobile.
+     */
+    background: transparent !important;
+
+    box-shadow: none !important;
+
+    transform: none !important;
+
+    scroll-snap-align: none;
+  }
+
+
+  /* Remove desktop hover appearance */
+
+  .rec-dock-card:hover {
+    background: transparent !important;
+
+    border: none;
+
+    box-shadow: none;
+
+    transform: none;
+  }
+
+
+  /* -------------------------------------------------------
+     THUMBNAIL
+     ------------------------------------------------------- */
+
+  .rec-dock-thumb {
+    width: 100%;
+
+    aspect-ratio: 16 / 9;
+
+    overflow: hidden;
+
+    border-radius: 10px;
+
+    background: #111111;
+  }
+
+
+  .rec-dock-thumb img {
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+
+    transform: none !important;
+
+    filter: none !important;
+  }
+
+
+  .rec-dock-card:hover .rec-dock-thumb img {
+    transform: none;
+
+    filter: none;
+  }
+
+
+  /* -------------------------------------------------------
+     INFORMATION
+     ------------------------------------------------------- */
+
+  .rec-dock-info {
+    width: 100%;
+
+    padding: 9px 2px 0;
+
+    background: transparent !important;
+
+    box-sizing: border-box;
+  }
+
+
+  /* -------------------------------------------------------
+     TITLE
+     ------------------------------------------------------- */
+
+  .rec-dock-film-title {
+    display: -webkit-box;
+
+    width: 100%;
+
+    margin: 0;
+
+    color: #ffffff !important;
+
+    font-size: 14px;
+    font-weight: 600;
+
+    line-height: 1.35;
+
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    background: transparent !important;
+
+    text-shadow: none;
+
+    opacity: 1 !important;
+  }
+
+
+  /* -------------------------------------------------------
+     META
+     ------------------------------------------------------- */
+
+  .rec-dock-meta {
+    display: block;
+
+    width: 100%;
+
+    margin-top: 4px;
+
+    color: rgba(255, 255, 255, 0.55);
+
+    font-size: 11px;
+
+    line-height: 1.35;
+
+    white-space: nowrap;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    background: transparent !important;
+  }
+
+
+  /* -------------------------------------------------------
+     DURATION
+     ------------------------------------------------------- */
+
+  .rec-dock-duration {
+    right: 7px;
+    bottom: 7px;
+
+    padding: 4px 6px;
+
+    border-radius: 4px;
+
+    background: rgba(0, 0, 0, 0.82);
+
+    font-size: 10px;
+  }
+
+
+  /* -------------------------------------------------------
+     PLAY BUTTON
+     ------------------------------------------------------- */
+
+  .rec-dock-play {
+    width: 42px;
+    height: 42px;
+
+    opacity: 0;
+
+    pointer-events: none;
+  }
+
+
+  .rec-dock-card:focus .rec-dock-play,
+  .rec-dock-card:focus-visible .rec-dock-play {
+    opacity: 1;
+  }
+
+
+  /* -------------------------------------------------------
+     SECTION TITLE
+     ------------------------------------------------------- */
+
+  .rec-dock-title {
+    margin: 0 0 12px;
+
+    font-size: 16px;
+    font-weight: 650;
+
+    color: #ffffff;
+
+    background: transparent !important;
+  }
+}
+
+
+/* =========================================================
+   SMALL PHONES
+   ========================================================= */
+
+@media (max-width: 380px) {
+
+  .rec-dock-shelf {
+    gap: 16px;
+  }
+
+  .rec-dock-thumb {
+    border-radius: 8px;
+  }
+
+  .rec-dock-info {
+    padding-top: 8px;
+  }
+
+  .rec-dock-film-title {
+    font-size: 13px;
+  }
+
+  .rec-dock-meta {
+    font-size: 10px;
+  }
+
+  .rec-dock-duration {
+    right: 6px;
+    bottom: 6px;
+
+    font-size: 9px;
+
+    padding: 3px 5px;
   }
 }
