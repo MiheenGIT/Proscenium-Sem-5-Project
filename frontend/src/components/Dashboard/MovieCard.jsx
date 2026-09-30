@@ -231,6 +231,24 @@ export default function MovieCard({
                 fill="currentColor"
               />
             </span>
+
+            {/* Watch progress bar */}
+            {num(video?.progress) > 0 && (
+              <>
+                <span className="absolute bottom-3 right-3 z-20 rounded-md border border-white/10 bg-black/60 px-2 py-1 text-[9px] font-semibold text-[#efe7da] backdrop-blur-md">
+                  {Math.round(Math.min(100, num(video.progress) * 100))}% watched
+                </span>
+
+                <div className="absolute bottom-0 left-0 right-0 z-20 h-1 bg-white/20">
+                  <div
+                    className="h-full bg-[#d9a653]"
+                    style={{
+                      width: `${Math.min(100, num(video.progress) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </button>
 
           {/* ===============================================
