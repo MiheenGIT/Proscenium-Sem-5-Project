@@ -406,6 +406,7 @@ export default function WatchVideo() {
   const [showModerationNotice, setShowModerationNotice] = useState(false);
   const [resubmitting, setResubmitting] = useState(false);
   const [resubmitError, setResubmitError] = useState(null);
+  const [playbackError, setPlaybackError] = useState(null);
 
   const videoRef = useRef(null);
   const plyrRef = useRef(null);
@@ -464,6 +465,7 @@ export default function WatchVideo() {
 
     const src = video.hlsManifestUrl;
     const el = videoRef.current;
+    setPlaybackError(null);
 
     let hls = null;
     let player = null;
@@ -516,7 +518,8 @@ export default function WatchVideo() {
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
-          setError("Playback error — Master HLS stream unavailable.");
+          hls.stopLoad();
+          setPlaybackError("Master HLS stream unavailable.");
         }
       });
     } else if (el.canPlayType("application/vnd.apple.mpegurl")) {
@@ -536,7 +539,7 @@ export default function WatchVideo() {
       });
       plyrRef.current = player;
     } else {
-      setError("This environment does not support HLS stream playback.");
+      setPlaybackError("This environment does not support HLS stream playback.");
     }
 
     return () => {
@@ -626,6 +629,19 @@ export default function WatchVideo() {
             playsInline
             className="aspect-video w-full object-contain"
           />
+          {playbackError && (
+            <div className="absolute inset-0 z-20 grid place-items-center bg-black/90 p-6 text-center">
+              <div>
+                <WarningIcon className="mx-auto mb-2 h-5 w-5 text-[var(--error,#df7861)]" />
+                <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--error,#df7861)]">
+                  Stream unavailable
+                </p>
+                <p className="mt-1 text-xs text-[var(--mauve,#9d919f)]">
+                  {playbackError}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Rejected State Warning Strip */}
