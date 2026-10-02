@@ -44,12 +44,8 @@ function CastSlider({ cast, setCast }) {
     if (index >= cast.length) setIndex(Math.max(0, cast.length - 1));
   }, [cast.length, index]);
 
-  useEffect(() => {
-    return () => {
-      cast.forEach((c) => {
-        if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
-      });
-    };
+  useEffect(() => () => {
+    cast.forEach((c) => c.photoPreviewUrl && URL.revokeObjectURL(c.photoPreviewUrl));
   }, []);
 
   function addMember() {
@@ -58,23 +54,15 @@ function CastSlider({ cast, setCast }) {
   }
 
   function updateMember(id, field, value) {
-    setCast((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
-    );
+    setCast((prev) => prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
   }
 
   function updatePhoto(id, file) {
-    setCast((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
-        return {
-          ...c,
-          photoFile: file,
-          photoPreviewUrl: file ? URL.createObjectURL(file) : null,
-        };
-      }),
-    );
+    setCast((prev) => prev.map((c) => {
+      if (c.id !== id) return c;
+      if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
+      return { ...c, photoFile: file, photoPreviewUrl: file ? URL.createObjectURL(file) : null };
+    }));
   }
 
   function removeMember(id) {
@@ -88,104 +76,63 @@ function CastSlider({ cast, setCast }) {
 
   if (cast.length === 0) {
     return (
-      <button
-        type="button"
-        onClick={addMember}
-        className="w-full rounded-[4px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] py-7 text-center font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
-      >
-        + Add first cast member
+      <button type="button" onClick={addMember}
+        className="group w-full rounded-[6px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-4 py-8 text-center transition hover:border-[var(--gold)] hover:bg-[rgba(217,166,83,0.04)]">
+        <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(217,166,83,0.25)] bg-[rgba(217,166,83,0.06)] text-lg text-[var(--gold-soft)]">+</div>
+        <div className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--parchment)]">Add first cast member</div>
+        <div className="mt-1 text-[0.68rem] text-[var(--mauve)]">Add actor, character and profile photo</div>
       </button>
     );
   }
 
   const current = cast[index];
-
   return (
-    <div className="relative rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-4">
-      {/* Navigation Header */}
-      <div className="mb-3 flex items-center justify-between px-2">
-        <button
-          type="button"
-          onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          disabled={index === 0}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
-        >
-          ‹
-        </button>
-
-        <span className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.08em] text-[var(--mauve)]">
-          Cast member {index + 1} of {cast.length}
-        </span>
-
-        <button
-          type="button"
-          onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))}
-          disabled={index === cast.length - 1}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
-        >
-          ›
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => removeMember(current.id)}
-        aria-label="Remove this cast member"
-        className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(224,138,107,0.35)] text-sm leading-none text-[var(--error)] transition-colors hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
-      >
-        ×
-      </button>
-
-      <div className="flex flex-col items-center">
-        <label className="block h-24 w-24 cursor-pointer overflow-hidden rounded-full border border-[rgba(239,231,218,0.2)] bg-[var(--velvet-deep)] transition-colors hover:border-[var(--gold)]">
-          {current.photoPreviewUrl ? (
-            <img
-              src={current.photoPreviewUrl}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-center text-[0.65rem] leading-none text-[var(--mauve)]">
-              No photo
-            </div>
-          )}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) =>
-              updatePhoto(current.id, e.target.files?.[0] ?? null)
-            }
-          />
-        </label>
-
-        <div className="mt-3 w-full space-y-2">
-          <input
-            type="text"
-            placeholder="Actor name"
-            value={current.name}
-            onChange={(e) => updateMember(current.id, "name", e.target.value)}
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-          />
-          <input
-            type="text"
-            placeholder="Character name"
-            value={current.characterName}
-            onChange={(e) =>
-              updateMember(current.id, "characterName", e.target.value)
-            }
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-          />
+    <div className="overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11]">
+      <div className="flex items-center justify-between border-b border-[rgba(239,231,218,0.1)] bg-[#141017] px-4 py-3">
+        <div>
+          <div className="font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.1em] text-[var(--mauve)]">Cast &amp; Crew</div>
+          <div className="mt-1 text-[0.72rem] text-[var(--parchment)]">Add actor, character and profile image.</div>
         </div>
+        <span className="rounded-full border border-[rgba(217,166,83,0.2)] bg-[rgba(217,166,83,0.06)] px-2.5 py-1 font-[var(--font-mono)] text-[0.62rem] text-[var(--gold-soft)]">{index + 1} / {cast.length}</span>
       </div>
 
-      <button
-        type="button"
-        onClick={addMember}
-        className="mt-3 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
-      >
-        + Add another cast member
-      </button>
+      <div className="p-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={index === 0} aria-label="Previous cast member"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-base text-[var(--parchment)] transition hover:border-[rgba(217,166,83,0.45)] hover:bg-[rgba(217,166,83,0.1)] disabled:cursor-not-allowed disabled:opacity-20">‹</button>
+          <div className="flex min-w-0 flex-1 justify-center gap-1.5 overflow-hidden">
+            {cast.map((member, i) => <button key={member.id} type="button" onClick={() => setIndex(i)} aria-label={`Select cast member ${i + 1}`}
+              className={`h-1.5 min-w-4 max-w-8 rounded-full transition-all ${i === index ? "bg-[var(--gold)]" : "bg-white/10 hover:bg-white/20"}`} />)}
+          </div>
+          <button type="button" onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))} disabled={index === cast.length - 1} aria-label="Next cast member"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-base text-[var(--parchment)] transition hover:border-[rgba(217,166,83,0.45)] hover:bg-[rgba(217,166,83,0.1)] disabled:cursor-not-allowed disabled:opacity-20">›</button>
+        </div>
+
+        <div className="relative grid gap-4 rounded-[5px] border border-[rgba(239,231,218,0.1)] bg-[#121016] p-4 sm:grid-cols-[112px_1fr]">
+          <button type="button" onClick={() => removeMember(current.id)} aria-label="Remove this cast member"
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(224,138,107,0.3)] bg-[#121016] text-sm text-[var(--error)] transition hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]">×</button>
+
+          <label className="group mx-auto block h-28 w-28 cursor-pointer overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.16)] bg-[var(--velvet-deep)] transition hover:border-[var(--gold)] sm:mx-0">
+            {current.photoPreviewUrl ? <img src={current.photoPreviewUrl} alt={current.name || "Cast member"} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" /> :
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-center text-[var(--mauve)]"><Users size={22} strokeWidth={1.5} /><span className="text-[0.6rem] uppercase tracking-[0.06em]">Add photo</span></div>}
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => updatePhoto(current.id, e.target.files?.[0] ?? null)} />
+          </label>
+
+          <div className="min-w-0 space-y-3 pr-6">
+            <div><label className="mb-1.5 block font-[var(--font-mono)] text-[0.58rem] uppercase tracking-[0.08em] text-[var(--mauve)]">Actor / Artist name</label>
+              <input type="text" placeholder="e.g. Tom Hanks" value={current.name} onChange={(e) => updateMember(current.id, "name", e.target.value)}
+                className="w-full rounded-[4px] border border-[rgba(239,231,218,0.14)] bg-[#17131a] px-3 py-2.5 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] transition focus:border-[var(--gold)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.12)]" /></div>
+            <div><label className="mb-1.5 block font-[var(--font-mono)] text-[0.58rem] uppercase tracking-[0.08em] text-[var(--mauve)]">Character name</label>
+              <input type="text" placeholder="e.g. Mr. White" value={current.characterName} onChange={(e) => updateMember(current.id, "characterName", e.target.value)}
+                className="w-full rounded-[4px] border border-[rgba(239,231,218,0.14)] bg-[#17131a] px-3 py-2.5 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] transition focus:border-[var(--gold)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.12)]" /></div>
+          </div>
+        </div>
+
+        <button type="button" onClick={addMember}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-[4px] border border-dashed border-[rgba(239,231,218,0.18)] bg-transparent py-2.5 font-[var(--font-mono)] text-[0.63rem] uppercase tracking-[0.07em] text-[var(--mauve)] transition hover:border-[var(--gold)] hover:bg-[rgba(217,166,83,0.04)] hover:text-[var(--gold-soft)]">
+          <Plus size={14} /> Add another cast member
+        </button>
+      </div>
     </div>
   );
 }
@@ -214,6 +161,8 @@ export default function UploadVideo() {
   const [uploadPercent, setUploadPercent] = useState(0);
   const [processingPercent, setProcessingPercent] = useState(0);
   const [phase, setPhase] = useState("idle");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [thumbnailPreviewOpen, setThumbnailPreviewOpen] = useState(false);
 
   const processingTimerRef = useRef(null);
 
@@ -228,6 +177,19 @@ export default function UploadVideo() {
       if (thumbnailPreviewUrl) URL.revokeObjectURL(thumbnailPreviewUrl);
     };
   }, [thumbnailPreviewUrl]);
+
+  useEffect(() => {
+    if (!submitting) return;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "Your video is still uploading. Please do not refresh or close this page.";
+      return event.returnValue;
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [submitting]);
 
   useEffect(() => {
     if (phase !== "processing") {
@@ -394,12 +356,12 @@ export default function UploadVideo() {
                 <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
                   Tags <span className="normal-case">(comma-separated)</span>
                 </label>
-                <input
-                  type="text"
+                <textarea
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
                   placeholder="noir, single-take, festival-cut"
-                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                  rows={2}
+                  className="max-h-[72px] min-h-[42px] w-full resize-none overflow-y-auto rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs leading-relaxed text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
                 />
               </div>
 
@@ -429,22 +391,33 @@ export default function UploadVideo() {
                 ) : (
                   <div className="w-full overflow-hidden rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11]">
                     <div className="relative">
-                      <img
-                        src={thumbnailPreviewUrl}
-                        alt="Thumbnail preview"
-                        className="h-[85px] w-full object-cover"
-                      />
+                      <div className="flex min-h-[170px] max-h-[240px] items-center justify-center bg-black p-2">
+                        <img
+                          src={thumbnailPreviewUrl}
+                          alt="Thumbnail preview"
+                          className="max-h-[220px] w-full object-contain rounded-[2px]"
+                        />
+                      </div>
                       {!submitting && (
                         <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center justify-between">
-                          <label className="cursor-pointer rounded-[3px] bg-[#0f0c11]/90 px-2 py-0.5 text-[0.65rem] text-[var(--parchment)] hover:border-[var(--gold)] border border-white/10">
-                            Change
-                            <input
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setThumbnailPreviewOpen(true)}
+                              className="rounded-[3px] border border-white/10 bg-[#0f0c11]/90 px-2 py-0.5 text-[0.65rem] text-[var(--parchment)] hover:border-[var(--gold)]"
+                            >
+                              Preview
+                            </button>
+                            <label className="cursor-pointer rounded-[3px] border border-white/10 bg-[#0f0c11]/90 px-2 py-0.5 text-[0.65rem] text-[var(--parchment)] hover:border-[var(--gold)]">
+                              Change
+                              <input
                               type="file"
                               accept="image/jpeg,image/png,image/webp"
                               onChange={handleThumbnailChange}
                               className="hidden"
                             />
-                          </label>
+                            </label>
+                          </div>
                           <button
                             type="button"
                             onClick={removeThumbnail}
@@ -459,19 +432,6 @@ export default function UploadVideo() {
                 )}
               </div>
 
-              {/* Language */}
-              <div>
-                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                  Language
-                </label>
-                <input
-                  type="text"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  placeholder="Enter language"
-                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-                />
-              </div>
             </div>
 
             {/* CENTER COLUMN (Film Stage, Cast, Action Button) */}
@@ -536,10 +496,31 @@ export default function UploadVideo() {
                       />
 
                       {!submitting && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                          <span className="rounded-[3px] border border-white/20 bg-[#17131a] px-4 py-2 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.08em] text-[var(--parchment)]">
-                            Choose another video
-                          </span>
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setPreviewOpen(true);
+                            }}
+                            className="rounded-[3px] border border-white/15 bg-[#0f0c11]/95 px-3 py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.08em] text-[var(--parchment)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)]"
+                          >
+                            Preview video
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (filmPreviewUrl) URL.revokeObjectURL(filmPreviewUrl);
+                              setFilm(null);
+                              setFilmPreviewUrl(null);
+                            }}
+                            className="rounded-[3px] border border-[rgba(224,138,107,0.35)] bg-[#0f0c11]/95 px-3 py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.08em] text-[var(--error)] hover:border-[var(--error)]"
+                          >
+                            Cancel
+                          </button>
                         </div>
                       )}
 
@@ -691,9 +672,52 @@ export default function UploadVideo() {
                   />
                 </div>
               </div>
+
+              {/* Language */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Language
+                </label>
+                <textarea
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  placeholder="Enter language"
+                  rows={2}
+                  className="max-h-[72px] min-h-[42px] w-full resize-none overflow-y-auto rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs leading-relaxed text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
+              </div>
             </div>
           </div>
         </form>
+
+        {previewOpen && filmPreviewUrl && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" onClick={() => setPreviewOpen(false)}>
+            <div className="w-full max-w-5xl rounded-[6px] border border-white/10 bg-[#0f0c11] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">Video Preview</p>
+                  <p className="mt-1 text-xs text-[var(--mauve)]">{film?.name}</p>
+                </div>
+                <button type="button" onClick={() => setPreviewOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] hover:border-[var(--gold)]" aria-label="Close preview">×</button>
+              </div>
+              <video src={filmPreviewUrl} controls autoPlay playsInline className="max-h-[70vh] w-full rounded-[4px] bg-black object-contain" />
+            </div>
+          </div>
+        )}
+
+        {thumbnailPreviewOpen && thumbnailPreviewUrl && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" onClick={() => setThumbnailPreviewOpen(false)}>
+            <div className="w-full max-w-4xl rounded-[6px] border border-white/10 bg-[#0f0c11] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.14em] text-[var(--gold)]">Thumbnail Preview</p>
+                <button type="button" onClick={() => setThumbnailPreviewOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] hover:border-[var(--gold)]" aria-label="Close thumbnail preview">×</button>
+              </div>
+              <div className="flex max-h-[75vh] items-center justify-center rounded-[4px] bg-black p-3">
+                <img src={thumbnailPreviewUrl} alt="Full thumbnail preview" className="max-h-[70vh] max-w-full object-contain" />
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
