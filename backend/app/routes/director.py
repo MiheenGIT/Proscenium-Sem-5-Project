@@ -13,6 +13,8 @@ from utils.cloudinary_helpers import (
     upload_avatar,
     _cleanup_cloudinary_assets,
     delete_cast_photo,
+    cleanup_old_video_renditions,
+    cleanup_old_thumbnail,
 )
 
 import os
@@ -1518,6 +1520,15 @@ async def reupload_video(
     )
 
     # ========================================================
+    # CLEAN UP PREVIOUS CLOUDINARY ASSETS (best-effort)
+    # ========================================================
+
+    cleanup_old_video_renditions(video_id, video)
+
+    if new_thumbnail_url:
+        cleanup_old_thumbnail(video_id, video.get("thumbnailUrl"))
+
+    # ========================================================
     # RESPONSE
     # ========================================================
 
@@ -2180,7 +2191,8 @@ async def delete_my_video(
     # ========================================================
 
     _cleanup_cloudinary_assets(
-        video_id
+        video_id,
+        video,
     )
 
     # ========================================================
@@ -2406,6 +2418,11 @@ async def update_video_metadata(
             "thumbnailUrl"
         ] = thumbnail_url
 
+        cleanup_old_thumbnail(
+            video_id,
+            video.get("thumbnailUrl"),
+        )
+
     # ========================================================
     # UPDATE CAST
     # ========================================================
@@ -2529,11 +2546,21 @@ async def update_video_metadata(
 
                 if has_new_photo:
 
+                    previous_cast_doc = cast_collection.find_one(
+                        {"_id": ObjectId(member_id)},
+                        {"photoUrl": 1},
+                    )
+
                     update[
                         "photoUrl"
                     ] = upload_avatar(
                         photo_file,
                         f"{video_id}_cast_{member_id}",
+                        previous_url=(
+                            previous_cast_doc.get("photoUrl")
+                            if previous_cast_doc
+                            else None
+                        ),
                     )
 
                 cast_collection.update_one(
@@ -2627,6 +2654,7 @@ async def update_video_metadata(
                 delete_cast_photo(
                     video_id,
                     removed_id,
+                    video,
                 )
 
             cast_collection.delete_many(
@@ -2698,7 +2726,20 @@ def update_director_avatar(
     if not avatar:
         raise HTTPException(status_code=400, detail="Avatar file is required")
 
-    avatar_url = upload_avatar(avatar, user_id)
+    existing_director = directors_collection.find_one(
+        {"_id": ObjectId(user_id)},
+        {"avatarUrl": 1},
+    )
+
+    avatar_url = upload_avatar(
+        avatar,
+        user_id,
+        previous_url=(
+            existing_director.get("avatarUrl")
+            if existing_director
+            else None
+        ),
+    )
     if not avatar_url:
         raise HTTPException(status_code=500, detail="Failed to upload avatar to storage")
 

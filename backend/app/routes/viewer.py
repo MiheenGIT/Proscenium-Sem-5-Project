@@ -2024,6 +2024,7 @@ def update_viewer_avatar(
         url = upload_avatar(
             avatar,
             str(viewer["_id"]),
+            previous_url=viewer.get("avatarUrl"),
         )
     except Exception as exc:
         raise HTTPException(
