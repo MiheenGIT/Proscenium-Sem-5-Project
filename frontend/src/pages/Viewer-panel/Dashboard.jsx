@@ -1,4 +1,8 @@
-import React, {useEffect,useMemo,useState,} from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import HeroBanner from "../../components/Dashboard/HeroBanner.jsx";
@@ -7,7 +11,7 @@ import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import TopReviewsModal from "../../components/Dashboard/TopReviewsModal.jsx";
 
 import { getRequest, postJson } from "../../api/client.js";
-import { ErrorState,} from "../../components/common/States.jsx";
+import { ErrorState } from "../../components/common/States.jsx";
 
 const fallbackGenres = [
   "Mystery",
@@ -102,7 +106,8 @@ function HomeInner() {
 
   const [genre, setGenre] = useState("");
   const [hero, setHero] = useState(0);
-  const [selectedReviewVideo, setSelectedReviewVideo] = useState(null);
+  const [selectedReviewVideo, setSelectedReviewVideo] =
+    useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -179,7 +184,9 @@ function HomeInner() {
       }
 
       if (profileResult.status === "fulfilled") {
-        setProfile(profileResult.value || null);
+        setProfile(
+          profileResult.value || null
+        );
       } else {
         setProfile(null);
       }
@@ -257,10 +264,53 @@ function HomeInner() {
     [history]
   );
 
+  /*
+   * HERO / FEATURED VIDEOS
+   *
+   * The first five videos are used in the hero carousel.
+   */
   const featured = useMemo(
     () => videos.slice(0, 5),
     [videos]
   );
+
+  /*
+   * Reset the hero position whenever the selected
+   * genre changes.
+   *
+   * This prevents the dashboard from trying to show
+   * an old hero index that may not exist in the new
+   * filtered video list.
+   */
+  useEffect(() => {
+    setHero(0);
+  }, [genre]);
+
+  /*
+   * HERO AUTOPLAY
+   *
+   * Automatically move to the next featured video
+   * every 5 seconds.
+   *
+   * The functional setHero() is important because it
+   * always uses the latest hero index.
+   */
+  useEffect(() => {
+    if (featured.length <= 1) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setHero(
+        (current) =>
+          (current + 1) % featured.length
+      );
+    }, 5000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [featured.length]);
 
   const madeForYou = useMemo(
     () =>
@@ -422,6 +472,10 @@ function HomeInner() {
     );
   }
 
+  /*
+   * Protect the hero index from ever going outside
+   * the current featured array.
+   */
   const currentHero =
     featured.length > 0
       ? featured[
@@ -432,256 +486,318 @@ function HomeInner() {
   return (
     <div className="min-w-0">
       <main className="min-w-0 overflow-hidden">
-          <HeroBanner
-            video={currentHero}
-            saved={
-              currentHero
-                ? savedIds.has(
-                    currentHero.id
-                  )
-                : false
-            }
-            onSave={save}
-            onPlay={play}
-            onInfo={(video) =>
-              navigate(
-                `/viewer/videos/${video.id}`
-              )
-            }
-            index={hero}
-            total={featured.length}
-            onPrev={() =>
-              featured.length &&
-              setHero(
-                (value) =>
-                  (value -
-                    1 +
-                    featured.length) %
-                  featured.length
-              )
-            }
-            onNext={() =>
-              featured.length &&
-              setHero(
-                (value) =>
-                  (value + 1) %
-                  featured.length
-              )
-            }
-          />
+        <HeroBanner
+          video={currentHero}
+          saved={
+            currentHero
+              ? savedIds.has(
+                  currentHero.id
+                )
+              : false
+          }
+          onSave={save}
+          onPlay={play}
+          onInfo={(video) =>
+            navigate(
+              `/viewer/videos/${video.id}`
+            )
+          }
+          index={hero}
+          total={featured.length}
+          onPrev={() =>
+            featured.length &&
+            setHero(
+              (value) =>
+                (value -
+                  1 +
+                  featured.length) %
+                featured.length
+            )
+          }
+          onNext={() =>
+            featured.length &&
+            setHero(
+              (value) =>
+                (value + 1) %
+                featured.length
+            )
+          }
+        />
 
-          <div className="sticky top-[72px] z-30 lg:top-[112px] lg:z-30 border-b border-white/[0.06] bg-[#100d10]/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
-            <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="sticky top-[72px] z-30 lg:top-[112px] lg:z-30 border-b border-white/[0.06] bg-[#100d10]/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+          <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              onClick={() => setGenre("")}
+              className={`shrink-0 rounded-full border px-4 py-2 text-[9px] font-semibold ${
+                !genre
+                  ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
+                  : "border-white/10 bg-white/[0.025] text-[#968b8f]"
+              }`}
+            >
+              All
+            </button>
+
+            {(genres.length
+              ? genres
+              : fallbackGenres
+            ).map((item) => (
               <button
-                onClick={() => setGenre("")}
-                className={`shrink-0 rounded-full border px-4 py-2 text-[9px] font-semibold ${
-                  !genre
-                    ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
-                    : "border-white/10 bg-white/[0.025] text-[#968b8f]"
-                }`}
-              >
-                All
-              </button>
-
-              {(genres.length
-                ? genres
-                : fallbackGenres
-              ).map((item) => (
-                <button
-                  key={item}
-                  onClick={() =>
-                    setGenre(
-                      item === genre
-                        ? ""
-                        : item
-                    )
-                  }
-                  className={`shrink-0 rounded-full border px-4 py-2 text-[9px] font-semibold ${
-                    genre.toLowerCase() ===
-                    item.toLowerCase()
-                      ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
-                      : "border-white/10 bg-white/[0.025] text-[#968b8f] hover:text-[#efe7da]"
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <MovieRow
-            title="Continue Watching"
-            subtitle="Pick up exactly where you left off."
-            videos={continueWatching}
-            savedIds={savedIds}
-            likedIds={likedIds}
-            onPlay={play}
-            onSaved={onSaved}
-            onShowReviews={(v) => setSelectedReviewVideo(v)}
-          />
-
-          <MovieRow
-            title="Made For You"
-            subtitle="Recommendations shaped by your viewing taste."
-            videos={madeForYou}
-            savedIds={savedIds}
-            likedIds={likedIds}
-            onPlay={play}
-            onSaved={onSaved}
-            onLiked={() => {}}
-            onShowReviews={(v) => setSelectedReviewVideo(v)}
-          />
-
-          <MovieRow
-            title={
-              watchedGenres[0]
-                ? `Because You Watched ${watchedGenres[0]}`
-                : "Discover Your Next Story"
-            }
-            videos={
-              watchedGenres.length
-                ? madeForYou.filter(
-                    (video) =>
-                      video.genres?.some(
-                        (item) =>
-                          item.toLowerCase() ===
-                          watchedGenres[0].toLowerCase()
-                      )
-                  )
-                : madeForYou
-            }
-            savedIds={savedIds}
-            likedIds={likedIds}
-            onPlay={play}
-            onSaved={onSaved}
-            onShowReviews={(v) => setSelectedReviewVideo(v)}
-          />
-
-          <MovieRow
-            title="Trending Now"
-            subtitle="Popular across the Proscenium library."
-            videos={trending}
-            savedIds={savedIds}
-            likedIds={likedIds}
-            onPlay={play}
-            onSaved={onSaved}
-            onShowReviews={(v) => setSelectedReviewVideo(v)}
-          />
-
-          <MovieRow
-            title="New on Proscenium"
-            videos={newReleases}
-            savedIds={savedIds}
-            likedIds={likedIds}
-            onPlay={play}
-            onSaved={onSaved}
-            onShowReviews={(v) => setSelectedReviewVideo(v)}
-          />
-
-          <MovieRow
-            title="Your Watchlist"
-            videos={watchlist}
-            savedIds={savedIds}
-            likedIds={likedIds}
-            onPlay={play}
-            onSaved={onSaved}
-            onShowReviews={(v) => setSelectedReviewVideo(v)}
-            action={
-              <button
+                key={item}
                 onClick={() =>
-                  navigate(
-                    "/watchlist"
+                  setGenre(
+                    item === genre
+                      ? ""
+                      : item
                   )
                 }
-                className="text-[9px] uppercase tracking-[.16em] text-[#d9a653]"
+                className={`shrink-0 rounded-full border px-4 py-2 text-[9px] font-semibold ${
+                  genre.toLowerCase() ===
+                  item.toLowerCase()
+                    ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
+                    : "border-white/10 bg-white/[0.025] text-[#968b8f] hover:text-[#efe7da]"
+                }`}
               >
-                View all
+                {item}
               </button>
-            }
-          />
+            ))}
+          </div>
+        </div>
 
-          <section className="mx-auto max-w-[1680px] px-4 pb-12 sm:px-6 lg:px-10">
-            <div className="overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-br from-[#5c1220]/35 via-white/[0.02] to-transparent p-5 sm:p-6">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-[8px] font-bold uppercase tracking-[.2em] text-[#d9a653]">
-                    Your cinema
-                  </p>
-                  <h2 className="mt-1 font-[var(--font-display)] text-2xl text-[#efe7da]">
-                    {profile?.username ? `Welcome back, ${profile.username}` : "Your viewing space"}
-                  </h2>
-                  <p className="mt-1 text-[10px] text-[#8f8388]">
-                    Everything you save, like, review, and watch stays connected to your profile.
-                  </p>
-                </div>
+        <MovieRow
+          title="Continue Watching"
+          subtitle="Pick up exactly where you left off."
+          videos={continueWatching}
+          savedIds={savedIds}
+          likedIds={likedIds}
+          onPlay={play}
+          onSaved={onSaved}
+          onShowReviews={(v) =>
+            setSelectedReviewVideo(v)
+          }
+        />
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {[
-                    ["Watched", history.length, "/history"],
-                    ["Saved", watchlist.length, "/watchlist"],
-                    ["Liked", liked.length, "/liked"],
-                    ["Reviews", reviews.length, "/reviews"],
-                  ].map(([label, value, to]) => (
+        <MovieRow
+          title="Made For You"
+          subtitle="Recommendations shaped by your viewing taste."
+          videos={madeForYou}
+          savedIds={savedIds}
+          likedIds={likedIds}
+          onPlay={play}
+          onSaved={onSaved}
+          onLiked={() => {}}
+          onShowReviews={(v) =>
+            setSelectedReviewVideo(v)
+          }
+        />
+
+        <MovieRow
+          title={
+            watchedGenres[0]
+              ? `Because You Watched ${watchedGenres[0]}`
+              : "Discover Your Next Story"
+          }
+          videos={
+            watchedGenres.length
+              ? madeForYou.filter(
+                  (video) =>
+                    video.genres?.some(
+                      (item) =>
+                        item.toLowerCase() ===
+                        watchedGenres[0].toLowerCase()
+                    )
+                )
+              : madeForYou
+          }
+          savedIds={savedIds}
+          likedIds={likedIds}
+          onPlay={play}
+          onSaved={onSaved}
+          onShowReviews={(v) =>
+            setSelectedReviewVideo(v)
+          }
+        />
+
+        <MovieRow
+          title="Trending Now"
+          subtitle="Popular across the Proscenium library."
+          videos={trending}
+          savedIds={savedIds}
+          likedIds={likedIds}
+          onPlay={play}
+          onSaved={onSaved}
+          onShowReviews={(v) =>
+            setSelectedReviewVideo(v)
+          }
+        />
+
+        <MovieRow
+          title="New on Proscenium"
+          videos={newReleases}
+          savedIds={savedIds}
+          likedIds={likedIds}
+          onPlay={play}
+          onSaved={onSaved}
+          onShowReviews={(v) =>
+            setSelectedReviewVideo(v)
+          }
+        />
+
+        <MovieRow
+          title="Your Watchlist"
+          videos={watchlist}
+          savedIds={savedIds}
+          likedIds={likedIds}
+          onPlay={play}
+          onSaved={onSaved}
+          onShowReviews={(v) =>
+            setSelectedReviewVideo(v)
+          }
+          action={
+            <button
+              onClick={() =>
+                navigate(
+                  "/watchlist"
+                )
+              }
+              className="text-[9px] uppercase tracking-[.16em] text-[#d9a653]"
+            >
+              View all
+            </button>
+          }
+        />
+
+        <section className="mx-auto max-w-[1680px] px-4 pb-12 sm:px-6 lg:px-10">
+          <div className="overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-br from-[#5c1220]/35 via-white/[0.02] to-transparent p-5 sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-[.2em] text-[#d9a653]">
+                  Your cinema
+                </p>
+
+                <h2 className="mt-1 font-[var(--font-display)] text-2xl text-[#efe7da]">
+                  {profile?.username
+                    ? `Welcome back, ${profile.username}`
+                    : "Your viewing space"}
+                </h2>
+
+                <p className="mt-1 text-[10px] text-[#8f8388]">
+                  Everything you save, like, review, and watch stays connected to your profile.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  [
+                    "Watched",
+                    history.length,
+                    "/history",
+                  ],
+                  [
+                    "Saved",
+                    watchlist.length,
+                    "/watchlist",
+                  ],
+                  [
+                    "Liked",
+                    liked.length,
+                    "/liked",
+                  ],
+                  [
+                    "Reviews",
+                    reviews.length,
+                    "/reviews",
+                  ],
+                ].map(
+                  ([label, value, to]) => (
                     <button
                       key={label}
                       type="button"
-                      onClick={() => navigate(to)}
+                      onClick={() =>
+                        navigate(to)
+                      }
                       className="min-w-[105px] rounded-2xl border border-white/[0.07] bg-black/20 px-4 py-3 text-left transition hover:border-[#d9a653]/25 hover:bg-white/[0.04]"
                     >
-                      <b className="block text-lg text-[#efe7da]">{value}</b>
-                      <span className="text-[8px] uppercase tracking-[.15em] text-[#756a6f]">{label}</span>
+                      <b className="block text-lg text-[#efe7da]">
+                        {value}
+                      </b>
+
+                      <span className="text-[8px] uppercase tracking-[.15em] text-[#756a6f]">
+                        {label}
+                      </span>
                     </button>
-                  ))}
-                </div>
+                  )
+                )}
               </div>
+            </div>
 
-              {watchlist.length > 0 && (
-                <div className="mt-5 border-t border-white/[0.06] pt-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bdb1b4]">
-                      Saved for later
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/watchlist")}
-                      className="text-[9px] text-[#d9a653] hover:text-[#e6c184]"
-                    >
-                      Open watchlist →
-                    </button>
-                  </div>
+            {watchlist.length > 0 && (
+              <div className="mt-5 border-t border-white/[0.06] pt-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bdb1b4]">
+                    Saved for later
+                  </h3>
 
-                  <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {watchlist.slice(0, 6).map((video) => (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        "/watchlist"
+                      )
+                    }
+                    className="text-[9px] text-[#d9a653] hover:text-[#e6c184]"
+                  >
+                    Open watchlist →
+                  </button>
+                </div>
+
+                <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {watchlist
+                    .slice(0, 6)
+                    .map((video) => (
                       <button
                         key={video.id}
                         type="button"
-                        onClick={() => play(video)}
+                        onClick={() =>
+                          play(video)
+                        }
                         className="group flex w-[210px] shrink-0 items-center gap-3 rounded-2xl border border-white/[0.06] bg-black/20 p-2 text-left transition hover:border-[#d9a653]/25"
                       >
                         <img
-                          src={video.thumbnailUrl}
+                          src={
+                            video.thumbnailUrl
+                          }
                           alt=""
                           className="h-12 w-20 rounded-xl object-cover transition group-hover:scale-[1.03]"
                         />
+
                         <span className="min-w-0">
-                          <b className="block truncate text-[10px] text-[#ded4d6]">{video.title}</b>
+                          <b className="block truncate text-[10px] text-[#ded4d6]">
+                            {video.title}
+                          </b>
+
                           <small className="mt-1 block truncate text-[8px] text-[#756a6f]">
-                            {(video.genres || []).slice(0, 2).join(" • ") || "Film"}
+                            {(video.genres ||
+                              [])
+                              .slice(0, 2)
+                              .join(" • ") ||
+                              "Film"}
                           </small>
                         </span>
                       </button>
                     ))}
-                  </div>
                 </div>
-              )}
-            </div>
-          </section>
+              </div>
+            )}
+          </div>
+        </section>
       </main>
 
       {selectedReviewVideo && (
         <TopReviewsModal
           video={selectedReviewVideo}
-          onClose={() => setSelectedReviewVideo(null)}
+          onClose={() =>
+            setSelectedReviewVideo(null)
+          }
           onPlay={play}
         />
       )}
