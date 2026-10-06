@@ -6,6 +6,7 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
+    BackgroundTasks,
 )
 
 from utils.security import require_role
@@ -43,6 +44,11 @@ from database import (
 )
 
 from models.schemas import BioUpdateRequest
+
+from utils.email_service import (
+    notify_admin_reuploaded,
+    notify_admin_resubmitted,
+)
 
 from utils.AIhelpers import (
     ai_upscale_video_espcn,
@@ -1274,8 +1280,11 @@ async def upload_vid(
 @router.post("/videos/{video_id}/reupload")
 async def reupload_video(
     video_id: str,
+    background_tasks: BackgroundTasks,
     film: UploadFile = File(...),
     thumbnail: UploadFile | None = File(None),
+    oldTitle: str | None = Form(None),
+    title: str | None = Form(None),
     payload: dict = Depends(
         require_role("director")
     ),
@@ -1405,28 +1414,29 @@ async def reupload_video(
         )
 
     # ========================================================
+    # REMOVE OLD RENDITIONS BEFORE UPLOADING NEW ONES
+    # ========================================================
+    # Must run BEFORE the new HLS build: old and new renditions
+    # share the same "proscenium/{video_id}/..." prefix, so
+    # deleting by that prefix AFTER the new upload would wipe
+    # the fresh renditions too, not just the old ones.
+
+    cleanup_old_video_renditions(video_id, video)
+
+    # ========================================================
     # THUMBNAIL, AI UPSCALING, HLS
     # ========================================================
 
     try:
-        new_thumbnail_url = None
-
-        if (
-            thumbnail is not None
-            and getattr(
-                thumbnail,
-                "filename",
-                "",
-            )
-        ):
-
-            new_thumbnail_url = _prepare_thumbnail(
-                thumbnail_file=thumbnail,
-                raw_path=raw_path,
-                video_id=video_id,
-                media_folder=video_media_folder,
-                duration_sec=duration_sec,
-            )
+        # Uses the director's image if one was sent, otherwise
+        # auto-generates a frame from the newly re-uploaded video.
+        new_thumbnail_url = _prepare_thumbnail(
+            thumbnail_file=thumbnail,
+            raw_path=raw_path,
+            video_id=video_id,
+            media_folder=video_media_folder,
+            duration_sec=duration_sec,
+        )
 
         hls_input = await _prepare_hls_input(
             raw_path=raw_path,
@@ -1520,10 +1530,8 @@ async def reupload_video(
     )
 
     # ========================================================
-    # CLEAN UP PREVIOUS CLOUDINARY ASSETS (best-effort)
+    # CLEAN UP PREVIOUS THUMBNAIL (best-effort, cross-account only)
     # ========================================================
-
-    cleanup_old_video_renditions(video_id, video)
 
     if new_thumbnail_url:
         cleanup_old_thumbnail(video_id, video.get("thumbnailUrl"))
@@ -1531,6 +1539,20 @@ async def reupload_video(
     # ========================================================
     # RESPONSE
     # ========================================================
+
+    director = directors_collection.find_one(
+        {"_id": ObjectId(payload["user_id"])},
+        {"username": 1, "email": 1},
+    )
+    if director:
+        prev_title = oldTitle or video.get("title", "Untitled")
+        curr_title = title or video.get("title", "Untitled")
+        background_tasks.add_task(
+            notify_admin_reuploaded,
+            director,
+            prev_title,
+            curr_title,
+        )
 
     response = {
         "video_id": video_id,
@@ -1639,6 +1661,7 @@ async def get_moderation_status(
 )
 async def resubmit_video(
     video_id: str,
+    background_tasks: BackgroundTasks,
     payload: dict = Depends(
         require_role("director")
     ),
@@ -1727,6 +1750,17 @@ async def resubmit_video(
             },
         },
     )
+
+    director = directors_collection.find_one(
+        {"_id": ObjectId(payload["user_id"])},
+        {"username": 1, "email": 1},
+    )
+    if director:
+        background_tasks.add_task(
+            notify_admin_resubmitted,
+            director,
+            video.get("title", "Untitled"),
+        )
 
     return {
         "message": (
@@ -2260,6 +2294,8 @@ async def update_video_metadata(
 
     thumbnail: UploadFile | None = File(None),
 
+    autoGenerateThumbnail: str | None = Form(None),
+
     releaseYear: int | None = Form(None),
 
     # JSON array:
@@ -2394,6 +2430,10 @@ async def update_video_metadata(
     # UPDATE THUMBNAIL
     # ========================================================
 
+    is_auto_thumbnail = (
+        autoGenerateThumbnail or ""
+    ).lower() in ("true", "1", "yes")
+
     if (
         thumbnail is not None
         and getattr(
@@ -2402,7 +2442,6 @@ async def update_video_metadata(
             "",
         )
     ):
-
         thumbnail_url = _prepare_thumbnail(
             thumbnail_file=thumbnail,
             raw_path="",
@@ -2422,6 +2461,41 @@ async def update_video_metadata(
             video_id,
             video.get("thumbnailUrl"),
         )
+
+    elif is_auto_thumbnail:
+        stream_source = video.get("hlsManifestUrl")
+        if stream_source:
+            thumbnail_folder = os.path.join(
+                media_root,
+                video_id,
+                "thumbnail",
+            )
+            os.makedirs(thumbnail_folder, exist_ok=True)
+            try:
+                thumbnail_path = os.path.join(
+                    thumbnail_folder,
+                    "thumbnail.jpg",
+                )
+                duration = float(video.get("durationSec") or 0)
+                _generate_video_thumbnail(
+                    stream_source,
+                    thumbnail_path,
+                    duration,
+                )
+                auto_url = _upload_thumbnail(
+                    thumbnail_path,
+                    video_id,
+                )
+                update_fields["thumbnailUrl"] = auto_url
+                cleanup_old_thumbnail(
+                    video_id,
+                    video.get("thumbnailUrl"),
+                )
+            finally:
+                shutil.rmtree(
+                    thumbnail_folder,
+                    ignore_errors=True,
+                )
 
     # ========================================================
     # UPDATE CAST

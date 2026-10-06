@@ -2,7 +2,7 @@ from datetime import datetime
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from database import (
     cast_collection,
@@ -25,6 +25,12 @@ from models.schemas import (
     RejectVideoRequest,
 )
 from utils.security import require_role
+from utils.email_service import (
+    build_new_release_message,
+    notify_director_approved,
+    notify_director_rejected,
+    send_many,
+)
 from utils.moderation import check_comment_text
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -84,6 +90,39 @@ def _get_video_or_404(video_id: str):
 
 def _serialize_video(video: dict) -> dict:
     return _serialize_mongo(video)
+
+
+def _queue_director_email(background_tasks: BackgroundTasks, video: dict, notify_fn, *args):
+    """Look up the film's director and queue an email to send after the response."""
+    director = directors_collection.find_one(
+        {"_id": video.get("directorId")},
+        {"username": 1, "email": 1},
+    )
+    if director:
+        background_tasks.add_task(
+            notify_fn,
+            director,
+            video.get("title", "Untitled"),
+            *args,
+            thumbnail_url=video.get("thumbnailUrl"),
+        )
+
+
+def _queue_new_release_emails(background_tasks: BackgroundTasks, video: dict):
+    """Queue one new-release email per opted-in viewer (sent after the response)."""
+    messages = [
+        build_new_release_message(viewer, video)
+        for viewer in viewers_collection.find(
+            {
+                "newReleaseNotifications": {"$ne": False},
+                "emailNotifications": {"$ne": False},
+                "email": {"$exists": True, "$ne": None},
+            },
+            {"username": 1, "email": 1},
+        )
+    ]
+    if messages:
+        background_tasks.add_task(send_many, messages)
 
 
 def _feedback_is_flagged(item: dict) -> bool:
@@ -310,6 +349,7 @@ def watch_video(
 def approve_video(
     video_id: str,
     body: ApproveVideoRequest,
+    background_tasks: BackgroundTasks,
     payload: dict = Depends(require_role("admin")),
 ):
     oid, video = _get_video_or_404(video_id)
@@ -369,6 +409,9 @@ def approve_video(
             }
         )
 
+    _queue_director_email(background_tasks, video, notify_director_approved, body.comment)
+    _queue_new_release_emails(background_tasks, video)
+
     return {
         "message": "Video approved",
         "videoId": video_id,
@@ -384,6 +427,7 @@ def approve_video(
 def reject_video(
     video_id: str,
     body: RejectVideoRequest,
+    background_tasks: BackgroundTasks,
     payload: dict = Depends(require_role("admin")),
 ):
     oid, video = _get_video_or_404(video_id)
@@ -420,6 +464,8 @@ def reject_video(
             },
         },
     )
+
+    _queue_director_email(background_tasks, video, notify_director_rejected, body.reason)
 
     return {
         "message": "Video rejected",
@@ -662,6 +708,7 @@ def list_admin_notes(
 @router.post("/videos/bulk-approve")
 def bulk_approve_videos(
     body: BulkApproveRequest,
+    background_tasks: BackgroundTasks,
     payload: dict = Depends(require_role("admin")),
 ):
     now = datetime.utcnow()
@@ -722,6 +769,8 @@ def bulk_approve_videos(
                 }
             )
 
+        _queue_director_email(background_tasks, video, notify_director_approved, body.comment)
+        _queue_new_release_emails(background_tasks, video)
         results.append({"videoId": video_id, "success": True})
 
     return {
@@ -734,6 +783,7 @@ def bulk_approve_videos(
 @router.post("/videos/bulk-reject")
 def bulk_reject_videos(
     body: BulkRejectRequest,
+    background_tasks: BackgroundTasks,
     payload: dict = Depends(require_role("admin")),
 ):
     now = datetime.utcnow()
@@ -773,6 +823,7 @@ def bulk_reject_videos(
             },
         )
 
+        _queue_director_email(background_tasks, video, notify_director_rejected, body.reason)
         results.append({"videoId": video_id, "success": True})
 
     return {

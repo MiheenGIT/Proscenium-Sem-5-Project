@@ -206,6 +206,9 @@ export default function EditVideo() {
 
   const [newFilm, setNewFilm] = useState(null);
   const [newFilmPreviewUrl, setNewFilmPreviewUrl] = useState(null);
+  const [newThumbnail, setNewThumbnail] = useState(null);
+  const [newThumbnailPreviewUrl, setNewThumbnailPreviewUrl] = useState(null);
+  const [resetToAutoThumbnail, setResetToAutoThumbnail] = useState(false);
   const [reuploading, setReuploading] = useState(false);
   const [reuploadError, setReuploadError] = useState(null);
   const [reuploadPercent, setReuploadPercent] = useState(0);
@@ -294,8 +297,14 @@ export default function EditVideo() {
       title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl,
       cast: cast.map((c) => ({ name: c.name, characterName: c.characterName })),
     });
-    setIsDirty(current !== initialSnapshotRef.current || cast.some((c) => c.photoFile));
-  }, [title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl, cast]);
+    setIsDirty(
+      current !== initialSnapshotRef.current ||
+      cast.some((c) => c.photoFile) ||
+      Boolean(newThumbnail) ||
+      Boolean(newFilm) ||
+      resetToAutoThumbnail
+    );
+  }, [title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl, cast, newThumbnail, newFilm, resetToAutoThumbnail]);
 
   useEffect(() => {
     function handleBeforeUnload(e) {
@@ -321,8 +330,9 @@ export default function EditVideo() {
   useEffect(() => {
     return () => {
       if (newFilmPreviewUrl) URL.revokeObjectURL(newFilmPreviewUrl);
+      if (newThumbnailPreviewUrl) URL.revokeObjectURL(newThumbnailPreviewUrl);
     };
-  }, [newFilmPreviewUrl]);
+  }, [newFilmPreviewUrl, newThumbnailPreviewUrl]);
 
   const customGenres = genres.filter((g) => !GENRE_OPTIONS.includes(g));
   const allGenreOptions = [...customGenres];
@@ -353,8 +363,14 @@ export default function EditVideo() {
     fd.append("tags", tags);
     fd.append("language", language);
     fd.append("productionCountry", productionCountry);
-    fd.append("thumbnailUrl", thumbnailUrl);
     if (releaseYear) fd.append("releaseYear", releaseYear);
+    if (newThumbnail) {
+      fd.append("thumbnail", newThumbnail);
+    } else if (resetToAutoThumbnail) {
+      fd.append("autoGenerateThumbnail", "true");
+    } else {
+      fd.append("thumbnailUrl", thumbnailUrl);
+    }
     fd.append(
       "cast",
       JSON.stringify(cast.map((c) => ({ ...(c._id ? { _id: c._id } : {}), clientId: c.clientId, name: c.name, characterName: c.characterName })))
@@ -363,14 +379,29 @@ export default function EditVideo() {
       if (c.photoFile) fd.append(`cast_photo_${c.clientId}`, c.photoFile);
     });
 
+    const prevOldTitle = initialSnapshotRef.current
+      ? JSON.parse(initialSnapshotRef.current).title
+      : (video?.title || title);
+
     setSavingMeta(true);
     try {
-      await putForm(`/directors/videos/${id}`, fd);
+      const res = await putForm(`/directors/videos/${id}`, fd);
+      const updatedThumbnail = res?.thumbnailUrl || thumbnailUrl;
+      setThumbnailUrl(updatedThumbnail);
+
+      if (newThumbnailPreviewUrl) {
+        URL.revokeObjectURL(newThumbnailPreviewUrl);
+      }
+      setNewThumbnail(null);
+      setNewThumbnailPreviewUrl(null);
+      setResetToAutoThumbnail(false);
+
       initialSnapshotRef.current = JSON.stringify({
-        title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl,
+        title, description, genres, tags, language, productionCountry, releaseYear,
+        thumbnailUrl: updatedThumbnail,
         cast: cast.map((c) => ({ name: c.name, characterName: c.characterName })),
       });
-      setIsDirty(false);
+      setIsDirty(Boolean(newFilm));
     } catch (err) {
       setMetaError(err.message || "Failed to save changes");
       setSavingMeta(false);
@@ -385,6 +416,11 @@ export default function EditVideo() {
 
     const filmFd = new FormData();
     filmFd.append("film", newFilm);
+    filmFd.append("oldTitle", prevOldTitle);
+    filmFd.append("title", title);
+    if (newThumbnail) {
+      filmFd.append("thumbnail", newThumbnail);
+    }
 
     setReuploading(true);
     setReuploadPhase("uploading");
@@ -509,18 +545,100 @@ export default function EditVideo() {
                 />
               </div>
 
-              {/* Thumbnail URL */}
+              {/* Visual Thumbnail Card & Picker */}
               <div>
-                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                  Thumbnail URL
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                    Thumbnail
+                  </label>
+                  {newThumbnail ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newThumbnailPreviewUrl) URL.revokeObjectURL(newThumbnailPreviewUrl);
+                        setNewThumbnail(null);
+                        setNewThumbnailPreviewUrl(null);
+                      }}
+                      className="font-[var(--font-mono)] text-[0.62rem] text-[var(--error)] hover:underline"
+                    >
+                      Clear picked image
+                    </button>
+                  ) : resetToAutoThumbnail ? (
+                    <button
+                      type="button"
+                      onClick={() => setResetToAutoThumbnail(false)}
+                      className="font-[var(--font-mono)] text-[0.62rem] text-[var(--gold-soft)] hover:underline"
+                    >
+                      Undo reset
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetToAutoThumbnail(true);
+                      }}
+                      className="font-[var(--font-mono)] text-[0.62rem] text-[var(--mauve)] hover:text-[var(--error)] transition"
+                      title="Reset thumbnail to a frame captured from your video"
+                    >
+                      Auto-generate from video
+                    </button>
+                  )}
+                </div>
+
+                <label className="group relative flex aspect-video w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] transition hover:border-[var(--gold)]">
+                  {resetToAutoThumbnail ? (
+                    <div className="flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+                      <RefreshCw size={20} className="text-[var(--gold)] animate-pulse" />
+                      <span className="font-[var(--font-mono)] text-[0.68rem] text-[var(--gold-soft)] uppercase tracking-wider">
+                        Auto-capture on Save
+                      </span>
+                      <p className="text-[0.62rem] text-[var(--mauve)]">
+                        A fresh frame will be generated from your video when you click Save Changes.
+                      </p>
+                    </div>
+                  ) : newThumbnailPreviewUrl || thumbnailUrl ? (
+                    <img
+                      src={newThumbnailPreviewUrl || thumbnailUrl}
+                      alt="Thumbnail preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-1.5 text-center text-[var(--mauve)] group-hover:text-[var(--gold-soft)]">
+                      <ImageIcon size={20} />
+                      <span className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-wider">
+                        Upload Thumbnail
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="rounded-[3px] border border-[var(--gold)] bg-[#17131a] px-3 py-1 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-wider text-[var(--gold-soft)]">
+                      {resetToAutoThumbnail ? "Upload custom image instead" : "Change Thumbnail"}
+                    </span>
+                  </div>
+
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      if (file) {
+                        if (newThumbnailPreviewUrl) URL.revokeObjectURL(newThumbnailPreviewUrl);
+                        setResetToAutoThumbnail(false);
+                        setNewThumbnail(file);
+                        setNewThumbnailPreviewUrl(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
                 </label>
-                <input
-                  type="text"
-                  value={thumbnailUrl}
-                  onChange={(e) => setThumbnailUrl(e.target.value)}
-                  placeholder="https://…"
-                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-                />
+                <p className="mt-1.5 text-[0.65rem] leading-relaxed text-[var(--mauve)]">
+                  {resetToAutoThumbnail
+                    ? "Thumbnail will be automatically extracted from the video stream upon saving."
+                    : newThumbnail
+                      ? `Selected: ${newThumbnail.name}`
+                      : "Upload a custom poster, or click 'Auto-generate from video' to capture a fresh frame."}
+                </p>
               </div>
 
               {/* Language */}
