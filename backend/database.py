@@ -28,3 +28,7 @@ viewer_settings_collection = db["viewer_settings"]
 notifications_collection = db["notifications"]
 
 print(">>> database.py loaded, using PyMongo")
+# Anonymous, privacy-conscious website engagement events used by analytics dashboards.
+analytics_events_collection = db["analytics_events"]
+# Append-only log: one document per play, keeps accumulating watch time after the view is counted.
+watch_log_collection = db["watch_session_log"]

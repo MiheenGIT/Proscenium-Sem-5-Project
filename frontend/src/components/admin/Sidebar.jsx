@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   X,
   LogOut,
+  BarChart3,
 } from "lucide-react";
 import {
   NavLink,
@@ -17,6 +18,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 const items = [
   ["Dashboard", "/admin", LayoutDashboard],
   ["Content", "/admin/content", Film],
+  ["Analytics", "/admin/analytics", BarChart3],
   ["Review", "/admin/review", ShieldCheck],
   ["Comments", "/admin/comments", MessageSquare],
 ];

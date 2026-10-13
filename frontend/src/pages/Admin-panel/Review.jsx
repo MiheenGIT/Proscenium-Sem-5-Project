@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   Check,
@@ -48,6 +49,9 @@ export default function Review() {
   const [directorDetail, setDirectorDetail] = useState(null);
   const [directorBusy, setDirectorBusy] = useState(false);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinked = useRef(null);
+
   async function load() {
     setLoading(true);
     setError("");
@@ -66,6 +70,16 @@ export default function Review() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    const id = searchParams.get("video");
+    if (!id || deepLinked.current === id) return;
+    deepLinked.current = id;
+    setSearchParams({}, { replace: true });
+    getRequest(`/admin/videos/${id}`)
+      .then((video) => video?._id && openReview(video))
+      .catch((err) => setError(err.message || "Unable to open that film."));
+  }, [searchParams]);
 
   const filteredVideos = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

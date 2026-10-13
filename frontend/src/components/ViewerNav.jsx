@@ -1,25 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Bell,
-  ChevronRight,
-  Clock3,
-  Film,
-  Heart,
-  HelpCircle,
-  Home,
-  Languages,
-  LogOut,
-  MessageSquare,
-  Search,
-  Settings,
-  Sparkles,
-  UserRound,
-  X,
-  PlayCircle,
-} from "lucide-react";
+import {Bell,BarChart3,ChevronRight,Clock3,Film,Heart,HelpCircle,Home,Languages,LogOut,MessageSquare,Search,Settings,Sparkles,UserRound,X,PlayCircle,} from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getRequest } from "../api/client.js";
+import { trackEvent } from "../pages/Analytics/trackEvent.js";
 import "./ViewerNav.css";
 
 export default function ViewerNav() {
@@ -40,6 +24,8 @@ export default function ViewerNav() {
 
   const inputRef = useRef(null);
   const timerRef = useRef(null);
+  const trackTimerRef = useRef(null);
+  const trackedQueryRef = useRef("");
 
   useEffect(() => {
     let mounted = true;
@@ -67,7 +53,10 @@ export default function ViewerNav() {
   }, [location.pathname]);
 
   useEffect(() => {
-    return () => clearTimeout(timerRef.current);
+    return () => {
+      clearTimeout(timerRef.current);
+      clearTimeout(trackTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -123,6 +112,7 @@ export default function ViewerNav() {
   ];
 
   const library = [
+    ["Analytics", "/viewer/analytics", BarChart3],
     ["Watchlist", "/watchlist", Heart],
     ["History", "/history", Clock3],
     ["Film Reviews", "/film-reviews", Film],
@@ -184,6 +174,7 @@ export default function ViewerNav() {
     setQuery(value);
 
     clearTimeout(timerRef.current);
+    clearTimeout(trackTimerRef.current);
 
     if (!value.trim()) {
       setResults([]);
@@ -202,13 +193,21 @@ export default function ViewerNav() {
           )}&limit=20`
         );
 
-        setResults(
-          Array.isArray(data?.videos)
-            ? data.videos
-            : Array.isArray(data)
-              ? data
-              : []
-        );
+        const found = Array.isArray(data?.videos)
+          ? data.videos
+          : Array.isArray(data)
+            ? data
+            : [];
+        setResults(found);
+
+        const term = value.trim();
+        if (term.length >= 2) {
+          trackTimerRef.current = setTimeout(() => {
+            if (trackedQueryRef.current === term) return;
+            trackedQueryRef.current = term;
+            trackEvent("search", { query: term, resultsCount: found.length });
+          }, 900);
+        }
       } catch (err) {
         setResults([]);
 
@@ -454,10 +453,6 @@ export default function ViewerNav() {
           </div>
         </div>
       </aside>
-
-      {/* ================================================== */}
-      {/* NO TOP RIGHT PROFILE / NOTIFICATION */}
-      {/* ================================================== */}
 
       {/* ================================================== */}
       {/* SEARCH OVERLAY */}

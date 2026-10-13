@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, ArrowRight, Play, Film } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getRequest } from "../../api/client.js";
+import { trackEvent } from "../../pages/Analytics/trackEvent.js";
 
 const FALLBACK_GENRES = [
   "Trending",
@@ -19,9 +20,7 @@ const FALLBACK_GENRES = [
 function yearOf(video) {
   return (
     video?.releaseYear ||
-    (video?.publishedAt
-      ? new Date(video.publishedAt).getFullYear()
-      : "")
+    (video?.publishedAt ? new Date(video.publishedAt).getFullYear() : "")
   );
 }
 
@@ -31,6 +30,19 @@ export default function SearchOverlay({ onClose }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [genres, setGenres] = useState(FALLBACK_GENRES);
+  const trackedQuery = useRef("");
+
+  // Record one search event per settled query (not per keystroke), with its result count.
+  useEffect(() => {
+    const value = query.trim();
+    if (value.length < 2 || loading) return undefined;
+    const timer = setTimeout(() => {
+      if (trackedQuery.current === value) return;
+      trackedQuery.current = value;
+      trackEvent("search", { query: value, resultsCount: results.length });
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [query, results, loading]);
 
   useEffect(() => {
     const input = document.getElementById("proscenium-global-search");
@@ -59,7 +71,7 @@ export default function SearchOverlay({ onClose }) {
       setLoading(true);
       try {
         const data = await getRequest(
-          `/viewer/videos/search?q=${encodeURIComponent(value)}&limit=20`
+          `/viewer/videos/search?q=${encodeURIComponent(value)}&limit=20`,
         );
         setResults(Array.isArray(data?.videos) ? data.videos : []);
       } catch {
@@ -194,8 +206,13 @@ export default function SearchOverlay({ onClose }) {
                     onClick={onClose}
                     className="group flex min-h-28 items-end justify-between rounded-2xl border border-white/[0.07] bg-gradient-to-br from-[#5c1220]/80 to-[#171216] p-4 text-left transition hover:-translate-y-1 hover:border-[#d9a653]/35"
                   >
-                    <span className="text-sm font-semibold text-[#efe7da]">{label}</span>
-                    <ArrowRight size={16} className="text-[#d9a653] transition group-hover:translate-x-1" />
+                    <span className="text-sm font-semibold text-[#efe7da]">
+                      {label}
+                    </span>
+                    <ArrowRight
+                      size={16}
+                      className="text-[#d9a653] transition group-hover:translate-x-1"
+                    />
                   </button>
                 ))}
               </div>
@@ -218,7 +235,10 @@ export default function SearchOverlay({ onClose }) {
               {loading ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                   {Array.from({ length: 10 }).map((_, index) => (
-                    <div key={index} className="aspect-[16/10] animate-pulse rounded-2xl bg-white/[0.055]" />
+                    <div
+                      key={index}
+                      className="aspect-[16/10] animate-pulse rounded-2xl bg-white/[0.055]"
+                    />
                   ))}
                 </div>
               ) : results.length ? (
@@ -231,18 +251,28 @@ export default function SearchOverlay({ onClose }) {
                         className="relative block aspect-[16/10] w-full overflow-hidden rounded-2xl border border-white/[0.07] bg-[#171216] text-left transition duration-300 group-hover:-translate-y-1 group-hover:border-[#d9a653]/40"
                       >
                         {video.thumbnailUrl ? (
-                          <img src={video.thumbnailUrl} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+                          <img
+                            src={video.thumbnailUrl}
+                            alt=""
+                            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                          />
                         ) : (
-                          <div className="grid h-full place-items-center text-[#8b7c82]"><Film size={30} /></div>
+                          <div className="grid h-full place-items-center text-[#8b7c82]">
+                            <Film size={30} />
+                          </div>
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
                         <span className="absolute bottom-3 left-3 grid h-9 w-9 place-items-center rounded-full bg-[#efe7da] text-[#100d10] opacity-0 transition group-hover:opacity-100">
                           <Play size={14} fill="currentColor" />
                         </span>
                       </button>
-                      <h3 className="mt-3 truncate text-[13px] font-semibold text-[#efe7da]">{video.title || "Untitled"}</h3>
+                      <h3 className="mt-3 truncate text-[13px] font-semibold text-[#efe7da]">
+                        {video.title || "Untitled"}
+                      </h3>
                       <p className="mt-1 truncate text-[10px] text-[#8b7c82]">
-                        {[yearOf(video), ...(video.genres || []).slice(0, 2)].filter(Boolean).join(" • ")}
+                        {[yearOf(video), ...(video.genres || []).slice(0, 2)]
+                          .filter(Boolean)
+                          .join(" • ")}
                       </p>
                     </article>
                   ))}
@@ -250,7 +280,9 @@ export default function SearchOverlay({ onClose }) {
               ) : (
                 <div className="rounded-3xl border border-white/[0.07] bg-white/[0.025] px-6 py-20 text-center">
                   <Search className="mx-auto text-[#d9a653]" size={28} />
-                  <h2 className="mt-4 font-[var(--font-display)] text-2xl text-[#efe7da]">No titles found</h2>
+                  <h2 className="mt-4 font-[var(--font-display)] text-2xl text-[#efe7da]">
+                    No titles found
+                  </h2>
                   <p className="mx-auto mt-2 max-w-md text-xs leading-6 text-[#8b7c82]">
                     Try a different movie name, genre, language, or keyword.
                   </p>

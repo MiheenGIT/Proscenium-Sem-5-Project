@@ -200,7 +200,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, onSearch }) {
                     <Icon size={18} />
                     {label}
                   </button>
-                )
+                ),
               )}
             </div>
           </aside>

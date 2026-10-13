@@ -11,6 +11,11 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # ---------- shared helpers ----------
 
+def _safe_errors(exc):
+    # JSON-safe validation errors; never echo the submitted values (they can include the password).
+    return [{"type": err.get("type"), "loc": list(err.get("loc", [])), "msg": err.get("msg")} for err in exc.errors()]
+
+
 def _validate_dob(dob_date):
     dob = datetime.combine(dob_date, datetime.min.time())
     if dob > datetime.now():
@@ -49,7 +54,7 @@ def register_viewer(
             maturitySetting=maturitySetting,
         )
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors())
+        raise HTTPException(status_code=422, detail=_safe_errors(e))
 
     user_data = user.dict()
     dob = _validate_dob(user_data["date_of_birth"])
@@ -57,7 +62,7 @@ def register_viewer(
     _check_email_unique(email)
 
     password_hash = hash_password(user_data.pop("password"))
-    now = datetime.now()
+    now = datetime.utcnow()
 
     avatar_url = upload_avatar(avatar, username) if avatar else None
 
@@ -105,7 +110,7 @@ def register_creator(
             studioName=studioName, bio=bio, portfolioUrl=portfolioUrl,
         )
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors())
+        raise HTTPException(status_code=422, detail=_safe_errors(e))
 
     user_data = user.dict()
     dob = _validate_dob(user_data["date_of_birth"])
@@ -113,7 +118,7 @@ def register_creator(
     _check_email_unique(email)
 
     password_hash = hash_password(user_data.pop("password"))
-    now = datetime.now()
+    now = datetime.utcnow()
 
     avatar_url = upload_avatar(avatar, username) if avatar else None
 
@@ -160,7 +165,7 @@ def register_admin(
             date_of_birth=date_of_birth, adminLevel=adminLevel,
         )
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors())
+        raise HTTPException(status_code=422, detail=_safe_errors(e))
 
     user_data = user.dict()
     dob = _validate_dob(user_data["date_of_birth"])
@@ -168,7 +173,7 @@ def register_admin(
     _check_email_unique(email)
 
     password_hash = hash_password(user_data.pop("password"))
-    now = datetime.now()
+    now = datetime.utcnow()
 
     avatar_url = upload_avatar(avatar, username) if avatar else None
 

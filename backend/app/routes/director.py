@@ -10,6 +10,11 @@ from fastapi import (
 )
 
 from utils.security import require_role
+from utils.notifications import (
+    on_video_resubmitted,
+    on_video_reuploaded,
+    on_video_submitted,
+)
 from utils.cloudinary_helpers import (
     upload_avatar,
     _cleanup_cloudinary_assets,
@@ -1245,6 +1250,12 @@ async def upload_vid(
         video_doc
     )
 
+    if payload["role"] == "director":
+        on_video_submitted(
+            {**video_doc, "_id": insert_result.inserted_id},
+            ObjectId(payload["user_id"]),
+        )
+
     # ========================================================
     # RESPONSE
     # ========================================================
@@ -1554,6 +1565,12 @@ async def reupload_video(
             curr_title,
         )
 
+    on_video_reuploaded(
+        video,
+        ObjectId(payload["user_id"]),
+        title or video.get("title"),
+    )
+
     response = {
         "video_id": video_id,
 
@@ -1750,6 +1767,8 @@ async def resubmit_video(
             },
         },
     )
+
+    on_video_resubmitted(video, ObjectId(payload["user_id"]))
 
     director = directors_collection.find_one(
         {"_id": ObjectId(payload["user_id"])},

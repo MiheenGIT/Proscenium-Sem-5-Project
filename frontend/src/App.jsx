@@ -1,9 +1,5 @@
 import React from "react";
-import {
-  Navigate,
-  Route,
-  Routes,
-} from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import RequireRole from "./components/RequireRole.jsx";
 
@@ -14,9 +10,7 @@ function getStoredRole() {
 
     if (!auth?.token) return null;
 
-    const payload = JSON.parse(
-      atob(auth.token.split(".")[1])
-    );
+    const payload = JSON.parse(atob(auth.token.split(".")[1]));
 
     if (payload.exp && Date.now() >= payload.exp * 1000) {
       return null;
@@ -70,356 +64,387 @@ import AdminDashboard from "./pages/Admin-panel/Dashboard.jsx";
 import AdminContent from "./pages/Admin-panel/Content.jsx";
 import AdminReview from "./pages/Admin-panel/Review.jsx";
 import AdminComments from "./pages/Admin-panel/Comments.jsx";
+import NotificationsPage from "./pages/Shared/NotificationsPage.jsx";
+import AdminAnalytics from "./pages/Analytics/AdminAnalytics.jsx";
+import DirectorAnalytics from "./pages/Analytics/DirectorAnalytics.jsx";
+import ViewerAnalytics from "./pages/Analytics/ViewerAnalytics.jsx";
+import AnalyticsTracker from "./pages/Analytics/AnalyticsTracker.jsx";
 
 function ViewerOnly({ children }) {
-  return (
-    <RequireRole roles={["viewer"]}>
-      {children}
-    </RequireRole>
-  );
+  return <RequireRole roles={["viewer"]}>{children}</RequireRole>;
 }
 
 function DirectorOnly({ children }) {
-  return (
-    <RequireRole roles={["director"]}>
-      {children}
-    </RequireRole>
-  );
+  return <RequireRole roles={["director"]}>{children}</RequireRole>;
 }
 
 function AdminOnly({ children }) {
   return (
     <RequireRole roles={["admin"]}>
-      <AdminLayout>
-        {children}
-      </AdminLayout>
+      <AdminLayout>{children}</AdminLayout>
     </RequireRole>
   );
 }
 
 export default function App() {
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={<Login />}
-      />
+    <>
+      <AnalyticsTracker />
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
-      <Route
-        path="/register"
-        element={<Register />}
-      />
+        <Route path="/register" element={<Register />} />
 
-      {/* ================= ADMIN ================= */}
+        {/* ================= ADMIN ================= */}
 
-      <Route
-        path="/admin"
-        element={
-          <AdminOnly>
-            <AdminDashboard />
-          </AdminOnly>
-        }
-      />
+        <Route
+          path="/admin"
+          element={
+            <AdminOnly>
+              <AdminDashboard />
+            </AdminOnly>
+          }
+        />
 
-      <Route
-        path="/admin/content"
-        element={
-          <AdminOnly>
-            <AdminContent />
-          </AdminOnly>
-        }
-      />
+        <Route
+          path="/admin/analytics"
+          element={
+            <AdminOnly>
+              <AdminAnalytics />
+            </AdminOnly>
+          }
+        />
 
-      <Route
-        path="/admin/review"
-        element={
-          <AdminOnly>
-            <AdminReview />
-          </AdminOnly>
-        }
-      />
+        <Route
+          path="/admin/tags"
+          element={<Navigate to="/admin/analytics?tab=tags" replace />}
+        />
 
-      <Route
-        path="/admin/comments"
-        element={
-          <AdminOnly>
-            <AdminComments />
-          </AdminOnly>
-        }
-      />
+        <Route
+          path="/admin/content"
+          element={
+            <AdminOnly>
+              <AdminContent />
+            </AdminOnly>
+          }
+        />
 
-      {/* ================= DIRECTOR ================= */}
+        <Route
+          path="/admin/review"
+          element={
+            <AdminOnly>
+              <AdminReview />
+            </AdminOnly>
+          }
+        />
 
-      <Route
-        path="/director"
-        element={
-          <DirectorOnly>
-            <DirectorHome />
-          </DirectorOnly>
-        }
-      />
+        <Route
+          path="/admin/comments"
+          element={
+            <AdminOnly>
+              <AdminComments />
+            </AdminOnly>
+          }
+        />
 
-      <Route
-        path="/director/upload"
-        element={
-          <DirectorOnly>
-            <UploadVideo />
-          </DirectorOnly>
-        }
-      />
+        <Route
+          path="/admin/notifications"
+          element={
+            <AdminOnly>
+              <NotificationsPage role="admin" />
+            </AdminOnly>
+          }
+        />
 
-      <Route
-        path="/director/videos/:id/watch"
-        element={
-          <DirectorOnly>
-            <DirectorWatchVideo />
-          </DirectorOnly>
-        }
-      />
+        {/* ================= DIRECTOR ================= */}
 
-      <Route
-        path="/director/videos/:id/edit"
-        element={
-          <DirectorOnly>
-            <EditVideo />
-          </DirectorOnly>
-        }
-      />
+        <Route
+          path="/director/notifications"
+          element={
+            <DirectorOnly>
+              <NotificationsPage role="director" />
+            </DirectorOnly>
+          }
+        />
 
-      <Route
-        path="/director/profile"
-        element={
-          <DirectorOnly>
-            <DirectorProfile />
-          </DirectorOnly>
-        }
-      />
+        <Route
+          path="/director"
+          element={
+            <DirectorOnly>
+              <DirectorHome />
+            </DirectorOnly>
+          }
+        />
 
-      {/* ================= VIEWER ================= */}
+        <Route
+          path="/director/analytics"
+          element={
+            <DirectorOnly>
+              <DirectorAnalytics />
+            </DirectorOnly>
+          }
+        />
 
-      <Route
-        path="/"
-        element={<RootRedirect />}
-      />
+        <Route
+          path="/director/upload"
+          element={
+            <DirectorOnly>
+              <UploadVideo />
+            </DirectorOnly>
+          }
+        />
 
-      <Route
-        path="/viewer"
-        element={
-          <ViewerOnly>
-            <Dashboard />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/director/videos/:id/watch"
+          element={
+            <DirectorOnly>
+              <DirectorWatchVideo />
+            </DirectorOnly>
+          }
+        />
 
-      <Route
-        path="/dashboard"
-        element={
-          <ViewerOnly>
-            <Dashboard />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/director/videos/:id/edit"
+          element={
+            <DirectorOnly>
+              <EditVideo />
+            </DirectorOnly>
+          }
+        />
 
-      <Route
-        path="/viewer/dashboard"
-        element={
-          <ViewerOnly>
-            <Dashboard />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/director/profile"
+          element={
+            <DirectorOnly>
+              <DirectorProfile />
+            </DirectorOnly>
+          }
+        />
 
-      <Route
-        path="/movie/:id"
-        element={
-          <ViewerOnly>
-            <MovieDetail />
-          </ViewerOnly>
-        }
-      />
+        {/* ================= VIEWER ================= */}
 
-      <Route
-        path="/viewer/movie/:id"
-        element={
-          <ViewerOnly>
-            <MovieDetail />
-          </ViewerOnly>
-        }
-      />
+        <Route path="/" element={<RootRedirect />} />
 
-      <Route
-        path="/watch/:id"
-        element={
-          <ViewerOnly>
-            <WatchVideo />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/viewer"
+          element={
+            <ViewerOnly>
+              <Dashboard />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/viewer/watch/:id"
-        element={
-          <ViewerOnly>
-            <WatchVideo />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/dashboard"
+          element={
+            <ViewerOnly>
+              <Dashboard />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/viewer/videos/:id"
-        element={
-          <ViewerOnly>
-            <WatchVideo />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/viewer/dashboard"
+          element={
+            <ViewerOnly>
+              <Dashboard />
+            </ViewerOnly>
+          }
+        />
 
-      {/* Discovery categories are sections of Home, not separate destinations.
+        <Route
+          path="/movie/:id"
+          element={
+            <ViewerOnly>
+              <MovieDetail />
+            </ViewerOnly>
+          }
+        />
+
+        <Route
+          path="/viewer/movie/:id"
+          element={
+            <ViewerOnly>
+              <MovieDetail />
+            </ViewerOnly>
+          }
+        />
+
+        <Route
+          path="/watch/:id"
+          element={
+            <ViewerOnly>
+              <WatchVideo />
+            </ViewerOnly>
+          }
+        />
+
+        <Route
+          path="/viewer/watch/:id"
+          element={
+            <ViewerOnly>
+              <WatchVideo />
+            </ViewerOnly>
+          }
+        />
+
+        <Route
+          path="/viewer/videos/:id"
+          element={
+            <ViewerOnly>
+              <WatchVideo />
+            </ViewerOnly>
+          }
+        />
+
+        {/* Discovery categories are sections of Home, not separate destinations.
           Keep these legacy URLs working by returning viewers to the unified dashboard. */}
-      <Route
-        path="/explore"
-        element={
-          <ViewerOnly>
-            <Navigate to="/viewer" replace />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/explore"
+          element={
+            <ViewerOnly>
+              <Navigate to="/viewer" replace />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/trending"
-        element={
-          <ViewerOnly>
-            <Navigate to="/viewer" replace />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/trending"
+          element={
+            <ViewerOnly>
+              <Navigate to="/viewer" replace />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/for-you"
-        element={
-          <ViewerOnly>
-            <Navigate to="/viewer" replace />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/for-you"
+          element={
+            <ViewerOnly>
+              <Navigate to="/viewer" replace />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/watchlist"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="watchlist" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/viewer/analytics"
+          element={
+            <ViewerOnly>
+              <ViewerAnalytics />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/history"
-        element={
-          <ViewerOnly>
-            <History />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/watchlist"
+          element={
+            <ViewerOnly>
+              <LibraryPage mode="watchlist" />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/liked"
-        element={
-          <ViewerOnly>
-            <LibraryPage mode="liked" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/history"
+          element={
+            <ViewerOnly>
+              <History />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/reviews"
-        element={
-          <ViewerOnly>
-            <Reviews />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/liked"
+          element={
+            <ViewerOnly>
+              <LibraryPage mode="liked" />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/film-reviews"
-        element={
-          <ViewerOnly>
-            <FilmReviewsPage />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/reviews"
+          element={
+            <ViewerOnly>
+              <Reviews />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/film-reviews/:id"
-        element={
-          <ViewerOnly>
-            <FilmReviewsPage />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/film-reviews"
+          element={
+            <ViewerOnly>
+              <FilmReviewsPage />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/profile"
-        element={
-          <ViewerOnly>
-            <Profile />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/film-reviews/:id"
+          element={
+            <ViewerOnly>
+              <FilmReviewsPage />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/settings"
-        element={
-          <ViewerOnly>
-            <AccountPages section="settings" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/profile"
+          element={
+            <ViewerOnly>
+              <Profile />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/notifications"
-        element={
-          <ViewerOnly>
-            <AccountPages section="notifications" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/settings"
+          element={
+            <ViewerOnly>
+              <AccountPages section="settings" />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/preferences/genres"
-        element={
-          <ViewerOnly>
-            <AccountPages section="genres" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/notifications"
+          element={
+            <ViewerOnly>
+              <AccountPages section="notifications" />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/preferences/languages"
-        element={
-          <ViewerOnly>
-            <AccountPages section="languages" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/preferences/genres"
+          element={
+            <ViewerOnly>
+              <AccountPages section="genres" />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="/help"
-        element={
-          <ViewerOnly>
-            <AccountPages section="help" />
-          </ViewerOnly>
-        }
-      />
+        <Route
+          path="/preferences/languages"
+          element={
+            <ViewerOnly>
+              <AccountPages section="languages" />
+            </ViewerOnly>
+          }
+        />
 
-      <Route
-        path="*"
-        element={
-          <Navigate
-            to="/login"
-            replace
-          />
-        }
-      />
-    </Routes>
+        <Route
+          path="/help"
+          element={
+            <ViewerOnly>
+              <AccountPages section="help" />
+            </ViewerOnly>
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </>
   );
 }

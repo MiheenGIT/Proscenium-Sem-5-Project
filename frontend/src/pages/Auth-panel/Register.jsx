@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "../../components/AuthLayout.jsx";
 import CustomSelect from "../../components/CustomSelect.jsx";
 import { postForm } from "../../api/client";
+import { trackEvent } from "../Analytics/trackEvent.js";
 import "../../components/FormControls.css";
 
 const GENRE_OPTIONS = [
@@ -41,7 +42,9 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
 
   function toggleGenre(g) {
-    setGenres((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+    setGenres((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+    );
   }
 
   function handleAvatarChange(e) {
@@ -76,6 +79,7 @@ export default function Register() {
 
     try {
       await postForm(path, formData);
+      trackEvent("registration_success", { label: role });
       navigate("/login", { state: { justRegistered: true } });
     } catch (err) {
       setError(err.message);
@@ -268,8 +272,8 @@ export default function Register() {
           {submitting
             ? "Creating account…"
             : role === "director"
-            ? "Create director account"
-            : "Create viewer account"}
+              ? "Create director account"
+              : "Create viewer account"}
         </button>
       </form>
 

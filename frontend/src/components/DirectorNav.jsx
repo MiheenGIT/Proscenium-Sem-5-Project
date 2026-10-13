@@ -2,10 +2,12 @@ import React, { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import NotificationBell from "./notifications/NotificationBell.jsx";
 
 const navItems = [
   { to: "/director", label: "My Films", end: true },
   { to: "/director/upload", label: "Upload" },
+  { to: "/director/analytics", label: "Analytics" },
   { to: "/director/profile", label: "Profile" },
 ];
 
@@ -57,6 +59,8 @@ export default function DirectorNav({ confirmBeforeLeave = false }) {
         </nav>
 
         <div className="hidden items-center gap-4 md:flex">
+          <NotificationBell role="director" />
+
           <span className="text-sm text-(--parchment)">
             {auth?.username}
           </span>
@@ -113,6 +117,14 @@ export default function DirectorNav({ confirmBeforeLeave = false }) {
               {item.label}
             </NavLink>
           ))}
+
+          <NavLink
+            to="/director/notifications"
+            onClick={() => setOpen(false)}
+            className="rounded-[3px] px-3 py-2 font-(--font-mono) text-[0.72rem] uppercase tracking-[0.08em] text-(--mauve)"
+          >
+            Notifications
+          </NavLink>
 
           <button
             type="button"

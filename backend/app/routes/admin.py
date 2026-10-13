@@ -32,6 +32,15 @@ from utils.email_service import (
     send_many,
 )
 from utils.moderation import check_comment_text
+from utils.notifications import (
+    notify_new_release,
+    on_admin_note,
+    on_director_reinstated,
+    on_director_suspended,
+    on_feedback_removed,
+    on_video_approved,
+    on_video_rejected,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -389,25 +398,8 @@ def approve_video(
         },
     )
 
-    # Notify viewers who have enabled new-release notifications.
-    for viewer in viewers_collection.find(
-        {"newReleaseNotifications": {"$ne": False}},
-        {"_id": 1},
-    ):
-        notifications_collection.insert_one(
-            {
-                "viewerId": viewer["_id"],
-                "type": "new_release",
-                "title": "New film on Proscenium",
-                "message": (
-                    f"{video.get('title', 'A new film')} "
-                    "is now available to watch."
-                ),
-                "videoId": oid,
-                "read": False,
-                "createdAt": now,
-            }
-        )
+    notify_new_release(video)
+    on_video_approved(video, moderator_id, body.comment)
 
     _queue_director_email(background_tasks, video, notify_director_approved, body.comment)
     _queue_new_release_emails(background_tasks, video)
@@ -464,6 +456,8 @@ def reject_video(
             },
         },
     )
+
+    on_video_rejected(video, moderator_id, body.reason)
 
     _queue_director_email(background_tasks, video, notify_director_rejected, body.reason)
 
@@ -679,6 +673,8 @@ def add_admin_note(
         {"$push": {"adminNotes": note_entry}},
     )
 
+    on_admin_note(video, moderator_id, body.note)
+
     return {
         "message": "Note added",
         "videoId": video_id,
@@ -750,24 +746,8 @@ def bulk_approve_videos(
             },
         )
 
-        for viewer in viewers_collection.find(
-            {"newReleaseNotifications": {"$ne": False}},
-            {"_id": 1},
-        ):
-            notifications_collection.insert_one(
-                {
-                    "viewerId": viewer["_id"],
-                    "type": "new_release",
-                    "title": "New film on Proscenium",
-                    "message": (
-                        f"{video.get('title', 'A new film')} "
-                        "is now available to watch."
-                    ),
-                    "videoId": oid,
-                    "read": False,
-                    "createdAt": now,
-                }
-            )
+        notify_new_release(video)
+        on_video_approved(video, moderator_id, body.comment)
 
         _queue_director_email(background_tasks, video, notify_director_approved, body.comment)
         _queue_new_release_emails(background_tasks, video)
@@ -822,6 +802,8 @@ def bulk_reject_videos(
                 "$push": {"moderationHistory": history_entry},
             },
         )
+
+        on_video_rejected(video, moderator_id, body.reason)
 
         _queue_director_email(background_tasks, video, notify_director_rejected, body.reason)
         results.append({"videoId": video_id, "success": True})
@@ -1221,6 +1203,14 @@ def admin_remove_comment(
             {"$inc": {"commentCount": -1}},
         )
 
+    if result.modified_count:
+        on_feedback_removed(
+            "comment",
+            comment,
+            film_collection.find_one({"_id": comment.get("videoId")}, {"title": 1}),
+            moderator_id,
+        )
+
     return {"message": "Comment removed", "commentId": comment_id}
 
 
@@ -1322,6 +1312,13 @@ def admin_remove_review(
     if video_id:
         _recalculate_review_stats(video_id)
 
+    on_feedback_removed(
+        "review",
+        review,
+        film_collection.find_one({"_id": video_id}, {"title": 1}) if video_id else None,
+        moderator_id,
+    )
+
     return {"message": "Review removed", "reviewId": review_id}
 
 
@@ -1391,6 +1388,8 @@ def suspend_director(
         },
     )
 
+    on_director_suspended(director, moderator_id, body.reason)
+
     return {
         "message": "Director suspended",
         "directorId": director_id,
@@ -1434,6 +1433,8 @@ def unsuspend_director(
             },
         },
     )
+
+    on_director_reinstated(director, moderator_id)
 
     return {
         "message": "Director reinstated",

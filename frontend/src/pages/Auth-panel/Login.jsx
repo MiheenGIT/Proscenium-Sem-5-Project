@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "../../components/AuthLayout.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { trackEvent } from "../Analytics/trackEvent.js";
 import "../../components/FormControls.css";
 
 export default function Login() {
@@ -20,15 +21,16 @@ export default function Login() {
     try {
       const data = await login(email, password);
       if (data.role === "admin") {
-  navigate("/admin");
-} else if (data.role === "director") {
-  navigate("/director");
-} else if (data.role === "viewer") {
-  navigate("/viewer");
-} else {
-  navigate("/login");
-}
+        navigate("/admin");
+      } else if (data.role === "director") {
+        navigate("/director");
+      } else if (data.role === "viewer") {
+        navigate("/viewer");
+      } else {
+        navigate("/login");
+      }
     } catch (err) {
+      trackEvent("login_failure");
       setError(err.message);
     } finally {
       setSubmitting(false);

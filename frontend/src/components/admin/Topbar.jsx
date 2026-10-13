@@ -2,12 +2,16 @@ import React from "react";
 import { ChevronRight } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
+import NotificationBell from "../notifications/NotificationBell.jsx";
 
 const labels = {
   "/admin": "Dashboard",
   "/admin/content": "Content",
+  "/admin/tags": "Tags & taxonomy",
+  "/admin/analytics": "Analytics",
   "/admin/review": "Review queue",
   "/admin/comments": "Comments",
+  "/admin/notifications": "Notifications",
 };
 
 export default function Topbar() {
@@ -39,6 +43,8 @@ export default function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
+        <NotificationBell role="admin" />
+
         <div className="hidden text-right sm:block">
           <p className="text-[11px] font-medium text-[#d9d0d2]">
             {username}

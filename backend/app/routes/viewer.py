@@ -19,6 +19,7 @@ from database import (
     cast_collection,
     watch_history_collection,
     watch_sessions_collection,
+    watch_log_collection,
     watchlist_collection,
     viewer_settings_collection,
     notifications_collection,
@@ -36,6 +37,14 @@ from models.schemas import (
 from utils.cloudinary_helpers import upload_avatar
 from utils.moderation import check_comment_text
 from utils.security import require_role
+from utils.notifications import (
+    on_comment_added,
+    on_comment_liked,
+    on_comment_reply,
+    on_review_liked,
+    on_review_posted,
+    on_view_counted,
+)
 
 router = APIRouter(prefix="/viewer", tags=["viewer"])
 
@@ -57,6 +66,15 @@ try:
     )
     review_reactions_collection.create_index(
         [("viewerId", 1), ("reviewId", 1)], unique=True
+    )
+except Exception:
+    pass
+
+try:
+    # One counted view per viewer per film. Fails harmlessly if old duplicates exist;
+    # run utils/backfill_analytics_data.py --apply once to dedupe, then restart.
+    video_views_collection.create_index(
+        [("videoId", 1), ("viewerId", 1)], unique=True
     )
 except Exception:
     pass
@@ -516,6 +534,8 @@ def watch_video(
 
     now = datetime.utcnow()
 
+    log_id = _start_watch_log(viewer["_id"], oid, now)
+
     watch_sessions_collection.update_one(
         {
             "videoId": oid,
@@ -527,6 +547,7 @@ def watch_video(
                 "lastHeartbeatAt": now,
                 "lastReportedTimeSec": 0.0,
                 "counted": False,
+                "logId": log_id,
             }
         },
         upsert=True,
@@ -548,6 +569,31 @@ def watch_video(
         "stream_url": video.get("hlsManifestUrl"),
         "resumeTimeSec": resume_time,
     }
+
+
+def _start_watch_log(viewer_id, video_oid, now):
+    """Append-only record of one play, used by analytics for sessions and watch time."""
+    return watch_log_collection.insert_one({
+        "viewerId": viewer_id,
+        "videoId": video_oid,
+        "startedAt": now,
+        "lastHeartbeatAt": now,
+        "accumulatedSeconds": 0.0,
+    }).inserted_id
+
+
+def _log_watch_time(session, credited_gap, now):
+    """Add credited seconds to this play's log entry (created lazily for older sessions)."""
+    log_id = session.get("logId")
+    if log_id is None:
+        log_id = _start_watch_log(session["viewerId"], session["videoId"], now)
+        watch_sessions_collection.update_one(
+            {"_id": session["_id"]}, {"$set": {"logId": log_id}}
+        )
+    watch_log_collection.update_one(
+        {"_id": log_id},
+        {"$inc": {"accumulatedSeconds": credited_gap}, "$set": {"lastHeartbeatAt": now}},
+    )
 
 
 HEARTBEAT_MAX_GAP_SECONDS = 15
@@ -620,21 +666,12 @@ def watch_heartbeat(
             "lastHeartbeatAt": now,
             "lastReportedTimeSec": current,
             "counted": False,
+            "logId": _start_watch_log(viewer["_id"], oid, now),
         })
 
         return {
             "counted": False,
             "accumulatedSeconds": 0.0,
-            "currentTimeSec": current,
-        }
-
-    if session.get("counted"):
-        return {
-            "counted": True,
-            "accumulatedSeconds": session.get(
-                "accumulatedSeconds",
-                0,
-            ),
             "currentTimeSec": current,
         }
 
@@ -662,6 +699,28 @@ def watch_heartbeat(
         and drift <= PLAYBACK_DRIFT_TOLERANCE
         else 0
     )
+
+    # Watch time keeps accumulating after the view is counted (it used to stop at 75%).
+    _log_watch_time(session, credited_gap, now)
+
+    if session.get("counted"):
+        watch_sessions_collection.update_one(
+            {"_id": session["_id"]},
+            {
+                "$set": {
+                    "lastHeartbeatAt": now,
+                    "lastReportedTimeSec": current,
+                },
+                "$inc": {"accumulatedSeconds": credited_gap},
+            },
+        )
+        return {
+            "counted": True,
+            "accumulatedSeconds": (
+                session.get("accumulatedSeconds", 0) + credited_gap
+            ),
+            "currentTimeSec": current,
+        }
 
     new_accumulated = (
         session.get("accumulatedSeconds", 0)
@@ -706,6 +765,8 @@ def watch_heartbeat(
                 {"_id": oid},
                 {"$inc": {"views": 1}},
             )
+
+        on_view_counted(oid)
 
         watch_history_collection.update_one(
             {"viewerId": viewer["_id"], "videoId": oid},
@@ -799,7 +860,7 @@ def add_comment(
     body: CommentCreateRequest,
     payload: dict = Depends(require_role("viewer")),
 ):
-    oid, _ = _get_public_video_or_404(video_id)
+    oid, video = _get_public_video_or_404(video_id)
     viewer = _viewer_or_404(payload)
 
     now = datetime.utcnow()
@@ -840,6 +901,8 @@ def add_comment(
         {"$inc": {"commentCount": 1}},
     )
 
+    on_comment_added(comment_doc, video, viewer["_id"])
+
     return _serialize_comment(comment_doc, viewer["_id"])
 
 
@@ -859,7 +922,7 @@ def reply_to_comment(
             detail="Invalid id",
         )
 
-    _get_public_video_or_404(video_id)
+    _, video = _get_public_video_or_404(video_id)
 
     parent = comments_collection.find_one({
         "_id": parent_oid,
@@ -914,6 +977,8 @@ def reply_to_comment(
         {"_id": video_oid},
         {"$inc": {"commentCount": 1}},
     )
+
+    on_comment_reply(reply_doc, parent, video, viewer["_id"])
 
     return _serialize_comment(reply_doc, viewer["_id"])
 
@@ -1042,7 +1107,7 @@ def react_to_comment(
         comment_oid = ObjectId(comment_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid id")
-    _get_public_video_or_404(video_id)
+    _, video = _get_public_video_or_404(video_id)
     viewer = _viewer_or_404(payload)
     comment = comments_collection.find_one({
         "_id": comment_oid,
@@ -1070,6 +1135,8 @@ def react_to_comment(
             "type": body.type,
         })
         current = body.type
+    if current == "like":
+        on_comment_liked(comment, video, viewer["_id"])
     return {
         "reaction": current,
         "likes": comment_reactions_collection.count_documents({"commentId": comment_oid, "type": "like"}),
@@ -1249,14 +1316,17 @@ def react_to_video(
     elif existing:
         video_reactions_collection.update_one(
             {"_id": existing["_id"]},
-            {"$set": {"type": body.type}},
+            {"$set": {"type": body.type, "updatedAt": datetime.utcnow()}},
         )
     else:
         try:
+            _now = datetime.utcnow()
             video_reactions_collection.insert_one({
                 "videoId": oid,
                 "viewerId": viewer["_id"],
                 "type": body.type,
+                "createdAt": _now,
+                "updatedAt": _now,
             })
         except DuplicateKeyError:
             video_reactions_collection.update_one(
@@ -1267,6 +1337,7 @@ def react_to_video(
                 {
                     "$set": {
                         "type": body.type,
+                        "updatedAt": datetime.utcnow(),
                     }
                 },
             )
@@ -1605,6 +1676,9 @@ def upsert_review(
     count = int(stats[0]["count"]) if stats else 0
     film_collection.update_one({"_id": oid}, {"$set": {"avgRating": avg, "reviewCount": count}})
 
+    if not existing:
+        on_review_posted(review, video, viewer["_id"])
+
     result = _serialize_review(review, viewer["_id"])
     result.update({"avgRating": avg, "reviewCount": count})
     return result
@@ -1641,7 +1715,7 @@ def toggle_review_like(
     except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid review id")
 
-    _get_public_video_or_404(video_id)
+    _, video = _get_public_video_or_404(video_id)
     viewer = _viewer_or_404(payload)
 
     review = video_reviews_collection.find_one({"_id": review_oid})
@@ -1665,6 +1739,8 @@ def toggle_review_like(
         liked = True
 
     likes = review_reactions_collection.count_documents({"reviewId": review_oid, "type": "like"})
+    if liked:
+        on_review_liked(review, video, viewer["_id"])
     return {"liked": liked, "likes": likes}
 
 @router.get("/liked")

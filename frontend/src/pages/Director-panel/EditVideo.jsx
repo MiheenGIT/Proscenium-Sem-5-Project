@@ -18,24 +18,39 @@ import {
 import Hls from "hls.js";
 
 const GENRE_OPTIONS = [
-  "Drama", "Comedy", "Thriller", "Horror", "Documentary",
-  "Sci-Fi", "Romance", "Animation", "Action", "Experimental",
+  "Drama",
+  "Comedy",
+  "Thriller",
+  "Horror",
+  "Documentary",
+  "Sci-Fi",
+  "Romance",
+  "Animation",
+  "Action",
+  "Experimental",
 ];
 
 function StatusIcon({ status }) {
-  if (status === "approved") return <ShieldCheck size={14} className="text-[#7fc59b]" />;
-  if (status === "rejected") return <ShieldAlert size={14} className="text-[#e08a6b]" />;
+  if (status === "approved")
+    return <ShieldCheck size={14} className="text-[#7fc59b]" />;
+  if (status === "rejected")
+    return <ShieldAlert size={14} className="text-[#e08a6b]" />;
   return <ShieldQuestion size={14} className="text-[var(--gold)]" />;
 }
 
 function StatusBadge({ status }) {
   const styles = {
-    approved: "border-[var(--gold)] text-[var(--gold-soft)] bg-[rgba(217,166,83,0.08)]",
-    pending: "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] bg-transparent",
-    rejected: "border-[var(--error)] text-[var(--error)] bg-[rgba(224,138,107,0.08)]",
+    approved:
+      "border-[var(--gold)] text-[var(--gold-soft)] bg-[rgba(217,166,83,0.08)]",
+    pending:
+      "border-[rgba(239,231,218,0.2)] text-[var(--mauve)] bg-transparent",
+    rejected:
+      "border-[var(--error)] text-[var(--error)] bg-[rgba(224,138,107,0.08)]",
   };
   return (
-    <span className={`inline-block rounded-full border px-2.5 py-0.5 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.08em] ${styles[status] || styles.pending}`}>
+    <span
+      className={`inline-block rounded-full border px-2.5 py-0.5 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.08em] ${styles[status] || styles.pending}`}
+    >
       {status || "pending"}
     </span>
   );
@@ -48,24 +63,26 @@ function CastSlider({ cast, setCast }) {
     if (index >= cast.length) setIndex(Math.max(0, cast.length - 1));
   }, [cast.length, index]);
 
-  useEffect(() => {
-    return () => {
-      cast.forEach((c) => {
-        if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
-      });
-    };
-  }, []);
-
   function addMember() {
     setCast((prev) => [
       ...prev,
-      { clientId: crypto.randomUUID(), _id: null, name: "", characterName: "", photoFile: null, photoPreviewUrl: null, existingPhotoUrl: null },
+      {
+        clientId: crypto.randomUUID(),
+        _id: null,
+        name: "",
+        characterName: "",
+        photoFile: null,
+        photoPreviewUrl: null,
+        existingPhotoUrl: null,
+      },
     ]);
     setIndex(cast.length);
   }
 
   function updateMember(clientId, field, value) {
-    setCast((prev) => prev.map((c) => (c.clientId === clientId ? { ...c, [field]: value } : c)));
+    setCast((prev) =>
+      prev.map((c) => (c.clientId === clientId ? { ...c, [field]: value } : c)),
+    );
   }
 
   function updatePhoto(clientId, file) {
@@ -73,8 +90,12 @@ function CastSlider({ cast, setCast }) {
       prev.map((c) => {
         if (c.clientId !== clientId) return c;
         if (c.photoPreviewUrl) URL.revokeObjectURL(c.photoPreviewUrl);
-        return { ...c, photoFile: file, photoPreviewUrl: file ? URL.createObjectURL(file) : null };
-      })
+        return {
+          ...c,
+          photoFile: file,
+          photoPreviewUrl: file ? URL.createObjectURL(file) : null,
+        };
+      }),
     );
   }
 
@@ -87,95 +108,149 @@ function CastSlider({ cast, setCast }) {
     });
   }
 
-  if (cast.length === 0) {
+  if (!cast.length)
     return (
       <button
         type="button"
         onClick={addMember}
-        className="w-full rounded-[4px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] py-7 text-center font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
+        className="group w-full rounded-[6px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-4 py-8 text-center transition hover:border-[var(--gold)] hover:bg-[rgba(217,166,83,0.04)]"
       >
-        + Add first cast member
+        <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(217,166,83,0.25)] bg-[rgba(217,166,83,0.06)] text-lg text-[var(--gold-soft)]">
+          +
+        </div>
+        <div className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--parchment)]">
+          Add first cast member
+        </div>
+        <div className="mt-1 text-[0.68rem] text-[var(--mauve)]">
+          Add actor, character and profile photo
+        </div>
       </button>
     );
-  }
 
   const current = cast[index];
-
   return (
-    <div className="relative rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] p-4">
-      <div className="mb-3 flex items-center justify-between px-2">
-        <button
-          type="button"
-          onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          disabled={index === 0}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
-        >
-          ‹
-        </button>
-        <span className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.08em] text-[var(--mauve)]">
-          Cast member {index + 1} of {cast.length}
-        </span>
-        <button
-          type="button"
-          onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))}
-          disabled={index === cast.length - 1}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[var(--parchment)] disabled:opacity-20 hover:bg-[rgba(217,166,83,0.15)] transition"
-        >
-          ›
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => removeMember(current.clientId)}
-        aria-label="Remove this cast member"
-        className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(224,138,107,0.35)] text-sm leading-none text-[var(--error)] transition-colors hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
-      >
-        ×
-      </button>
-
-      <div className="flex flex-col items-center">
-        <label className="block h-24 w-24 cursor-pointer overflow-hidden rounded-full border border-[rgba(239,231,218,0.2)] bg-[var(--velvet-deep)] transition-colors hover:border-[var(--gold)]">
-          {current.photoPreviewUrl || current.existingPhotoUrl ? (
-            <img src={current.photoPreviewUrl || current.existingPhotoUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-center text-[0.65rem] leading-none text-[var(--mauve)]">
-              No photo
-            </div>
-          )}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => updatePhoto(current.clientId, e.target.files?.[0] ?? null)}
-          />
-        </label>
-
-        <div className="mt-3 w-full space-y-2">
-          <input
-            type="text"
-            placeholder="Actor name"
-            value={current.name}
-            onChange={(e) => updateMember(current.clientId, "name", e.target.value)}
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-          />
-          <input
-            type="text"
-            placeholder="Character name"
-            value={current.characterName}
-            onChange={(e) => updateMember(current.clientId, "characterName", e.target.value)}
-            className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#17131a] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-          />
+    <div className="overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11]">
+      <div className="flex items-center justify-between border-b border-[rgba(239,231,218,0.1)] bg-[#141017] px-4 py-3">
+        <div>
+          <div className="font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+            Cast &amp; Crew
+          </div>
+          <div className="mt-1 text-[0.72rem] text-[var(--parchment)]">
+            Add actor, character and profile image.
+          </div>
         </div>
+        <span className="rounded-full border border-[rgba(217,166,83,0.2)] bg-[rgba(217,166,83,0.06)] px-2.5 py-1 font-[var(--font-mono)] text-[0.62rem] text-[var(--gold-soft)]">
+          {index + 1} / {cast.length}
+        </span>
       </div>
-
-      <button
-        type="button"
-        onClick={addMember}
-        className="mt-3 w-full rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] py-1.5 font-[var(--font-mono)] text-[0.65rem] uppercase tracking-[0.06em] text-[var(--mauve)] hover:border-[var(--gold)] hover:text-[var(--gold-soft)] transition"
-      >
-        + Add another cast member
-      </button>
+      <div className="p-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+            aria-label="Previous cast member"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-base text-[var(--parchment)] transition hover:border-[rgba(217,166,83,0.45)] hover:bg-[rgba(217,166,83,0.1)] disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            ‹
+          </button>
+          <div className="flex min-w-0 flex-1 justify-center gap-1.5 overflow-hidden">
+            {cast.map((member, i) => (
+              <button
+                key={member.clientId}
+                type="button"
+                onClick={() => setIndex(i)}
+                aria-label={`Select cast member ${i + 1}`}
+                className={`h-1.5 min-w-4 max-w-8 rounded-full transition-all ${i === index ? "bg-[var(--gold)]" : "bg-white/10 hover:bg-white/20"}`}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIndex((i) => Math.min(cast.length - 1, i + 1))}
+            disabled={index === cast.length - 1}
+            aria-label="Next cast member"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-base text-[var(--parchment)] transition hover:border-[rgba(217,166,83,0.45)] hover:bg-[rgba(217,166,83,0.1)] disabled:cursor-not-allowed disabled:opacity-20"
+          >
+            ›
+          </button>
+        </div>
+        <div className="relative grid gap-4 rounded-[5px] border border-[rgba(239,231,218,0.1)] bg-[#121016] p-4 sm:grid-cols-[112px_1fr]">
+          <button
+            type="button"
+            onClick={() => removeMember(current.clientId)}
+            aria-label="Remove this cast member"
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(224,138,107,0.3)] bg-[#121016] text-sm text-[var(--error)] transition hover:border-[var(--error)] hover:bg-[rgba(224,138,107,0.12)]"
+          >
+            ×
+          </button>
+          <label className="group mx-auto block h-28 w-28 cursor-pointer overflow-hidden rounded-[6px] border border-[rgba(239,231,218,0.16)] bg-[var(--velvet-deep)] transition hover:border-[var(--gold)] sm:mx-0">
+            {current.photoPreviewUrl || current.existingPhotoUrl ? (
+              <img
+                src={current.photoPreviewUrl || current.existingPhotoUrl}
+                alt={current.name || "Cast member"}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-center text-[var(--mauve)]">
+                <Users size={22} strokeWidth={1.5} />
+                <span className="text-[0.6rem] uppercase tracking-[0.06em]">
+                  Add photo
+                </span>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) =>
+                updatePhoto(current.clientId, e.target.files?.[0] ?? null)
+              }
+            />
+          </label>
+          <div className="min-w-0 space-y-3 pr-6">
+            <div>
+              <label className="mb-1.5 block font-[var(--font-mono)] text-[0.58rem] uppercase tracking-[0.08em] text-[var(--mauve)]">
+                Actor / Artist name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Tom Hanks"
+                value={current.name}
+                onChange={(e) =>
+                  updateMember(current.clientId, "name", e.target.value)
+                }
+                className="w-full rounded-[4px] border border-[rgba(239,231,218,0.14)] bg-[#17131a] px-3 py-2.5 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] transition focus:border-[var(--gold)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.12)]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block font-[var(--font-mono)] text-[0.58rem] uppercase tracking-[0.08em] text-[var(--mauve)]">
+                Character name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Mr. White"
+                value={current.characterName}
+                onChange={(e) =>
+                  updateMember(
+                    current.clientId,
+                    "characterName",
+                    e.target.value,
+                  )
+                }
+                className="w-full rounded-[4px] border border-[rgba(239,231,218,0.14)] bg-[#17131a] px-3 py-2.5 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] transition focus:border-[var(--gold)] focus:outline-none focus:ring-1 focus:ring-[rgba(217,166,83,0.12)]"
+              />
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={addMember}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-[4px] border border-dashed border-[rgba(239,231,218,0.18)] bg-transparent py-2.5 font-[var(--font-mono)] text-[0.63rem] uppercase tracking-[0.07em] text-[var(--mauve)] transition hover:border-[var(--gold)] hover:bg-[rgba(217,166,83,0.04)] hover:text-[var(--gold-soft)]"
+        >
+          + Add another cast member
+        </button>
+      </div>
     </div>
   );
 }
@@ -222,7 +297,8 @@ export default function EditVideo() {
   const [resubmitError, setResubmitError] = useState(null);
 
   useEffect(() => {
-    if (newFilmPreviewUrl || !video?.hlsManifestUrl || !bgVideoRef.current) return;
+    if (newFilmPreviewUrl || !video?.hlsManifestUrl || !bgVideoRef.current)
+      return;
 
     const el = bgVideoRef.current;
     const src = video.hlsManifestUrl;
@@ -280,7 +356,10 @@ export default function EditVideo() {
           productionCountry: data.productionCountry || "",
           releaseYear: data.releaseYear || "",
           thumbnailUrl: data.thumbnailUrl || "",
-          cast: initialCast.map((c) => ({ name: c.name, characterName: c.characterName })),
+          cast: initialCast.map((c) => ({
+            name: c.name,
+            characterName: c.characterName,
+          })),
         });
       })
       .catch((err) => {
@@ -294,17 +373,37 @@ export default function EditVideo() {
   useEffect(() => {
     if (!initialSnapshotRef.current) return;
     const current = JSON.stringify({
-      title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl,
+      title,
+      description,
+      genres,
+      tags,
+      language,
+      productionCountry,
+      releaseYear,
+      thumbnailUrl,
       cast: cast.map((c) => ({ name: c.name, characterName: c.characterName })),
     });
     setIsDirty(
       current !== initialSnapshotRef.current ||
-      cast.some((c) => c.photoFile) ||
-      Boolean(newThumbnail) ||
-      Boolean(newFilm) ||
-      resetToAutoThumbnail
+        cast.some((c) => c.photoFile) ||
+        Boolean(newThumbnail) ||
+        Boolean(newFilm) ||
+        resetToAutoThumbnail,
     );
-  }, [title, description, genres, tags, language, productionCountry, releaseYear, thumbnailUrl, cast, newThumbnail, newFilm, resetToAutoThumbnail]);
+  }, [
+    title,
+    description,
+    genres,
+    tags,
+    language,
+    productionCountry,
+    releaseYear,
+    thumbnailUrl,
+    cast,
+    newThumbnail,
+    newFilm,
+    resetToAutoThumbnail,
+  ]);
 
   useEffect(() => {
     function handleBeforeUnload(e) {
@@ -338,7 +437,9 @@ export default function EditVideo() {
   const allGenreOptions = [...customGenres];
 
   function toggleGenre(g) {
-    setGenres((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+    setGenres((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+    );
   }
 
   function addCustomGenre() {
@@ -373,7 +474,14 @@ export default function EditVideo() {
     }
     fd.append(
       "cast",
-      JSON.stringify(cast.map((c) => ({ ...(c._id ? { _id: c._id } : {}), clientId: c.clientId, name: c.name, characterName: c.characterName })))
+      JSON.stringify(
+        cast.map((c) => ({
+          ...(c._id ? { _id: c._id } : {}),
+          clientId: c.clientId,
+          name: c.name,
+          characterName: c.characterName,
+        })),
+      ),
     );
     cast.forEach((c) => {
       if (c.photoFile) fd.append(`cast_photo_${c.clientId}`, c.photoFile);
@@ -381,7 +489,7 @@ export default function EditVideo() {
 
     const prevOldTitle = initialSnapshotRef.current
       ? JSON.parse(initialSnapshotRef.current).title
-      : (video?.title || title);
+      : video?.title || title;
 
     setSavingMeta(true);
     try {
@@ -397,9 +505,18 @@ export default function EditVideo() {
       setResetToAutoThumbnail(false);
 
       initialSnapshotRef.current = JSON.stringify({
-        title, description, genres, tags, language, productionCountry, releaseYear,
+        title,
+        description,
+        genres,
+        tags,
+        language,
+        productionCountry,
+        releaseYear,
         thumbnailUrl: updatedThumbnail,
-        cast: cast.map((c) => ({ name: c.name, characterName: c.characterName })),
+        cast: cast.map((c) => ({
+          name: c.name,
+          characterName: c.characterName,
+        })),
       });
       setIsDirty(Boolean(newFilm));
     } catch (err) {
@@ -470,7 +587,9 @@ export default function EditVideo() {
       <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
         <DirectorNav confirmBeforeLeave={false} />
         <main className="mx-auto max-w-6xl px-6 py-12">
-          <p className="font-[var(--font-mono)] text-sm text-[var(--mauve)]">Loading…</p>
+          <p className="font-[var(--font-mono)] text-sm text-[var(--mauve)]">
+            Loading…
+          </p>
         </main>
       </div>
     );
@@ -480,7 +599,33 @@ export default function EditVideo() {
     <div className="min-h-screen bg-[var(--stage)] text-[var(--parchment)]">
       <DirectorNav confirmBeforeLeave={isDirty} />
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto w-full max-w-none px-5 py-8 sm:px-7 lg:px-8">
+        <section className="mb-8 flex flex-col justify-between gap-6 border-b border-[rgba(217,166,83,0.18)] pb-8 md:flex-row md:items-end">
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center gap-3 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.22em] text-[var(--gold)]">
+              <span className="h-px w-10 bg-[var(--gold)]" />
+              Director Studio
+            </div>
+            <h1 className="font-[var(--font-display)] text-4xl font-medium tracking-tight text-[var(--parchment)] sm:text-5xl">
+              Edit your film<span className="text-[var(--gold)]">.</span>
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--mauve)] sm:text-base">
+              Update your film details, artwork and cast. Your existing video
+              stays untouched unless you choose to replace it.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="inline-flex shrink-0 items-center justify-center gap-3 self-start rounded-[5px] border border-[rgba(239,231,218,0.18)] px-5 py-3 font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--parchment)] transition hover:border-[var(--gold)] hover:text-[var(--gold-soft)] md:self-auto"
+          >
+            <span aria-hidden="true" className="text-base">
+              ←
+            </span>{" "}
+            Back
+          </button>
+        </section>
+
         {metaError && (
           <div className="mb-4 rounded-[4px] border border-[rgba(224,138,107,0.4)] bg-[rgba(224,138,107,0.12)] px-4 py-3 text-sm text-[var(--error)]">
             {metaError}
@@ -494,8 +639,8 @@ export default function EditVideo() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Top Full Width: Film Title */}
-          <div className="rounded-[4px] border border-[rgba(239,231,218,0.12)] bg-[rgba(15,12,17,0.72)] p-4 backdrop-blur-sm">
-            <div className="mb-2 flex items-center gap-3">
+          <div className="rounded-[6px] border border-[rgba(239,231,218,0.16)] bg-[rgba(15,12,17,0.72)] p-5 backdrop-blur-sm sm:p-7">
+            <div className="mb-3 flex items-center gap-3">
               <span className="h-px flex-1 bg-[rgba(217,166,83,0.18)]" />
               <label className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.18em] text-[var(--gold)]">
                 Film Title
@@ -509,7 +654,7 @@ export default function EditVideo() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Give your film a name"
-              className="w-full h-9 rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-4 text-sm text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.45)] focus:border-[var(--gold)] focus:outline-none"
+              className="h-[54px] w-full rounded-[4px] border border-[rgba(239,231,218,0.18)] bg-[#0f0c11] px-5 text-base font-medium text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.45)] focus:border-[var(--gold)] focus:outline-none sm:text-lg"
             />
           </div>
 
@@ -555,7 +700,8 @@ export default function EditVideo() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (newThumbnailPreviewUrl) URL.revokeObjectURL(newThumbnailPreviewUrl);
+                        if (newThumbnailPreviewUrl)
+                          URL.revokeObjectURL(newThumbnailPreviewUrl);
                         setNewThumbnail(null);
                         setNewThumbnailPreviewUrl(null);
                       }}
@@ -585,35 +731,46 @@ export default function EditVideo() {
                   )}
                 </div>
 
-                <label className="group relative flex aspect-video w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[4px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] transition hover:border-[var(--gold)]">
+                <label
+                  className={`group relative flex ${newThumbnailPreviewUrl || thumbnailUrl ? "min-h-[170px] max-h-[240px]" : "h-[85px]"} w-full cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[3px] border border-dashed border-[rgba(239,231,218,0.2)] bg-[#0f0c11] px-3 text-center transition hover:border-[var(--gold)]`}
+                >
                   {resetToAutoThumbnail ? (
                     <div className="flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-                      <RefreshCw size={20} className="text-[var(--gold)] animate-pulse" />
+                      <RefreshCw
+                        size={20}
+                        className="text-[var(--gold)] animate-pulse"
+                      />
                       <span className="font-[var(--font-mono)] text-[0.68rem] text-[var(--gold-soft)] uppercase tracking-wider">
                         Auto-capture on Save
                       </span>
                       <p className="text-[0.62rem] text-[var(--mauve)]">
-                        A fresh frame will be generated from your video when you click Save Changes.
+                        A fresh frame will be generated from your video when you
+                        click Save Changes.
                       </p>
                     </div>
                   ) : newThumbnailPreviewUrl || thumbnailUrl ? (
                     <img
                       src={newThumbnailPreviewUrl || thumbnailUrl}
                       alt="Thumbnail preview"
-                      className="h-full w-full object-cover"
+                      className="max-h-[220px] w-full rounded-[2px] object-contain"
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center gap-1.5 text-center text-[var(--mauve)] group-hover:text-[var(--gold-soft)]">
                       <ImageIcon size={20} />
                       <span className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-wider">
-                        Upload Thumbnail
+                        Choose thumbnail
+                      </span>
+                      <span className="mt-0.5 text-[0.65rem] text-[var(--mauve)]">
+                        JPG, PNG or WebP · Max 10 MB
                       </span>
                     </div>
                   )}
 
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
                     <span className="rounded-[3px] border border-[var(--gold)] bg-[#17131a] px-3 py-1 font-[var(--font-mono)] text-[0.62rem] uppercase tracking-wider text-[var(--gold-soft)]">
-                      {resetToAutoThumbnail ? "Upload custom image instead" : "Change Thumbnail"}
+                      {resetToAutoThumbnail
+                        ? "Upload custom image instead"
+                        : "Change Thumbnail"}
                     </span>
                   </div>
 
@@ -624,7 +781,8 @@ export default function EditVideo() {
                     onChange={(e) => {
                       const file = e.target.files?.[0] ?? null;
                       if (file) {
-                        if (newThumbnailPreviewUrl) URL.revokeObjectURL(newThumbnailPreviewUrl);
+                        if (newThumbnailPreviewUrl)
+                          URL.revokeObjectURL(newThumbnailPreviewUrl);
                         setResetToAutoThumbnail(false);
                         setNewThumbnail(file);
                         setNewThumbnailPreviewUrl(URL.createObjectURL(file));
@@ -637,22 +795,8 @@ export default function EditVideo() {
                     ? "Thumbnail will be automatically extracted from the video stream upon saving."
                     : newThumbnail
                       ? `Selected: ${newThumbnail.name}`
-                      : "Upload a custom poster, or click 'Auto-generate from video' to capture a fresh frame."}
+                      : "Choose Change Thumbnail to replace the current poster, or auto-generate a fresh frame."}
                 </p>
-              </div>
-
-              {/* Language */}
-              <div>
-                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
-                  Language
-                </label>
-                <input
-                  type="text"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  placeholder="Enter language"
-                  className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
-                />
               </div>
             </div>
 
@@ -666,7 +810,11 @@ export default function EditVideo() {
 
                 <div className="relative flex flex-1 flex-col">
                   <div className="mb-2 flex items-center justify-center gap-2">
-                    <Film size={13} strokeWidth={1.5} className="text-[var(--gold)]" />
+                    <Film
+                      size={13}
+                      strokeWidth={1.5}
+                      className="text-[var(--gold)]"
+                    />
                     <label className="font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.16em] text-[var(--mauve)]">
                       Film
                     </label>
@@ -704,7 +852,9 @@ export default function EditVideo() {
                         onChange={(e) => {
                           const f = e.target.files?.[0] ?? null;
                           setNewFilm(f);
-                          setNewFilmPreviewUrl(f ? URL.createObjectURL(f) : null);
+                          setNewFilmPreviewUrl(
+                            f ? URL.createObjectURL(f) : null,
+                          );
                         }}
                       />
                     </label>
@@ -730,7 +880,8 @@ export default function EditVideo() {
                           <button
                             type="button"
                             onClick={() => {
-                              if (newFilmPreviewUrl) URL.revokeObjectURL(newFilmPreviewUrl);
+                              if (newFilmPreviewUrl)
+                                URL.revokeObjectURL(newFilmPreviewUrl);
                               setNewFilm(null);
                               setNewFilmPreviewUrl(null);
                             }}
@@ -744,13 +895,23 @@ export default function EditVideo() {
                       {reuploading && (
                         <div className="absolute inset-0 flex flex-col justify-end bg-black/75 p-4">
                           <div className="mb-1.5 flex justify-between font-[var(--font-mono)] text-[0.7rem] uppercase tracking-[0.06em] text-[var(--parchment)]">
-                            <span>{reuploadPhase === "uploading" ? "Uploading" : "Processing (estimated)"}</span>
-                            <span>{reuploadPhase === "uploading" ? `${reuploadPercent}%` : `${reuploadProcessingPercent}%`}</span>
+                            <span>
+                              {reuploadPhase === "uploading"
+                                ? "Uploading"
+                                : "Processing (estimated)"}
+                            </span>
+                            <span>
+                              {reuploadPhase === "uploading"
+                                ? `${reuploadPercent}%`
+                                : `${reuploadProcessingPercent}%`}
+                            </span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
                             <div
                               className="h-full rounded-full bg-[var(--gold)] transition-all duration-300"
-                              style={{ width: `${reuploadPhase === "uploading" ? reuploadPercent : reuploadProcessingPercent}%` }}
+                              style={{
+                                width: `${reuploadPhase === "uploading" ? reuploadPercent : reuploadProcessingPercent}%`,
+                              }}
                             />
                           </div>
                         </div>
@@ -758,7 +919,11 @@ export default function EditVideo() {
                     </div>
                   )}
 
-                  {reuploadError && <p className="mt-2 text-xs text-[var(--error)]">{reuploadError}</p>}
+                  {reuploadError && (
+                    <p className="mt-2 text-xs text-[var(--error)]">
+                      {reuploadError}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -776,7 +941,11 @@ export default function EditVideo() {
                 disabled={savingMeta || reuploading}
                 className="w-full rounded-[4px] bg-[var(--gold)] py-3 font-[var(--font-body)] text-sm font-semibold uppercase tracking-wider text-[#100d10] transition-colors hover:bg-[var(--gold-soft)] hover:brightness-105 disabled:opacity-60 shadow-lg shadow-[#d9a653]/15"
               >
-                {savingMeta ? "Saving Changes…" : reuploading ? "Uploading Film…" : "Save Changes"}
+                {savingMeta
+                  ? "Saving Changes…"
+                  : reuploading
+                    ? "Uploading Film…"
+                    : "Save Changes"}
               </button>
             </div>
 
@@ -842,9 +1011,13 @@ export default function EditVideo() {
                 </div>
 
                 <p className="mt-3 text-xs leading-relaxed text-[var(--mauve)]">
-                  {video.moderationStatus === "approved" && "This film is live and publicly visible to all viewers."}
-                  {video.moderationStatus === "pending" && "Awaiting moderator review before publishing."}
-                  {video.moderationStatus === "rejected" && (video.moderationComment || "This film was rejected. Address notes and resubmit.")}
+                  {video.moderationStatus === "approved" &&
+                    "This film is live and publicly visible to all viewers."}
+                  {video.moderationStatus === "pending" &&
+                    "Awaiting moderator review before publishing."}
+                  {video.moderationStatus === "rejected" &&
+                    (video.moderationComment ||
+                      "This film was rejected. Address notes and resubmit.")}
                 </p>
 
                 {video.moderationStatus === "rejected" && (
@@ -857,7 +1030,11 @@ export default function EditVideo() {
                     >
                       {resubmitting ? "Resubmitting…" : "Resubmit for review"}
                     </button>
-                    {resubmitError && <p className="mt-2 text-xs text-[var(--error)]">{resubmitError}</p>}
+                    {resubmitError && (
+                      <p className="mt-2 text-xs text-[var(--error)]">
+                        {resubmitError}
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -886,6 +1063,20 @@ export default function EditVideo() {
                     className="w-full rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs text-[var(--parchment)] focus:border-[var(--gold)] focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Language — positioned like Upload Video */}
+              <div>
+                <label className="mb-1.5 block font-[var(--font-mono)] text-[0.68rem] uppercase tracking-[0.1em] text-[var(--mauve)]">
+                  Language
+                </label>
+                <textarea
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  placeholder="Enter language"
+                  rows={2}
+                  className="max-h-[72px] min-h-[42px] w-full resize-none overflow-y-auto rounded-[3px] border border-[rgba(239,231,218,0.16)] bg-[#0f0c11] px-3 py-2 text-xs leading-relaxed text-[var(--parchment)] placeholder:text-[rgba(139,124,130,0.6)] focus:border-[var(--gold)] focus:outline-none"
+                />
               </div>
             </div>
           </div>
