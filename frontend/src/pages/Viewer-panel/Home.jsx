@@ -26,6 +26,19 @@ const MOODS = [
 const cx = (...values) => values.filter(Boolean).join(" ");
 const num = (value) => Number(value || 0);
 
+function cleanLabels(values) {
+  const seen = new Set();
+  return (Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter((value) => {
+      const key = value.toLocaleLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
 function yearOf(video) {
   return (
     video?.releaseYear ||
@@ -301,10 +314,11 @@ export default function ViewerHome() {
       setWatchlist(
         watchlistData.videos || []
       );
-      setGenres(genresData.genres || []);
+      setGenres(cleanLabels(genresData.genres));
       setProfile(profileData);
       setLiked(likedData.videos || []);
       setReviews(reviewsData.reviews || []);
+
     } catch (e) {
       setError(
         e.message || "Unable to load your cinema."
@@ -865,7 +879,7 @@ export default function ViewerHome() {
               onChange={(e) =>
                 setSearch(e.target.value)
               }
-              placeholder="Search films, directors, genres..."
+              placeholder="Search films, genres or tags..."
               className="min-w-0 flex-1 bg-transparent text-[11px] text-[#efe7da] outline-none placeholder:text-[#71666b]"
             />
 
@@ -975,19 +989,6 @@ export default function ViewerHome() {
                   <div className="mb-3 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[.2em] text-[#d9a653]">
                     <Sparkles size={13} />
                     Proscenium selection
-                  </div>
-
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    {hero.genres
-                      ?.slice(0, 3)
-                      .map((currentGenre) => (
-                        <span
-                          key={currentGenre}
-                          className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[9px] text-[#d8cfd1] backdrop-blur"
-                        >
-                          {currentGenre}
-                        </span>
-                      ))}
                   </div>
 
                   <h1 className="max-w-xl font-[var(--font-display)] text-4xl font-semibold leading-[.95] tracking-[-.035em] text-[#efe7da] sm:text-5xl lg:text-6xl">
@@ -1110,30 +1111,6 @@ export default function ViewerHome() {
                 )}
               </section>
             )}
-
-            <div className="flex gap-2 overflow-x-auto px-4 py-5 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {[
-                "",
-                ...(genres.length
-                  ? genres
-                  : DEFAULT_GENRES),
-              ].map((currentGenre) => (
-                <button
-                  key={currentGenre || "all"}
-                  onClick={() =>
-                    setGenre(currentGenre)
-                  }
-                  className={cx(
-                    "shrink-0 rounded-full border px-4 py-2 text-[9px] transition",
-                    genre === currentGenre
-                      ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
-                      : "border-white/[0.08] bg-white/[0.025] text-[#9b9094] hover:border-white/15 hover:text-[#efe7da]"
-                  )}
-                >
-                  {currentGenre || "All films"}
-                </button>
-              ))}
-            </div>
 
             <Rail
               id="continue"

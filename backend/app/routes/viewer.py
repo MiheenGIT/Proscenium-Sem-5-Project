@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from typing import Optional
 
 from bson import ObjectId
@@ -205,6 +206,7 @@ def _serialize_profile(viewer: dict) -> dict:
         "email": viewer.get("email", ""),
         "date_of_birth": viewer.get("date_of_birth"),
         "bio": viewer.get("bio"),
+        "gender": viewer.get("gender"),
         "genrePreferences": viewer.get("genrePreferences", []),
         "languagePreferences": viewer.get("languagePreferences", []),
         "maturitySetting": viewer.get("maturitySetting", "all"),
@@ -231,6 +233,9 @@ def browse_videos(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     genre: Optional[str] = Query(None),
+    tags: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, max_length=100),
+    sort: str = Query("newest", pattern="^(newest|trending|rating)$"),
     excludeId: Optional[str] = Query(None),
     payload: dict = Depends(require_role("viewer")),
 ):
@@ -243,6 +248,26 @@ def browse_videos(
             "$regex": f"^{genre.strip()}$",
             "$options": "i",
         }
+    selected_tags = [
+        tag.strip()
+        for tag in (tags or "").split(",")
+        if tag.strip()
+    ]
+    if selected_tags:
+        query["tags"] = {
+            "$all": [
+                re.compile(f"^{re.escape(tag)}$", re.IGNORECASE)
+                for tag in selected_tags
+            ]
+        }
+    if q and q.strip():
+        search = re.escape(q.strip())
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}},
+            {"genres": {"$regex": search, "$options": "i"}},
+            {"tags": {"$regex": search, "$options": "i"}},
+        ]
     if excludeId:
         try:
             query["_id"] = {"$ne": ObjectId(excludeId)}
@@ -257,10 +282,15 @@ def browse_videos(
         history_tags_genres.update(entry.get("tags", []))
         history_tags_genres.update(entry.get("genres", []))
 
-    if not history_tags_genres:
+    sort_field = {
+        "trending": ("views", -1),
+        "rating": ("avgRating", -1),
+        "newest": ("publishedAt", -1),
+    }[sort]
+
+    if not history_tags_genres or sort != "newest":
         videos = list(
-            film_collection.find(query)
-            .sort("publishedAt", -1)
+            film_collection.find(query).sort(*sort_field)
             .skip(skip)
             .limit(limit)
         )
@@ -282,12 +312,28 @@ def list_genres(payload: dict = Depends(require_role("viewer"))):
 
     genres = film_collection.distinct("genres", query)
 
-    return {
-        "genres": sorted(
-            {str(g).strip() for g in genres if str(g).strip()},
-            key=str.lower,
-        )
+    canonical = {}
+    for value in genres:
+        label = str(value).strip()
+        if label:
+            canonical.setdefault(label.casefold(), label)
+    return {"genres": sorted(canonical.values(), key=str.casefold)}
+
+
+@router.get("/tags")
+def list_tags(payload: dict = Depends(require_role("viewer"))):
+    query = {
+        "moderationStatus": "approved",
+        "visibility": "public",
     }
+    query.update(_maturity_filter(payload))
+    tags = film_collection.distinct("tags", query)
+    canonical = {}
+    for value in tags:
+        label = str(value).strip()
+        if label:
+            canonical.setdefault(label.casefold(), label)
+    return {"tags": sorted(canonical.values(), key=str.casefold)}
 
 
 # =========================================================
@@ -310,12 +356,14 @@ def search_videos(
         ge=1,
         le=100,
     ),
+    genre: Optional[str] = Query(None, max_length=60),
+    tags: Optional[str] = Query(None, max_length=300),
     payload: dict = Depends(
         require_role("viewer")
     ),
 ):
     """
-    Search approved/public videos by title.
+    Search approved/public videos by title, description, genre or tag.
 
     Only videos that are:
       - moderationStatus = approved
@@ -343,14 +391,34 @@ def search_videos(
     # BUILD SEARCH QUERY
     # -----------------------------------------------------
 
+    search_regex = {"$regex": re.escape(search_text), "$options": "i"}
     query = {
         "moderationStatus": "approved",
         "visibility": "public",
-        "title": {
-            "$regex": re.escape(search_text),
-            "$options": "i",
-        },
+        "$or": [
+            {"title": search_regex},
+            {"description": search_regex},
+            {"genres": search_regex},
+            {"tags": search_regex},
+        ],
     }
+    if genre and genre.strip():
+        query["genres"] = {
+            "$regex": f"^{re.escape(genre.strip())}$",
+            "$options": "i",
+        }
+    selected_tags = [
+        tag.strip()
+        for tag in (tags or "").split(",")
+        if tag.strip()
+    ]
+    if selected_tags:
+        query["tags"] = {
+            "$all": [
+                re.compile(f"^{re.escape(tag)}$", re.IGNORECASE)
+                for tag in selected_tags
+            ]
+        }
 
     # -----------------------------------------------------
     # MATURITY FILTER
@@ -477,9 +545,19 @@ def get_video_detail(
                 "liked": review_liked,
             }
 
+    _director = None
+    if video.get("directorId"):
+        try:
+            from database import directors_collection as _directors
+            _director = _directors.find_one({"_id": ObjectId(str(video["directorId"]))}, {"studioName": 1, "username": 1})
+        except Exception:
+            _director = None
+
     return {
         "id": str(video["_id"]),
         "title": video.get("title"),
+        "directorId": str(video["directorId"]) if video.get("directorId") else None,
+        "directorName": (_director or {}).get("studioName") or (_director or {}).get("username"),
         "description": video.get("description"),
         "thumbnailUrl": video.get("thumbnailUrl"),
         "genres": video.get("genres", []),
@@ -2030,6 +2108,9 @@ def update_profile(
 
     if body.languagePreferences is not None:
         updates["languagePreferences"] = body.languagePreferences
+
+    if body.gender is not None:
+        updates["gender"] = body.gender
 
     if body.maturitySetting is not None:
         if body.maturitySetting not in {

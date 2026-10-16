@@ -1,11 +1,36 @@
-from models.schemas import RegisterUser, ViewerRegister, CreatorRegister, AdminRegister
+from models.schemas import (
+    RegisterUser,
+    ViewerRegister,
+    CreatorRegister,
+    AdminRegister,
+    DeleteAccountRequest,
+)
 from fastapi import FastAPI, HTTPException, APIRouter, Depends, Form, UploadFile, File
-from database import directors_collection, viewers_collection, admin_collection
+from database import (
+    directors_collection,
+    viewers_collection,
+    admin_collection,
+    account_deletions_collection,
+    film_collection,
+    comments_collection,
+    comment_reactions_collection,
+    video_reactions_collection,
+    video_reviews_collection,
+    review_reactions_collection,
+    video_views_collection,
+    watch_history_collection,
+    watch_sessions_collection,
+    watchlist_collection,
+    notifications_collection,
+    cast_collection,
+)
 from datetime import datetime, date
 from typing import Optional, List
 from pydantic import EmailStr, ValidationError
 from utils.security import hash_password, verify_password, create_access_token, get_current_user, require_role
 from utils.cloudinary_helpers import upload_avatar
+from utils.cloudinary_helpers import _cleanup_cloudinary_assets
+from bson import ObjectId
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
@@ -43,6 +68,7 @@ def register_viewer(
     bio: Optional[str] = Form(None),
     genrePreferences: Optional[List[str]] = Form(None),
     maturitySetting: Optional[str] = Form("all"),
+    gender: Optional[str] = Form(None),
     avatar: Optional[UploadFile] = File(None),
 ):
     try:
@@ -52,6 +78,7 @@ def register_viewer(
             bio=bio,
             genrePreferences=genrePreferences or [],
             maturitySetting=maturitySetting,
+            gender=gender or None,
         )
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=_safe_errors(e))
@@ -82,6 +109,7 @@ def register_viewer(
         "loginCount": 0,
         "genrePreferences": user_data.get("genrePreferences", []),
         "maturitySetting": user_data.get("maturitySetting", "all"),
+        "gender": user_data.get("gender"),
         "createdAt": now,
         "updatedAt": now,
     }
@@ -249,6 +277,85 @@ def login(credentials: dict):
 @router.get("/me")
 def get_me(current_user: dict = Depends(get_current_user)):
     return {"message": "You are authenticated", "user": current_user}
+
+
+@router.delete("/account")
+def delete_account(
+    request: DeleteAccountRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="Admin accounts cannot be deleted here")
+
+    user_id = ObjectId(str(current_user["user_id"]))
+    collection = (
+        viewers_collection
+        if current_user.get("role") == "viewer"
+        else directors_collection
+    )
+    user = collection.find_one({"_id": user_id})
+    if not user or not verify_password(request.password, user.get("passwordHash", "")):
+        raise HTTPException(status_code=401, detail="Password is incorrect")
+
+    now = datetime.utcnow()
+    member_since = user.get("createdAt")
+    days_member = max(0, (now - member_since).days) if isinstance(member_since, datetime) else None
+    account_deletions_collection.insert_one({
+        "role": current_user.get("role"),
+        "reason": request.reason,
+        "details": request.details,
+        "daysMember": days_member,
+        "createdAt": now,
+    })
+
+    if current_user.get("role") == "viewer":
+        authored_comments = list(comments_collection.find(
+            {"viewerId": user_id}, {"_id": 1}
+        ))
+        authored_reviews = list(video_reviews_collection.find(
+            {"viewerId": user_id}, {"_id": 1}
+        ))
+        comments_collection.update_many(
+            {"viewerId": user_id},
+            {"$set": {"username": "Deleted user"}, "$unset": {"viewerId": ""}},
+        )
+        video_reviews_collection.update_many(
+            {"viewerId": user_id},
+            {"$set": {"username": "Deleted user"}, "$unset": {"viewerId": ""}},
+        )
+        comment_ids = [row["_id"] for row in authored_comments]
+        review_ids = [row["_id"] for row in authored_reviews]
+        if comment_ids:
+            comment_reactions_collection.delete_many({"commentId": {"$in": comment_ids}})
+        if review_ids:
+            review_reactions_collection.delete_many({"reviewId": {"$in": review_ids}})
+        for related in (
+            video_reactions_collection,
+            video_views_collection,
+            watch_history_collection,
+            watch_sessions_collection,
+            watchlist_collection,
+            notifications_collection,
+        ):
+            related.delete_many({"viewerId": user_id})
+    else:
+        films = list(film_collection.find({"directorId": user_id}))
+        film_ids = [film["_id"] for film in films]
+        for film in films:
+            _cleanup_cloudinary_assets(str(film["_id"]), film)
+        if film_ids:
+            cast_collection.delete_many({"videoId": {"$in": film_ids}})
+            comments_collection.delete_many({"videoId": {"$in": film_ids}})
+            video_reviews_collection.delete_many({"videoId": {"$in": film_ids}})
+            video_reactions_collection.delete_many({"videoId": {"$in": film_ids}})
+            video_views_collection.delete_many({"videoId": {"$in": film_ids}})
+            watch_history_collection.delete_many({"videoId": {"$in": film_ids}})
+            watch_sessions_collection.delete_many({"videoId": {"$in": film_ids}})
+            watchlist_collection.delete_many({"videoId": {"$in": film_ids}})
+            film_collection.delete_many({"_id": {"$in": film_ids}})
+
+    collection.delete_one({"_id": user_id})
+    return {"message": "Account deleted successfully"}
 
 # ---------- Director-only test route ----------
 

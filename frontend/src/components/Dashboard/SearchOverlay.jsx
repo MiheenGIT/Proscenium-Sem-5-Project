@@ -30,6 +30,7 @@ export default function SearchOverlay({ onClose }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [genres, setGenres] = useState(FALLBACK_GENRES);
+  const [tags, setTags] = useState([]);
   const trackedQuery = useRef("");
 
   // Record one search event per settled query (not per keystroke), with its result count.
@@ -48,11 +49,14 @@ export default function SearchOverlay({ onClose }) {
     const input = document.getElementById("proscenium-global-search");
     input?.focus();
 
-    getRequest("/viewer/genres")
-      .then((data) => {
+    Promise.all([getRequest("/viewer/genres"), getRequest("/viewer/tags")])
+      .then(([data, tagData]) => {
         const apiGenres = Array.isArray(data?.genres) ? data.genres : [];
         if (apiGenres.length) {
           setGenres(["Trending", ...apiGenres].slice(0, 12));
+        }
+        if (Array.isArray(tagData?.tags)) {
+          setTags(tagData.tags.slice(0, 8));
         }
       })
       .catch(() => {});
@@ -96,7 +100,12 @@ export default function SearchOverlay({ onClose }) {
 
   function browseGenre(genre) {
     onClose?.();
-    navigate(`/explore?genre=${encodeURIComponent(genre)}`);
+    navigate(`/viewer?genre=${encodeURIComponent(genre)}`);
+  }
+
+  function browseTag(tag) {
+    onClose?.();
+    navigate(`/viewer?tag=${encodeURIComponent(tag)}`);
   }
 
   return (
@@ -191,6 +200,20 @@ export default function SearchOverlay({ onClose }) {
                   </button>
                 ))}
               </div>
+              {tags.length > 0 && (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => browseTag(tag)}
+                      className="rounded-full border border-[#7c1d31]/60 bg-[#7c1d31]/20 px-3 py-2 text-[10px] text-[#e4c5c9] transition hover:border-[#d9a653]/50 hover:text-[#f3ce8a]"
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-9 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
                 {[

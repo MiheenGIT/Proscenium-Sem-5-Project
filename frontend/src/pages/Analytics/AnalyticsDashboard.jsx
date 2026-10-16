@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {Activity,BarChart3,Bookmark,Clock3,Eye,Film,Heart,MessageSquare,RefreshCw,Star,Users,TrendingUp,MousePointerClick,Globe2,Megaphone,ShieldCheck,Wallet,Gauge,PlayCircle,CalendarDays,Search,ArrowLeft,Tags as TagsIcon,Lightbulb,} from "lucide-react";
-import { getRequest } from "../../api/client.js";
+import { getRequest, putJson } from "../../api/client.js";
 import "./analytics.css";
 
 // When an admin opens another account's analytics, first-person wording is made neutral.
@@ -284,6 +284,7 @@ const roleConfig = {
       ["engagement", "Website engagement", Activity],
       ["audience", "Audience growth", Users],
       ["users", "User analytics", Users],
+      ["insights", "Why & trends", Lightbulb],
       ["content", "Content performance", Film],
       ["tags", "Tags", TagsIcon],
       ["marketing", "Marketing & business", Megaphone],
@@ -297,6 +298,7 @@ const roleConfig = {
     endpoint: "/analytics/director",
     tabs: [
       ["overview", "Overview", BarChart3],
+      ["insights", "Top performers", Star],
       ["films", "Film performance", Film],
       ["engagement", "Audience engagement", Heart],
     ],
@@ -486,6 +488,73 @@ function InfoState({ icon: Icon = Gauge, title, text }) {
 
 const USERS_PAGE = 20;
 
+function InsightFilmCard({ film, good, admin }) {
+  const s = film.sentiment || {};
+  const themes = (film.themes || []).map((t) => t.theme.toLowerCase()).join(", ");
+  return (
+    <article className={`insight-card ${good ? "is-best" : ""}`}>
+      <header className="insight-card-head">
+        <h4>{film.title}</h4>
+        <span className="analytics-status-pill">Score {film.score}</span>
+      </header>
+      <div className="analytics-mini-stats">
+        <div><span>Views</span><strong>{number(film.views)}</strong></div>
+        <div><span>Watched to end</span><strong>{film.completionRate == null ? "—" : `${film.completionRate}%`}</strong></div>
+        <div><span>Likes</span><strong>{film.likeRatio == null ? "—" : `${Math.round(film.likeRatio * 100)}%`}</strong></div>
+        <div><span>Rating</span><strong>{film.avgRating ? `${film.avgRating} / 5` : "—"}</strong></div>
+        <div><span>Comments</span><strong>{number(film.comments)}</strong></div>
+      </div>
+      <p className="insight-label">{admin ? "Why it is doing well" : good ? "Why it did well" : "Why it did less well"}</p>
+      <ul className="insight-reasons">
+        {(film.reasons || []).map((r) => <li key={r}>{r}</li>)}
+      </ul>
+      <p className="analytics-muted-copy">
+        Feedback: {s.positive || 0} positive · {s.negative || 0} negative · {s.neutral || 0} neutral
+        {themes ? ` · viewers talk about ${themes}` : ""}
+      </p>
+      {film.feedbackSummary && (
+        <p className="analytics-muted-copy">Summary: {film.feedbackSummary}</p>
+      )}
+      {admin && film.audience?.notes?.length > 0 && (
+        <p className="analytics-muted-copy">Who watches it: {film.audience.notes.join(" ")}</p>
+      )}
+      {!admin && good && film.similar?.length > 0 && (
+        <p className="analytics-muted-copy">
+          Similar on Proscenium:{" "}
+          {film.similar.map((x) => `${x.title}${x.isYours ? " (yours)" : ""}, ${number(x.views)} views`).join(" · ")}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function AudiencePanel({ audience, title, subtitle }) {
+  if (!audience || !audience.viewers) {
+    return (
+      <Panel title={title} subtitle={subtitle} icon={Users}>
+        <p className="analytics-muted-copy">No viewers in this period yet.</p>
+      </Panel>
+    );
+  }
+  return (
+    <Panel title={title} subtitle={subtitle} icon={Users}>
+      <ul className="insight-reasons">
+        {audience.notes.map((n) => <li key={n}>{n}</li>)}
+      </ul>
+      <div className="analytics-content-grid">
+        <div>
+          <p className="insight-label">By gender (shared by viewers, optional)</p>
+          <StatusList rows={audience.gender.map((g) => ({ label: g.label, value: g.count }))} empty="No data." />
+        </div>
+        <div>
+          <p className="insight-label">By age (from date of birth)</p>
+          <StatusList rows={audience.ageBands.map((g) => ({ label: g.label, value: g.count }))} empty="No data." />
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 export default function AnalyticsDashboard({ role, userId, onBack }) {
   const config = roleConfig[role] || roleConfig.viewer;
   const endpoint = userId
@@ -505,6 +574,8 @@ export default function AnalyticsDashboard({ role, userId, onBack }) {
   const [data, setData] = useState(null);
   const [engagement, setEngagement] = useState(null);
   const [community, setCommunity] = useState(null);
+  const [viewerGender, setViewerGender] = useState(null);
+  const [genderSaving, setGenderSaving] = useState(false);
   const [intelligence, setIntelligence] = useState(null);
   const [intelligenceError, setIntelligenceError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -517,6 +588,55 @@ export default function AnalyticsDashboard({ role, userId, onBack }) {
   const [users, setUsers] = useState(null);
   const [usersError, setUsersError] = useState("");
   const [selected, setSelected] = useState(null);
+const [dIns, setDIns] = useState(null);
+const [dInsError, setDInsError] = useState("");
+const [dSort, setDSort] = useState("score");
+const [dOrder, setDOrder] = useState("desc");
+const [dSkip, setDSkip] = useState(0);
+const [openRow, setOpenRow] = useState(null);
+const [aIns, setAIns] = useState(null);
+const [aInsError, setAInsError] = useState("");
+const [deletionData, setDeletionData] = useState(null);
+const [deletionError, setDeletionError] = useState("");
+const INSIGHT_PAGE = 10;
+
+useEffect(() => {
+  if (role !== "director" || tab !== "insights") return undefined;
+  let alive = true;
+  setDInsError("");
+  const q = new URLSearchParams({ days, sort: dSort, order: dOrder, limit: INSIGHT_PAGE, skip: dSkip });
+  if (userId) q.set("director_id", userId); // admin opening one director's analytics
+  getRequest(`/analytics/director/insights?${q}`)
+    .then((r) => alive && setDIns(r))
+    .catch((e) => alive && setDInsError(e.message || "Insights are not available yet."));
+  return () => {
+    alive = false;
+  };
+}, [role, tab, days, reload, userId, dSort, dOrder, dSkip]);
+
+useEffect(() => {
+  if (role !== "admin" || tab !== "insights" || userId) return undefined;
+  let alive = true;
+  setAInsError("");
+  getRequest(`/analytics/admin/insights?days=${days}&limit=5`)
+    .then((r) => alive && setAIns(r))
+    .catch((e) => alive && setAInsError(e.message || "Insights are not available yet."));
+  return () => {
+    alive = false;
+  };
+}, [role, tab, days, reload, userId]);
+
+useEffect(() => {
+  if (role !== "admin" || tab !== "insights" || userId) return undefined;
+  let alive = true;
+  setDeletionError("");
+  getRequest(`/analytics/admin/account-deletions?days=${days}`)
+    .then((r) => alive && setDeletionData(r))
+    .catch((e) => alive && setDeletionError(e.message || "Account exit data is not available yet."));
+  return () => {
+    alive = false;
+  };
+}, [role, tab, days, reload, userId]);
   const [tagData, setTagData] = useState(null);
   const [tagError, setTagError] = useState("");
   const [tagQuery, setTagQuery] = useState("");
@@ -633,6 +753,29 @@ export default function AnalyticsDashboard({ role, userId, onBack }) {
       alive = false;
     };
   }, [role, reload]);
+
+  useEffect(() => {
+    if (role !== "viewer" || userId) return undefined;
+    let alive = true;
+    getRequest("/viewer/profile")
+      .then((profile) => alive && setViewerGender(profile.gender || ""))
+      .catch(() => alive && setViewerGender(null));
+    return () => {
+      alive = false;
+    };
+  }, [role, userId, reload]);
+
+  async function saveViewerGender(value) {
+    setGenderSaving(true);
+    try {
+      await putJson("/viewer/profile", { gender: value });
+      setViewerGender(value);
+    } catch {
+      // The profile page remains available if this optional prompt fails.
+    } finally {
+      setGenderSaving(false);
+    }
+  }
 
   const summary = data?.summary || {};
   const tabs = userId
@@ -874,6 +1017,69 @@ export default function AnalyticsDashboard({ role, userId, onBack }) {
               </div>
             )}
 
+{role === "admin" && tab === "insights" && (
+  <>
+    {aInsError && <p className="analytics-muted-copy">{aInsError}</p>}
+    {!aIns && !aInsError && <p className="analytics-muted-copy">Loading insights…</p>}
+    {aIns && (
+      <>
+        <Panel title="What is trending, and why" subtitle="Top films right now, compared with the platform average and the previous period" icon={TrendingUp}>
+          {aIns.trending.length === 0 && <p className="analytics-muted-copy">No viewing activity in this period yet.</p>}
+          <div className="insight-grid">
+            {aIns.trending.map((f) => <InsightFilmCard key={f.videoId} film={f} good admin />)}
+          </div>
+        </Panel>
+
+        <AudiencePanel audience={aIns.audience} title="Who watches the platform" subtitle="All viewers with a view in this period" />
+
+        <Panel title="Where to invest" subtitle="Genre share of views compared with share of films" icon={Lightbulb}>
+          {aIns.investmentHints.length === 0 ? (
+            <p className="analytics-muted-copy">Views and films are balanced across genres. No gaps stand out yet.</p>
+          ) : (
+            <ul className="insight-reasons">{aIns.investmentHints.map((h) => <li key={h.text}>{h.text}</li>)}</ul>
+          )}
+        </Panel>
+
+        <Panel title="Why people leave" subtitle="Anonymous account deletion reasons in the selected period" icon={Users}>
+          {deletionError && <p className="analytics-muted-copy">{deletionError}</p>}
+          {!deletionError && deletionData && (
+            <>
+              <div className="analytics-mini-stats">
+                <div><span>Deleted accounts</span><strong>{number(deletionData.total)}</strong></div>
+                <div><span>Viewers</span><strong>{number((deletionData.byRole || []).find((item) => item.role === "viewer")?.count)}</strong></div>
+                <div><span>Directors</span><strong>{number((deletionData.byRole || []).find((item) => item.role === "director")?.count)}</strong></div>
+              </div>
+              <StatusList
+                rows={(deletionData.byReason || []).map((item) => ({
+                  label: item.reason.replaceAll("_", " "),
+                  value: item.count,
+                }))}
+                empty="No account deletions have been recorded in this period."
+              />
+              {deletionData.averageDaysMember != null && (
+                <p className="analytics-muted-copy">
+                  Average time before deletion: {number(deletionData.averageDaysMember)} days.
+                </p>
+              )}
+            </>
+          )}
+          {!deletionError && !deletionData && <p className="analytics-muted-copy">Loading account exit data…</p>}
+        </Panel>
+
+        {aIns.castBuzz.length > 0 && (
+          <Panel title="Cast people talk about" subtitle="Names mentioned in reviews and comments on the trending films" icon={Heart}>
+            <StatusList rows={aIns.castBuzz.map((c) => ({ label: `${c.name} (${c.film})`, value: c.mentions }))} />
+          </Panel>
+        )}
+
+        <p className="analytics-muted-copy">
+          Platform average: {number(aIns.platform?.avgViews)} views per film
+          {aIns.platform?.completionRate != null ? `, ${aIns.platform.completionRate}% watched to the end` : ""}. {aIns.method}
+        </p>
+      </>
+    )}
+  </>
+)}
             {role === "admin" && tab === "overview" && (
               <>
                 <div className="analytics-content-grid">
@@ -1554,6 +1760,120 @@ export default function AnalyticsDashboard({ role, userId, onBack }) {
               </>
             )}
 
+{role === "director" && tab === "insights" && (
+  <>
+    {dInsError && <p className="analytics-muted-copy">{dInsError}</p>}
+    {!dIns && !dInsError && <p className="analytics-muted-copy">Loading insights…</p>}
+    {dIns && (
+      <>
+        <Panel title="Your best performing films" subtitle="Top third of approved films, ranked by views, completion and engagement" icon={Star}>
+          {dIns.best.length === 0 && (
+            <p className="analytics-muted-copy">Once your films are approved and watched, your best performers appear here.</p>
+          )}
+          <div className="insight-grid">
+            {dIns.best.map((f) => <InsightFilmCard key={f.videoId} film={f} good />)}
+          </div>
+        </Panel>
+
+        {dIns.best.length > 0 && (
+          <div className="analytics-content-grid">
+            <Panel title="Genres and tags that work" subtitle="Weighted by views on your top films" icon={Film}>
+              <StatusList
+                rows={[...dIns.genreTheme.genres, ...dIns.genreTheme.tags].map((g) => ({ label: g.name, value: g.weight }))}
+                empty="No genres or tags on your top films yet."
+              />
+            </Panel>
+            <Panel title="What viewers talk about" subtitle="Themes in reviews and comments on your top films" icon={MessageSquare}>
+              <StatusList
+                rows={dIns.genreTheme.themes.map((t) => ({ label: t.theme, value: t.mentions }))}
+                empty="No review or comment themes yet."
+              />
+            </Panel>
+          </div>
+        )}
+
+        {dIns.castBuzz.length > 0 && (
+          <Panel title="Cast mentioned by viewers" subtitle="Cast names found in reviews and comments" icon={Heart}>
+            <StatusList rows={dIns.castBuzz.map((c) => ({ label: `${c.name} (${c.film})`, value: c.mentions }))} />
+          </Panel>
+        )}
+
+        <AudiencePanel audience={dIns.audience} title="Who watches your films" subtitle="Viewers of your films in this period" />
+
+        <Panel title="All your other films" subtitle="Click a column to sort, click a row to see why" icon={Film}>
+          {dIns.othersTotal === 0 && <p className="analytics-muted-copy">No other approved films yet.</p>}
+          {dIns.othersTotal > 0 && (
+            <div className="insight-table-wrap">
+              <table className="insight-table">
+                <thead>
+                  <tr>
+                    <th>Film</th>
+                    {[["views", "Views"], ["completion", "Watched to end"], ["likes", "Likes"], ["rating", "Rating"], ["comments", "Comments"], ["score", "Score"]].map(([k, label]) => (
+                      <th key={k}>
+                        <button
+                          type="button"
+                          className="insight-sort"
+                          onClick={() => {
+                            if (dSort === k) setDOrder(dOrder === "desc" ? "asc" : "desc");
+                            else { setDSort(k); setDOrder("desc"); }
+                            setDSkip(0);
+                            setOpenRow(null);
+                          }}
+                        >
+                          {label}{dSort === k ? (dOrder === "desc" ? " ↓" : " ↑") : ""}
+                        </button>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dIns.others.map((f) => (
+                    <React.Fragment key={f.videoId}>
+                      <tr className="insight-row" onClick={() => setOpenRow(openRow === f.videoId ? null : f.videoId)}>
+                        <td>{f.title}</td>
+                        <td>{number(f.views)}</td>
+                        <td>{f.completionRate == null ? "—" : `${f.completionRate}%`}</td>
+                        <td>{f.likeRatio == null ? "—" : `${Math.round(f.likeRatio * 100)}%`}</td>
+                        <td>{f.avgRating ? f.avgRating : "—"}</td>
+                        <td>{number(f.comments)}</td>
+                        <td>{f.score}</td>
+                      </tr>
+                      {openRow === f.videoId && (
+                        <tr className="insight-why">
+                          <td colSpan={7}>
+                            <strong>Why it did less well</strong>
+                            <ul className="insight-reasons">{f.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+                            <small>
+                              Feedback: {f.sentiment.positive} positive · {f.sentiment.negative} negative · {f.sentiment.neutral} neutral
+                            </small>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {dIns.othersTotal > INSIGHT_PAGE && (
+            <div className="insight-pager">
+              <button type="button" disabled={dSkip === 0} onClick={() => setDSkip(Math.max(0, dSkip - INSIGHT_PAGE))}>Previous</button>
+              <span>{dSkip + 1}–{Math.min(dSkip + INSIGHT_PAGE, dIns.othersTotal)} of {dIns.othersTotal}</span>
+              <button type="button" disabled={dSkip + INSIGHT_PAGE >= dIns.othersTotal} onClick={() => setDSkip(dSkip + INSIGHT_PAGE)}>Next</button>
+            </div>
+          )}
+        </Panel>
+
+        <p className="analytics-muted-copy">
+          Platform average: {number(dIns.platform?.avgViews)} views per film
+          {dIns.platform?.completionRate != null ? `, ${dIns.platform.completionRate}% watched to the end` : ""}.{" "}
+          {dIns.scoreNote} {dIns.method}
+          {dIns.pendingFilms > 0 ? ` ${dIns.pendingFilms} film(s) not yet approved are left out.` : ""}
+        </p>
+      </>
+    )}
+  </>
+)}
             {role === "director" && tab === "overview" && (
               <Panel
                 title="Film activity over time"
@@ -1676,6 +1996,30 @@ export default function AnalyticsDashboard({ role, userId, onBack }) {
 
             {role === "viewer" && tab === "overview" && (
               <>
+                {viewerGender === "" && (
+                  <Panel
+                    title="Help us understand the audience"
+                    subtitle="Optional: your answer is used only in anonymous audience totals."
+                    icon={Users}
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      <select
+                        aria-label="Gender"
+                        defaultValue=""
+                        disabled={genderSaving}
+                        onChange={(event) => saveViewerGender(event.target.value)}
+                        className="rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+                      >
+                        <option value="" disabled>Choose an option</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                        <option value="non_binary">Non-binary</option>
+                        <option value="prefer_not_to_say">Prefer not to say</option>
+                      </select>
+                      <span className="analytics-muted-copy">You can change this in your profile later.</span>
+                    </div>
+                  </Panel>
+                )}
                 <Panel
                   title="Personal library snapshot"
                   subtitle="All-time totals, not limited to the selected period"

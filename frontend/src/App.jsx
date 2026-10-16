@@ -297,8 +297,7 @@ export default function App() {
           }
         />
 
-        {/* Discovery categories are sections of Home, not separate destinations.
-          Keep these legacy URLs working by returning viewers to the unified dashboard. */}
+        {/* Keep older discovery links working after moving discovery into Search. */}
         <Route
           path="/explore"
           element={

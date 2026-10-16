@@ -2,7 +2,8 @@ import React, {useEffect,useState,} from "react";
 import { useNavigate } from "react-router-dom";
 import {Check,Languages,Save,Star,} from "lucide-react";
 
-import {getRequest,patchJson,putJson,postJson,} from "../../api/client.js";
+import {deleteRequest,getRequest,patchJson,putJson,postJson,} from "../../api/client.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import DashboardLayout from "../../components/Dashboard/DashboardLayout.jsx";
 import CustomSelect from "../../components/CustomSelect.jsx";
 import {EmptyState,ErrorState,PageLoading,} from "../../components/common/States.jsx";
@@ -208,6 +209,7 @@ export function Preferences({
 }
 
 export function SettingsPage() {
+  const { logout } = useAuth();
   const [settings, setSettings] =
     useState(null);
 
@@ -216,6 +218,10 @@ export function SettingsPage() {
 
   const [message, setMessage] =
     useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteReason, setDeleteReason] = useState("not_using_it");
+  const [deleteDetails, setDeleteDetails] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     getRequest("/viewer/settings")
@@ -241,6 +247,25 @@ export function SettingsPage() {
       setMessage(err.message);
     } finally {
       setSaving(false);
+    }
+
+  }
+
+  async function deleteAccount() {
+    if (!window.confirm("Delete your account and personal data? This cannot be undone.")) return;
+    setDeleting(true);
+    setMessage("");
+    try {
+      await deleteRequest("/auth/account", {
+        password: deletePassword,
+        reason: deleteReason,
+        details: deleteDetails || undefined,
+      });
+      logout();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -394,6 +419,52 @@ export function SettingsPage() {
             ? "Saving…"
             : "Save settings"}
         </button>
+
+        <section className="mt-10 rounded-2xl border border-[#e08a6b]/30 bg-[#e08a6b]/[0.04] p-5">
+          <h2 className="font-[var(--font-display)] text-xl text-[#efe7da]">
+            Delete account
+          </h2>
+          <p className="mt-2 text-xs leading-5 text-[#a8999e]">
+            Your account data will be deleted. Your comments and reviews will
+            remain anonymously as “Deleted user”.
+          </p>
+          <div className="mt-4 grid gap-3">
+            <select
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              className="rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+            >
+              <option value="not_enough_to_watch">Not enough to watch</option>
+              <option value="bugs_or_slowness">Bugs or slowness</option>
+              <option value="privacy_concerns">Privacy concerns</option>
+              <option value="not_using_it">I am not using it anymore</option>
+              <option value="moved_platform">Moved to another platform</option>
+              <option value="other">Other</option>
+            </select>
+            <textarea
+              value={deleteDetails}
+              onChange={(event) => setDeleteDetails(event.target.value)}
+              placeholder="Optional details"
+              maxLength={500}
+              className="min-h-20 rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+            />
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(event) => setDeletePassword(event.target.value)}
+              placeholder="Confirm with your password"
+              className="rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+            />
+            <button
+              type="button"
+              disabled={deleting || !deletePassword}
+              onClick={deleteAccount}
+              className="w-fit rounded-xl border border-[#e08a6b]/60 px-5 py-3 text-xs font-bold text-[#e08a6b] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {deleting ? "Deleting account…" : "Permanently delete account"}
+            </button>
+          </div>
+        </section>
       </main>
     </DashboardLayout>
   );

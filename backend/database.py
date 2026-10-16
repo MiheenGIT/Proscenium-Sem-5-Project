@@ -26,6 +26,7 @@ review_reactions_collection = db["review_reactions"]
 cast_collection = db["cast"]
 viewer_settings_collection = db["viewer_settings"]
 notifications_collection = db["notifications"]
+account_deletions_collection = db["account_deletions"]
 
 print(">>> database.py loaded, using PyMongo")
 # Anonymous, privacy-conscious website engagement events used by analytics dashboards.

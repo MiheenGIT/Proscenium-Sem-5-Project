@@ -524,45 +524,6 @@ function HomeInner() {
           }
         />
 
-        <div className="sticky top-[72px] z-30 lg:top-[112px] lg:z-30 border-b border-white/[0.06] bg-[#100d10]/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
-          <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              onClick={() => setGenre("")}
-              className={`shrink-0 rounded-full border px-4 py-2 text-[9px] font-semibold ${
-                !genre
-                  ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
-                  : "border-white/10 bg-white/[0.025] text-[#968b8f]"
-              }`}
-            >
-              All
-            </button>
-
-            {(genres.length
-              ? genres
-              : fallbackGenres
-            ).map((item) => (
-              <button
-                key={item}
-                onClick={() =>
-                  setGenre(
-                    item === genre
-                      ? ""
-                      : item
-                  )
-                }
-                className={`shrink-0 rounded-full border px-4 py-2 text-[9px] font-semibold ${
-                  genre.toLowerCase() ===
-                  item.toLowerCase()
-                    ? "border-[#d9a653] bg-[#5c1220] text-[#e6c184]"
-                    : "border-white/10 bg-white/[0.025] text-[#968b8f] hover:text-[#efe7da]"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <MovieRow
           title="Continue Watching"
           subtitle="Pick up exactly where you left off."

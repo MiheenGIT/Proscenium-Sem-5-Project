@@ -26,6 +26,7 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [dob, setDob] = useState("");
+  const [gender, setGender] = useState("");
   const [bio, setBio] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -71,6 +72,7 @@ export default function Register() {
       path = "/auth/register/viewer";
       genres.forEach((g) => formData.append("genrePreferences", g));
       formData.append("maturitySetting", maturitySetting);
+      if (gender) formData.append("gender", gender);
     } else {
       path = "/auth/register/creator";
       if (studioName) formData.append("studioName", studioName);
@@ -180,6 +182,22 @@ export default function Register() {
 
         {role === "viewer" && (
           <>
+            <div className="field">
+              <label className="field-label" htmlFor="gender">
+                Gender (optional)
+              </label>
+              <select
+                id="gender"
+                className="field-input"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+              >
+                <option value="">Prefer not to say</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="non_binary">Non-binary</option>
+              </select>
+            </div>
             <div className="field">
               <span className="field-label">Genres you're into</span>
               <div className="chip-group">

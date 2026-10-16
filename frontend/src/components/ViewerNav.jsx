@@ -496,7 +496,7 @@ export default function ViewerNav() {
                 onChange={(e) =>
                   changeQuery(e.target.value)
                 }
-                placeholder="Search films, videos, titles..."
+                placeholder="Search films, genres or tags..."
                 autoComplete="off"
               />
 
@@ -523,8 +523,7 @@ export default function ViewerNav() {
                     </h2>
 
                     <p>
-                      Search directly by video or film
-                      name.
+                      Search by film name, genre, theme or tag.
                     </p>
                   </div>
                 )}
@@ -555,7 +554,7 @@ export default function ViewerNav() {
                     </h2>
 
                     <p>
-                      Try another film or video name.
+                      Try another film name, genre or tag.
                     </p>
                   </div>
                 )}

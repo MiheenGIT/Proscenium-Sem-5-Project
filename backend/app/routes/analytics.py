@@ -23,6 +23,7 @@ from database import (
     video_reviews_collection,
     analytics_events_collection,
     watch_log_collection,
+    account_deletions_collection,
 )
 from utils.security import require_role
 
@@ -82,6 +83,46 @@ def _event_query(days, extra=None, date_fields=None):
     return _and(extra or {}, _date_query(days, date_fields))
 
 
+@router.get("/admin/account-deletions")
+def account_deletion_insights(
+    days: int = Query(365, ge=7, le=3650),
+    payload: dict = Depends(require_role("admin")),
+):
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = list(account_deletions_collection.find(
+        {"createdAt": {"$gte": since}},
+        {"role": 1, "reason": 1, "daysMember": 1, "createdAt": 1},
+    ))
+    reasons = {}
+    roles = {}
+    monthly = {}
+    stay_total = 0
+    stay_count = 0
+    for row in rows:
+        reason = row.get("reason") or "other"
+        reasons[reason] = reasons.get(reason, 0) + 1
+        role = row.get("role") or "unknown"
+        roles[role] = roles.get(role, 0) + 1
+        days_member = row.get("daysMember")
+        if isinstance(days_member, (int, float)):
+            stay_total += days_member
+            stay_count += 1
+        created = row.get("createdAt")
+        if isinstance(created, datetime):
+            month = created.strftime("%Y-%m")
+            monthly[month] = monthly.get(month, 0) + 1
+    return {
+        "total": len(rows),
+        "byReason": [
+            {"reason": reason, "count": count}
+            for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "byRole": [{"role": role, "count": count} for role, count in sorted(roles.items())],
+        "averageDaysMember": round(stay_total / stay_count, 1) if stay_count else None,
+        "monthly": [{"month": month, "count": count} for month, count in sorted(monthly.items())],
+    }
+
+
 def _day_floor(days):
     """Start (00:00 UTC) of the first calendar day in a `days`-day window that ends today."""
     first = datetime.utcnow().date() - timedelta(days=days - 1)
@@ -114,6 +155,32 @@ def _daily_trend(days, collection, extra=None, date_fields=None, label="views"):
     # The first listed date field is the canonical one for the collection.
     field = (date_fields or ["createdAt"])[0]
     return _fill_days(days, **{label: _daily_counts(collection, extra, field, days)})
+
+
+def _takeoff_day(video_id, days):
+    """Find the first day with at least three views and twice the prior daily average."""
+    try:
+        oid = ObjectId(video_id)
+    except Exception:
+        return None
+    rows = list(video_views_collection.aggregate([
+        {"$match": _and(
+            {"videoId": oid},
+            _date_query(days, _VIEW_DATE_FIELDS),
+        )},
+        {"$addFields": {"_when": _VIEW_DATE_EXPR}},
+        {"$match": {"_when": {"$ne": None}}},
+        {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$_when"}}, "n": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]))
+    counts = [int(row["n"]) for row in rows]
+    dates = [row["_id"] for row in rows]
+    for index, count in enumerate(counts):
+        previous = counts[:index]
+        average = sum(previous) / len(previous) if previous else 0
+        if count >= 3 and count >= max(2 * average, 3):
+            return dates[index]
+    return None
 
 
 # ---- Watch sessions / watch time -------------------------------------------------
@@ -1083,3 +1150,573 @@ def admin_intelligence(
         "newReleaseViews": new_release_windows,
         "dataNotes": ["Funnel values are event counts, not deduplicated people.", "Playback completion rate = unique (session, film) plays that finished, divided by unique plays that started. Per-film completion in the table below uses watch history instead, so the two can differ.", "Marketing spend, revenue and profit are not inferred without verified financial integrations.", "API health telemetry is kept for 30 days by default, so longer date ranges only show the retained window."],
     }
+
+
+# =====================================================================
+# INSIGHTS (director + admin): best performers, rule-based "why", audience,
+# investment hints.  No AI / external API: plain rules only.
+#
+# PASTE THIS AT THE VERY END of backend/app/routes/analytics.py
+#
+# New endpoints
+#   GET /analytics/director/insights   director token (admin: add &director_id=...)  ?days&sort&order&limit&skip
+#   GET /analytics/admin/insights      admin token     ?days&limit
+#   GET /analytics/viewer/demographics viewer token
+#   PUT /analytics/viewer/demographics viewer token    {"gender": "..."}
+# =====================================================================
+from collections import Counter
+from database import cast_collection
+
+_VIEW_DATE_FIELDS = ["firstWatchedAt", "createdAt", "timestamp", "watchedAt"]
+_VIEW_DATE_EXPR = {"$ifNull": ["$firstWatchedAt", {"$ifNull": ["$createdAt", {"$ifNull": ["$timestamp", "$watchedAt"]}]}]}
+_VISIBLE_COMMENT = {"$or": [{"moderationStatus": "visible"}, {"moderationStatus": {"$exists": False}}]}
+_POS_WORDS = {"good", "great", "amazing", "awesome", "love", "loved", "beautiful", "best", "brilliant",
+              "perfect", "masterpiece", "excellent", "superb", "wow", "fantastic", "enjoyed", "wonderful",
+              "hot", "mast", "badhiya", "zabardast", "shandar", "kamaal"}
+_NEG_WORDS = {"bad", "boring", "worst", "terrible", "awful", "poor", "hate", "hated", "cringe", "dull",
+              "confusing", "disappointing", "weak", "waste", "bakwas", "bekar", "faltu"}
+_NAME_STOP = {"the", "and", "she", "her", "his", "him", "was", "who", "you", "not", "one", "can", "all", "for",
+              "but", "are", "has", "had", "how", "its", "out", "too", "very", "this", "that", "with", "what"}
+_THEME_WORDS = {
+    "Story & writing": {"story", "plot", "script", "writing", "narrative", "storyline"},
+    "Pacing": {"pace", "pacing", "slow", "dragging", "fast", "long"},
+    "Acting & cast": {"acting", "acted", "actor", "actress", "performance", "cast"},
+    "Audio & dialogue": {"audio", "sound", "dialogue", "voice", "volume", "music", "song", "bgm"},
+    "Visuals & editing": {"visual", "visuals", "cinematography", "editing", "camera", "effects"},
+    "Emotional impact": {"emotional", "moving", "touching", "funny", "exciting", "engaging"},
+}
+_SORT_KEYS = {"score": "score", "views": "views", "completion": "completionRate", "likes": "likeRatio",
+              "rating": "avgRating", "comments": "comments"}
+_GENDER_LABELS = {"female": "Female", "male": "Male", "non_binary": "Non-binary",
+                  "prefer_not_to_say": "Prefer not to say", "not_provided": "Not shared"}
+
+
+def _pct(part, whole):
+    return round(part / whole * 100, 1) if whole else None
+
+
+# ───────────── raw stat queries (each is one grouped query) ─────────────
+def _completion_stats(days, film_filter=None):
+    """{videoId: [history rows, completed rows]} from watch_history."""
+    done = {"$or": [{"$eq": ["$completed", True]}, {"$gte": ["$progress", 95]},
+                    {"$and": [{"$lte": ["$progress", 1]}, {"$gte": ["$progress", 0.95]}]}]}
+    match = _and(_date_query(days, ["lastWatchedAt", "updatedAt", "createdAt"]), film_filter)
+    out = {}
+    for row in watch_history_collection.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$videoId", "rows": {"$sum": 1}, "done": {"$sum": {"$cond": [done, 1, 0]}}}},
+    ]):
+        cur = out.setdefault(str(row["_id"]), [0, 0])
+        cur[0] += int(row["rows"])
+        cur[1] += int(row["done"])
+    return out
+
+
+def _early_drop_stats(days, film_ids):
+    """{videoId: [sessions, sessions that never got past 20%]} from playback_progress events."""
+    if not film_ids:
+        return {}
+    out = {}
+    for row in analytics_events_collection.aggregate([
+        {"$match": {"eventType": "playback_progress", "createdAt": {"$gte": datetime.utcnow() - timedelta(days=days)},
+                    "videoId": {"$in": [str(i) for i in film_ids]}}},
+        {"$group": {"_id": {"v": "$videoId", "s": "$sessionId"}, "peak": {"$max": "$progressPercent"}}},
+        {"$group": {"_id": "$_id.v", "sessions": {"$sum": 1},
+                    "early": {"$sum": {"$cond": [{"$lt": ["$peak", 20]}, 1, 0]}}}},
+    ]):
+        out[str(row["_id"])] = [int(row["sessions"]), int(row["early"])]
+    return out
+
+
+def _reaction_stats(days, film_filter):
+    like = {"$or": [{"$in": ["$type", ["like", "liked"]]}, {"$in": ["$reaction", ["like", "liked", 1]]}]}
+    dislike = {"$or": [{"$in": ["$type", ["dislike", "disliked"]]}, {"$in": ["$reaction", ["dislike", "disliked", -1]]}]}
+    match = _and(film_filter, _date_query(days, ["createdAt", "created_at", "timestamp"]))
+    out = {}
+    for row in video_reactions_collection.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$videoId", "likes": {"$sum": {"$cond": [like, 1, 0]}},
+                    "dislikes": {"$sum": {"$cond": [dislike, 1, 0]}}}},
+    ]):
+        cur = out.setdefault(str(row["_id"]), [0, 0])
+        cur[0] += int(row["likes"])
+        cur[1] += int(row["dislikes"])
+    return out
+
+
+def _rating_stats(days, film_filter):
+    out = {}
+    match = _and(film_filter, _date_query(days, ["createdAt", "created_at", "timestamp"]), {"moderationStatus": {"$ne": "removed"}})
+    for row in video_reviews_collection.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$videoId", "avg": {"$avg": "$rating"}, "n": {"$sum": 1}}},
+    ]):
+        out[str(row["_id"])] = [round(float(row["avg"] or 0), 2), int(row["n"])]
+    return out
+
+
+def _window_view_stats(start, end=None, film_filter=None):
+    """{videoId: [views in [start, end), date of the first one]}"""
+    cond = {"$gte": start}
+    if end:
+        cond["$lt"] = end
+    out = {}
+    for row in video_views_collection.aggregate([
+        {"$match": film_filter or {}},
+        {"$addFields": {"_when": _VIEW_DATE_EXPR}},
+        {"$match": {"_when": cond}},
+        {"$group": {"_id": "$videoId", "n": {"$sum": 1}, "first": {"$min": "$_when"}}},
+    ]):
+        out[str(row["_id"])] = [int(row["n"]), row["first"]]
+    return out
+
+
+def _feedback_by_video(days, film_filter):
+    """{videoId: {"texts": [...], "comments": n, "reviews": n}} for visible comments and reviews."""
+    out = {}
+    window = _date_query(days, ["createdAt", "created_at", "timestamp"])
+    for collection, kind, extra in [(video_reviews_collection, "reviews", {"moderationStatus": {"$ne": "removed"}}),
+                                    (comments_collection, "comments", _VISIBLE_COMMENT)]:
+        for item in collection.find(_and(film_filter, window, extra)).limit(2000):
+            cur = out.setdefault(str(item.get("videoId")), {"texts": [], "comments": 0, "reviews": 0})
+            cur[kind] += 1
+            body = item.get("text") or item.get("review") or item.get("comment") or item.get("content") or ""
+            if isinstance(body, str) and body.strip():
+                cur["texts"].append(body.lower()[:400])
+    return out
+
+
+def _gather_stats(films, days, platform_views, platform_completion):
+    """All per-film stats for the given films, in one place (used by director and admin)."""
+    film_ids = [f["_id"] for f in films if f.get("_id") is not None]
+    mine = _film_ids_query("videoId", films)
+    cast = {}
+    if film_ids:
+        for c in cast_collection.find(mine, {"videoId": 1, "name": 1, "characterName": 1}):
+            if c.get("name"):
+                aliases = [c["name"]]
+                if c.get("characterName"):
+                    aliases.append(c["characterName"])
+                cast.setdefault(str(c.get("videoId")), []).extend(aliases)
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    return {
+        "views": {str(i): platform_views.get(str(i), 0) for i in film_ids},
+        "platformViews": platform_views,
+        "completion": platform_completion,
+        "early": _early_drop_stats(days, film_ids),
+        "reactions": _reaction_stats(days, mine) if film_ids else {},
+        "ratings": _rating_stats(days, mine) if film_ids else {},
+        "recent": _window_view_stats(week_ago, None, mine) if film_ids else {},
+        "feedback": _feedback_by_video(days, mine) if film_ids else {},
+        "cast": cast,
+    }
+
+
+def _platform_numbers(days):
+    """Platform-wide views per film and completion, used as the yardstick for every comparison."""
+    views = _counts_by_video(video_views_collection, _date_query(days, _VIEW_DATE_FIELDS))
+    catalog = list(film_collection.find({"moderationStatus": "approved", "visibility": "public"}))
+    completion = _completion_stats(days)
+    platform = {
+        "avgViews": round(sum(views.values()) / len(catalog), 1) if catalog else 0,
+        "completionRate": _pct(sum(v[1] for v in completion.values()), sum(v[0] for v in completion.values())),
+    }
+    return views, catalog, completion, platform
+
+
+# ───────────── text analysis (keyword rules) ─────────────
+def _analyze_feedback(texts, cast_names):
+    pos = neg = neu = 0
+    themes, themes_pos, themes_neg, cast = Counter(), Counter(), Counter(), Counter()
+    for text in texts:
+        tokens = set(re.findall(r"[a-z']+", text))
+        p, n = len(tokens & _POS_WORDS), len(tokens & _NEG_WORDS)
+        label = "pos" if p > n else "neg" if n > p else "neu"
+        pos, neg, neu = pos + (label == "pos"), neg + (label == "neg"), neu + (label == "neu")
+        for theme, words in _THEME_WORDS.items():
+            if tokens & words:
+                themes[theme] += 1
+                if label == "pos":
+                    themes_pos[theme] += 1
+                elif label == "neg":
+                    themes_neg[theme] += 1
+        for name in cast_names:
+            low = name.lower().strip()
+            first = low.split()[0] if low else ""
+            # full name, first name, or a nickname that starts the first name ("leo" -> "leonardo")
+            nick = any(len(t) >= 3 and t not in _NAME_STOP and t not in _POS_WORDS and t not in _NEG_WORDS
+                       and first.startswith(t) for t in tokens)
+            if low and (low in text or (len(first) >= 4 and first in tokens) or nick):
+                cast[name] += 1
+    return {"pos": pos, "neg": neg, "neu": neu, "themes": themes,
+            "themes_pos": themes_pos, "themes_neg": themes_neg, "cast": cast}
+
+
+def _why(row, platform, good):
+    """Plain-English reasons from simple rules. Compares a film with the platform average."""
+    out = []
+    pv, pc = platform.get("avgViews") or 0, platform.get("completionRate")
+    comp, ratio, react = row["completionRate"], row["likeRatio"], row["reactions"]
+    fb_total = row["sentiment"]["positive"] + row["sentiment"]["negative"] + row["sentiment"]["neutral"]
+    if good:
+        if pv and row["views"] >= 1.5 * pv:
+            out.append(f"Views are {row['views'] / pv:.1f}x the platform average per film.")
+        if comp is not None and pc is not None and comp >= pc + 10:
+            out.append(f"{comp:.0f}% of viewers watched to the end (platform average {pc:.0f}%).")
+        if ratio is not None and ratio >= 0.8 and react >= 3:
+            out.append(f"{ratio * 100:.0f}% of reactions are likes.")
+        if row["avgRating"] and row["avgRating"] >= 4 and row["reviews"] >= 2:
+            out.append(f"Average review rating is {row['avgRating']:.1f} out of 5.")
+        if row["trending"]:
+            out.append(row["trending"])
+        if row["praisedTheme"]:
+            out.append(f"Viewers praise the {row['praisedTheme'].lower()} the most.")
+        if row["topCast"]:
+            n = row["topCast"][1]
+            out.append(f"{row['topCast'][0]} is mentioned in {n} comment{'s' if n != 1 else ''} or reviews.")
+        if not out:
+            out.append("Ranks above the other films on views, completion and engagement.")
+    else:
+        if pv and row["views"] <= 0.5 * pv:
+            out.append("Views are less than half the platform average per film.")
+        if row["earlyDropPercent"] is not None and row["earlyDropPercent"] >= 40:
+            out.append(f"{row['earlyDropPercent']:.0f}% of viewers left within the first 20% of the film.")
+        if comp is not None and pc is not None and comp <= pc - 10:
+            out.append("Nobody watched it to the end." if comp == 0
+                       else f"Only {comp:.0f}% watched to the end (platform average {pc:.0f}%).")
+        if ratio is not None and ratio < 0.5 and react >= 3:
+            out.append("None of the reactions are likes." if ratio == 0
+                       else f"Only {ratio * 100:.0f}% of reactions are likes.")
+        if fb_total >= 3 and row["sentiment"]["negative"] / fb_total >= 0.3:
+            out.append(f"{row['sentiment']['negative']} of {fb_total} reviews and comments are negative.")
+        if row["criticisedTheme"]:
+            out.append(f"Viewers criticise the {row['criticisedTheme'].lower()} the most.")
+        if not row["hasThumbnail"]:
+            out.append("No thumbnail is set, which hurts clicks.")
+        if fb_total == 0:
+            out.append("No reviews or comments yet, so there is little feedback to learn from.")
+        if not out:
+            out.append("Slower than the best films, but there is not enough data to point at one cause.")
+    return out
+
+
+# ───────────── audience (age bands from date_of_birth, optional gender) ─────────────
+def _age_band(dob, now=None):
+    now = now or datetime.utcnow()
+    if not isinstance(dob, datetime):
+        return "Unknown"
+    age = int((now - dob).days // 365.25)
+    if age < 18:
+        return "Under 18"
+    if age < 25:
+        return "18-24"
+    if age < 35:
+        return "25-34"
+    if age < 45:
+        return "35-44"
+    return "45+"
+
+
+def _summarize_audience(rows, viewers, genres_by_film):
+    """Pure function. rows = video_views docs, viewers = {viewerId: viewer doc}."""
+    now = datetime.utcnow()
+    by_gender, by_age, g_genres, a_genres = {}, {}, {}, {}
+    for r in rows:
+        vid = r.get("viewerId")
+        v = viewers.get(vid, {})
+        g = v.get("gender") or "not_provided"
+        a = _age_band(v.get("date_of_birth"), now)
+        by_gender[vid], by_age[vid] = g, a
+        for genre in genres_by_film.get(str(r.get("videoId")), []):
+            g_genres.setdefault(g, Counter())[genre] += 1
+            a_genres.setdefault(a, Counter())[genre] += 1
+    n = len(by_gender)
+    gender, age = Counter(by_gender.values()), Counter(by_age.values())
+
+    def block(counter, genres, label_map=None):
+        return [{"label": (label_map or {}).get(k, k), "key": k, "count": c, "percent": _pct(c, n),
+                 "topGenres": [g for g, _ in genres.get(k, Counter()).most_common(3)]}
+                for k, c in counter.most_common()]
+
+    notes = []
+    known_g = {k: c for k, c in gender.items() if k not in ("not_provided", "prefer_not_to_say")}
+    if n and sum(known_g.values()) >= 5:
+        label, cnt = max(known_g.items(), key=lambda kv: kv[1])
+        top = g_genres.get(label, Counter()).most_common(1)
+        notes.append(f"{cnt / sum(known_g.values()) * 100:.0f}% of viewers who shared their gender are "
+                     f"{_GENDER_LABELS[label].lower()}" + (f"; their most-watched genre is {top[0][0]}." if top else "."))
+    elif n:
+        notes.append("Not enough viewers have shared their gender yet, so there is no gender breakdown.")
+    known_a = {k: c for k, c in age.items() if k != "Unknown"}
+    if known_a:
+        label, cnt = max(known_a.items(), key=lambda kv: kv[1])
+        top = a_genres.get(label, Counter()).most_common(1)
+        notes.append(f"The biggest age group is {label} ({cnt / n * 100:.0f}% of viewers)"
+                     + (f"; they watch {top[0][0]} most." if top else "."))
+    return {"viewers": n, "gender": block(gender, g_genres, _GENDER_LABELS),
+            "ageBands": block(age, a_genres), "notes": notes}
+
+
+def _audience_profile(film_filter, genres_by_film, days):
+    rows = list(video_views_collection.find(
+        _and(film_filter, _date_query(days, _VIEW_DATE_FIELDS)), {"videoId": 1, "viewerId": 1}).limit(20000))
+    ids = list({r["viewerId"] for r in rows if r.get("viewerId") is not None})
+    viewers = {}
+    if ids:
+        for v in viewers_collection.find({"_id": {"$in": ids}}, {"date_of_birth": 1, "gender": 1}):
+            viewers[v["_id"]] = v
+    return _summarize_audience(rows, viewers, genres_by_film)
+
+
+def _genre_list(film):
+    genres = film.get("genres") or []
+    if isinstance(genres, str):
+        genres = [g.strip() for g in genres.split(",") if g.strip()]
+    return genres if isinstance(genres, list) else []
+
+
+# ───────────── film rows, scoring, sorting ─────────────
+def _film_rows(live, st, platform, days):
+    rows, themes_by_row = [], {}
+    for f in live:
+        key = str(f["_id"])
+        views = st["views"].get(key, 0)
+        cr, cd = st["completion"].get(key, [0, 0])
+        likes, dislikes = st["reactions"].get(key, [0, 0])
+        avg_rating, n_rev = st["ratings"].get(key, [0, 0])
+        fb = st["feedback"].get(key, {"texts": [], "comments": 0, "reviews": 0})
+        a = _analyze_feedback(fb["texts"], st["cast"].get(key, []))
+        sess, early = st["early"].get(key, [0, 0])
+        r7, first7 = st["recent"].get(key, [0, None])
+        trending = None
+        if days >= 14 and r7 >= 3 and views and r7 / views >= 0.5:
+            since = first7.strftime("%d %b") if hasattr(first7, "strftime") else "this week"
+            trending = f"Trending: {r7} of its {views} views came in the last 7 days (picked up since {since})."
+        takeoff = _takeoff_day(key, days)
+        if takeoff:
+            takeoff_text = datetime.strptime(takeoff, "%Y-%m-%d").strftime("%d %b %Y")
+            trending = (f"{trending} Exact takeoff date: {takeoff_text}."
+                        if trending else f"Takeoff date: {takeoff_text}.")
+        praised, criticised, top_cast = a["themes_pos"].most_common(1), a["themes_neg"].most_common(1), a["cast"].most_common(1)
+        feedback_total = a["pos"] + a["neg"] + a["neu"]
+        feedback_summary = None
+        if feedback_total:
+            parts = [f"{a['pos'] / feedback_total * 100:.0f}% of feedback is positive."]
+            if praised:
+                parts.append(f"Viewers praise the {praised[0][0].lower()} most.")
+            if criticised:
+                parts.append(f"Some viewers criticise the {criticised[0][0].lower()}.")
+            feedback_summary = " ".join(parts)
+        rows.append({
+            "videoId": key, "title": _video_title(f), "genres": _genre_list(f), "tags": f.get("tags") or [],
+            "views": views, "uniqueViewers": views,
+            "completionRate": _pct(cd, cr), "likes": likes, "dislikes": dislikes, "reactions": likes + dislikes,
+            "likeRatio": round(likes / (likes + dislikes), 2) if likes + dislikes else None,
+            "avgRating": avg_rating, "reviews": fb["reviews"] or n_rev, "comments": fb["comments"],
+            "sentiment": {"positive": a["pos"], "negative": a["neg"], "neutral": a["neu"]},
+            "themes": [{"theme": t, "mentions": n} for t, n in a["themes"].most_common(4)],
+            "praisedTheme": praised[0][0] if praised else None,
+            "criticisedTheme": criticised[0][0] if criticised else None,
+            "castMentions": dict(a["cast"]), "topCast": list(top_cast[0]) if top_cast else None,
+            "feedbackSummary": feedback_summary,
+            "earlyDropPercent": _pct(early, sess) if sess >= 5 else None,
+            "trending": trending, "hasThumbnail": bool(f.get("thumbnailUrl")),
+        })
+        themes_by_row[key] = a["themes"]
+    max_views = max([r["views"] for r in rows] or [0]) or 1
+    max_eng = max([r["likes"] + r["reviews"] + r["comments"] for r in rows] or [0]) or 1
+    for r in rows:
+        v = r["views"] / max_views
+        e = (r["likes"] + r["reviews"] + r["comments"]) / max_eng
+        r["score"] = round(v * 40 + r["completionRate"] * 0.30 + e * 30, 1) if r["completionRate"] is not None \
+            else round(v * 60 + e * 40, 1)
+    return rows, themes_by_row
+
+
+def _sort_rows(rows, sort="score", order="desc"):
+    key = _SORT_KEYS.get(sort, "score")
+    known = [r for r in rows if r.get(key) is not None]
+    unknown = [r for r in rows if r.get(key) is None]
+    known.sort(key=lambda r: (r[key], r["views"]), reverse=(order != "asc"))
+    return known + unknown
+
+
+def _similar_films(row, catalog, platform_views, my_director_id=None, n=3):
+    mine_g = {g.lower() for g in row["genres"]}
+    mine_t = {t.lower() for t in row["tags"]}
+    sims = []
+    for c in catalog:
+        if str(c["_id"]) == row["videoId"]:
+            continue
+        g = {x.lower() for x in _genre_list(c)}
+        t = {x.lower() for x in (c.get("tags") or [])}
+        overlap = 2 * len(mine_g & g) + len(mine_t & t)
+        if overlap:
+            sims.append((overlap, platform_views.get(str(c["_id"]), 0), c))
+    sims.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return [{"videoId": str(c["_id"]), "title": _video_title(c), "views": v, "genres": _genre_list(c),
+             "isYours": my_director_id is not None and str(c.get("directorId")) == str(my_director_id)}
+            for _, v, c in sims[:n]]
+
+
+def _assemble_insights(films, st, platform, catalog, days, sort="score", order="desc", limit=12, skip=0, director_id=None):
+    """Pure function (no DB): turns gathered stats into the director response."""
+    live = [f for f in films if f.get("moderationStatus") == "approved"]
+    base = {"periodDays": days, "platform": platform, "pendingFilms": len(films) - len(live),
+            "sort": sort if sort in _SORT_KEYS else "score", "order": "asc" if order == "asc" else "desc",
+            "limit": limit, "skip": skip}
+    if not live:
+        return {**base, "best": [], "others": [], "othersTotal": 0,
+                "genreTheme": {"genres": [], "tags": [], "themes": []}, "castBuzz": []}
+    rows, themes_by_row = _film_rows(live, st, platform, days)
+    rows.sort(key=lambda r: (r["score"], r["views"]), reverse=True)
+    cut = max(1, len(rows) // 3)
+    best, rest = rows[:cut], rows[cut:]
+    for r in best:
+        r["reasons"] = _why(r, platform, True)
+        r["similar"] = _similar_films(r, catalog, st["platformViews"], director_id)
+    rest = _sort_rows(rest, base["sort"], base["order"])
+    page = rest[skip:skip + limit]
+    for r in page:
+        r["reasons"] = _why(r, platform, False)
+    genres, tags, themes, cast_buzz = Counter(), Counter(), Counter(), []
+    for r in best:
+        weight = max(r["views"], 1)
+        for g in r["genres"]:
+            genres[g] += weight
+        for t in r["tags"]:
+            tags[t] += weight
+        themes.update(themes_by_row[r["videoId"]])
+        for name, n in r["castMentions"].items():
+            cast_buzz.append({"name": name, "film": r["title"], "mentions": n})
+    cast_buzz.sort(key=lambda x: x["mentions"], reverse=True)
+    return {
+        **base, "best": best, "others": page, "othersTotal": len(rest),
+        "genreTheme": {"genres": [{"name": k, "weight": v} for k, v in genres.most_common(6)],
+                       "tags": [{"name": k, "weight": v} for k, v in tags.most_common(8)],
+                       "themes": [{"theme": k, "mentions": v} for k, v in themes.most_common(5)]},
+        "castBuzz": cast_buzz[:8],
+        "scoreNote": "Score (0-100) = views 40%, completion 30%, engagement 30%; when completion data is missing: views 60%, engagement 40%.",
+        "method": "Rule-based comparison with platform averages and keyword matching; not an AI model.",
+    }
+
+
+# ───────────── director endpoint ─────────────
+@router.get("/director/insights")
+def director_insights(
+    days: int = Query(30, ge=7, le=365),
+    sort: str = Query("score"),
+    order: str = Query("desc"),
+    limit: int = Query(12, ge=1, le=50),
+    skip: int = Query(0, ge=0),
+    director_id: Optional[str] = Query(None),          # admins only: look at one director's insights
+    payload: dict = Depends(require_role("director", "admin")),
+):
+    if payload.get("role") == "admin":
+        if not director_id or not ObjectId.is_valid(director_id):
+            raise HTTPException(status_code=400, detail="director_id is required for admins")
+        user_id = director_id
+    else:
+        user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Director identity is missing")
+    films = list(film_collection.find(_id_query("directorId", user_id)))
+    views, catalog, completion, platform = _platform_numbers(days)
+    st = _gather_stats(films, days, views, completion)
+    out = _assemble_insights(films, st, platform, catalog, days, sort, order, limit, skip, user_id)
+    genres_by_film = {str(f["_id"]): _genre_list(f) for f in films}
+    out["audience"] = _audience_profile(_film_ids_query("videoId", films), genres_by_film, days) if films else \
+        {"viewers": 0, "gender": [], "ageBands": [], "notes": []}
+    return out
+
+
+# ───────────── admin endpoint: why is it trending, who watches, where to invest ─────────────
+def _investment_hints(catalog, platform_views):
+    """Pure function: compares each genre's share of views with its share of the catalog."""
+    films_by_genre, views_by_genre = Counter(), Counter()
+    for f in catalog:
+        for g in _genre_list(f):
+            films_by_genre[g] += 1
+            views_by_genre[g] += platform_views.get(str(f["_id"]), 0)
+    total_films, total_views = sum(films_by_genre.values()), sum(views_by_genre.values())
+    hints = []
+    if not total_films or not total_views:
+        return hints
+    for g in films_by_genre:
+        film_share, view_share = films_by_genre[g] / total_films, views_by_genre[g] / total_views
+        if view_share >= 1.5 * film_share and views_by_genre[g] >= 5:
+            hints.append({"genre": g, "type": "demand",
+                          "text": f"{g} is {view_share * 100:.0f}% of views but only {film_share * 100:.0f}% of films. "
+                                  f"Viewers want more of it: promote it or invite more {g} directors."})
+        elif film_share >= 1.5 * view_share and films_by_genre[g] >= 3:
+            hints.append({"genre": g, "type": "oversupply",
+                          "text": f"{g} is {film_share * 100:.0f}% of films but only {view_share * 100:.0f}% of views. "
+                                  f"Promote the best of them or review what is not working."})
+    return hints
+
+
+@router.get("/admin/insights")
+def admin_insights(
+    days: int = Query(30, ge=7, le=365),
+    limit: int = Query(5, ge=1, le=15),
+    payload: dict = Depends(require_role("admin")),
+):
+    views, catalog, completion, platform = _platform_numbers(days)
+    now = datetime.utcnow()
+    start = now - timedelta(days=days)
+    previous = _window_view_stats(start - timedelta(days=days), start)
+    current = _window_view_stats(start)
+    candidates = sorted(catalog, key=lambda f: views.get(str(f["_id"]), 0), reverse=True)[:max(limit * 2, 10)]
+    st = _gather_stats(candidates, days, views, completion)
+    rows, _ = _film_rows(candidates, st, platform, days)
+    rows.sort(key=lambda r: (r["score"], r["views"]), reverse=True)
+    top = rows[:limit]
+    by_id = {str(f["_id"]): f for f in candidates}
+    for r in top:
+        key = r["videoId"]
+        cur_n, first = current.get(key, [0, None])
+        prev_n = previous.get(key, [0, None])[0]
+        extra = []
+        if prev_n:
+            change = round((cur_n - prev_n) / prev_n * 100)
+            if abs(change) >= 10:
+                extra.append(f"Views are {'up' if change > 0 else 'down'} {abs(change)}% on the previous {days} days.")
+            r["growthPercent"] = change
+        elif cur_n:
+            extra.append(f"New momentum: no views in the previous {days} days, {cur_n} in this period.")
+            r["growthPercent"] = None
+        if hasattr(first, "strftime"):
+            r["firstViewInPeriod"] = first.strftime("%d %b")
+        r["reasons"] = extra + _why(r, platform, True)
+        film = by_id[key]
+        r["audience"] = _audience_profile(_film_ids_query("videoId", [film]), {key: _genre_list(film)}, days)
+        for k in ("gender", "ageBands"):                      # keep the payload small for per-film audience
+            r["audience"][k] = r["audience"][k][:4]
+    genres_by_film = {str(f["_id"]): _genre_list(f) for f in catalog}
+    audience = _audience_profile(_film_ids_query("videoId", catalog), genres_by_film, days) if catalog else \
+        {"viewers": 0, "gender": [], "ageBands": [], "notes": []}
+    cast_buzz = sorted([{"name": n, "film": r["title"], "mentions": c} for r in top for n, c in r["castMentions"].items()],
+                       key=lambda x: x["mentions"], reverse=True)[:8]
+    return {"periodDays": days, "platform": platform, "trending": top, "audience": audience,
+            "investmentHints": _investment_hints(catalog, views), "castBuzz": cast_buzz,
+            "method": "Rule-based comparison with platform averages, viewer age (from date of birth) and optional gender; not an AI model."}
+
+
+# ───────────── viewer: optional gender (used only in aggregate audience stats) ─────────────
+class DemographicsPayload(BaseModel):
+    gender: Literal["female", "male", "non_binary", "prefer_not_to_say"]
+
+
+@router.get("/viewer/demographics")
+def get_demographics(payload: dict = Depends(require_role("viewer"))):
+    viewer = viewers_collection.find_one({"_id": _oid(payload["user_id"])}, {"gender": 1}) or {}
+    return {"gender": viewer.get("gender")}
+
+
+@router.put("/viewer/demographics")
+def update_demographics(body: DemographicsPayload, payload: dict = Depends(require_role("viewer"))):
+    result = viewers_collection.update_one({"_id": _oid(payload["user_id"])},
+                                           {"$set": {"gender": body.gender, "updatedAt": datetime.utcnow()}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Viewer not found")
+    return {"gender": body.gender}

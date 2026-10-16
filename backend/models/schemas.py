@@ -50,6 +50,7 @@ class ViewerRegister(BaseModel):
     password: str
     date_of_birth: date
     bio: Optional[str] = None
+    gender: Optional[Literal["female", "male", "non_binary", "prefer_not_to_say"]] = None
     role: Literal["viewer"] = "viewer"
     genrePreferences: Optional[list[str]] = []
     maturitySetting: Optional[str] = "all"
@@ -187,6 +188,22 @@ class ViewerSettingsRequest(BaseModel):
     saveHistory: Optional[bool] = None
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(min_length=1)
+    reason: Literal[
+        "not_enough_to_watch",
+        "bugs_or_slowness",
+        "privacy_concerns",
+        "not_using_it",
+        "moved_platform",
+        "films_rejected",
+        "too_few_views",
+        "upload_problems",
+        "other",
+    ]
+    details: Optional[str] = Field(None, max_length=500)
+
+
 class ViewerProfileUpdateRequest(BaseModel):
     username: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -194,6 +211,7 @@ class ViewerProfileUpdateRequest(BaseModel):
     genrePreferences: Optional[list[str]] = None
     languagePreferences: Optional[list[str]] = None
     maturitySetting: Optional[str] = None
+    gender: Optional[Literal["female", "male", "non_binary", "prefer_not_to_say"]] = None
 
 
 class CastMember(BaseModel):

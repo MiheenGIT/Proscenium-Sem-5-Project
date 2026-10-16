@@ -258,10 +258,11 @@ export function patchForm(
 // DELETE
 // =========================================================
 
-export function deleteRequest(path) {
+export function deleteRequest(path, body) {
   return request({
     url: path,
     method: "DELETE",
+    data: body,
   });
 }
 

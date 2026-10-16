@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 
-import { getRequest, putJson, putForm } from "../../api/client";
+import { deleteRequest, getRequest, putJson, putForm } from "../../api/client";
 import { useAuth } from "../../context/AuthContext.jsx";
 import DirectorNav from "../../components/DirectorNav.jsx";
 
@@ -118,6 +118,11 @@ export default function Profile() {
 
   // ID copy feedback
   const [copiedId, setCopiedId] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteReason, setDeleteReason] = useState("not_using_it");
+  const [deleteDetails, setDeleteDetails] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   // Sync initial user details
   useEffect(() => {
@@ -128,6 +133,24 @@ export default function Profile() {
       setAvatarUrl(user.avatarUrl);
     }
   }, [user]);
+
+  async function deleteAccount() {
+    if (!window.confirm("Delete your account and all uploaded films? This cannot be undone.")) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteRequest("/auth/account", {
+        password: deletePassword,
+        reason: deleteReason,
+        details: deleteDetails || undefined,
+      });
+      auth.logout();
+    } catch (error) {
+      setDeleteError(error.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Fetch director's catalog
   const loadVideos = async () => {
@@ -826,6 +849,51 @@ export default function Profile() {
             </div>
           </div>
         </div>
+        <section className="mt-8 rounded-2xl border border-[#e08a6b]/30 bg-[#e08a6b]/[0.04] p-5">
+          <h2 className="font-[var(--font-display)] text-xl text-[#efe7da]">
+            Delete account
+          </h2>
+          <p className="mt-2 text-xs leading-5 text-[#a8999e]">
+            Your account and all uploaded films will be removed. This cannot be undone.
+          </p>
+          <div className="mt-4 grid max-w-xl gap-3">
+            <select
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              className="rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+            >
+              <option value="films_rejected">My films were rejected</option>
+              <option value="too_few_views">Too few views</option>
+              <option value="upload_problems">Upload problems</option>
+              <option value="moved_platform">Moved to another platform</option>
+              <option value="not_using_it">I am not using it anymore</option>
+              <option value="other">Other</option>
+            </select>
+            <textarea
+              value={deleteDetails}
+              onChange={(event) => setDeleteDetails(event.target.value)}
+              placeholder="Optional details"
+              maxLength={500}
+              className="min-h-20 rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+            />
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(event) => setDeletePassword(event.target.value)}
+              placeholder="Confirm with your password"
+              className="rounded-xl border border-white/[0.08] bg-[#171216] px-3 py-3 text-xs text-[#efe7da]"
+            />
+            {deleteError && <p className="text-xs text-[#e08a6b]">{deleteError}</p>}
+            <button
+              type="button"
+              disabled={deleting || !deletePassword}
+              onClick={deleteAccount}
+              className="w-fit rounded-xl border border-[#e08a6b]/60 px-5 py-3 text-xs font-bold text-[#e08a6b] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {deleting ? "Deleting account…" : "Permanently delete account"}
+            </button>
+          </div>
+        </section>
       </main>
     </div>
   );
