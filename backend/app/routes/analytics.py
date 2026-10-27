@@ -1720,3 +1720,143 @@ def update_demographics(body: DemographicsPayload, payload: dict = Depends(requi
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Viewer not found")
     return {"gender": body.gender}
+
+# =====================================================================
+# SINGLE-FILM PERFORMANCE (director's video review page)
+# GET /analytics/director/video/{video_id}?days=30
+# =====================================================================
+@router.get("/director/video/{video_id}")
+def director_video_performance(
+    video_id: str,
+    days: int = Query(30, ge=7, le=365),
+    payload: dict = Depends(require_role("director")),
+):
+    try:
+        oid = ObjectId(video_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    film = film_collection.find_one({"_id": oid})
+    if not film:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if str(film.get("directorId")) != str(payload.get("user_id")):
+        raise HTTPException(status_code=403, detail="Not your video")
+
+    key = str(oid)
+    mine = _film_ids_query("videoId", [film])
+    duration = float(film.get("durationSec") or 0)
+    live = film.get("moderationStatus") == "approved" and film.get("visibility") == "public"
+
+    # ---- reach and watch time (selected period) ----
+    views = _count(video_views_collection, _and(mine, _date_query(days, _VIEW_DATE_FIELDS)))
+    plays = _watch_sessions(days, mine)
+    seconds = _watch_seconds_by_video(days, mine).get(key, 0.0)
+    minutes = round(seconds / 60)
+    avg_sec = round(seconds / plays) if plays else None
+    avg_percent = min(100, round(avg_sec / duration * 100)) if avg_sec and duration else None
+
+    trend = _fill_days(days, views=_daily_counts(video_views_collection, mine, "firstWatchedAt", days))
+
+    # ---- completion and early drop-off ----
+    history_rows, finished = _completion_stats(days, mine).get(key, [0, 0])
+    completion = _pct(finished, history_rows)
+    early_sessions, early_left = _early_drop_stats(days, [oid]).get(key, [0, 0])
+    early_pct = _pct(early_left, early_sessions) if early_sessions >= 5 else None
+
+    # ---- retention curve (10% bands of the film) ----
+    by_bucket = {
+        int(row.get("bucket", 0)): int(row.get("sessions", 0))
+        for row in analytics_events_collection.aggregate([
+            {"$match": {"eventType": "playback_progress", "videoId": key,
+                        "createdAt": {"$gte": datetime.utcnow() - timedelta(days=days)}}},
+            {"$project": {"bucket": {"$min": [{"$multiply": [{"$floor": {"$divide": ["$progressPercent", 10]}}, 10]}, 90]},
+                          "sessionId": 1}},
+            {"$group": {"_id": "$bucket", "sessions": {"$addToSet": "$sessionId"}}},
+            {"$project": {"bucket": "$_id", "sessions": {"$size": "$sessions"}, "_id": 0}},
+        ])
+    }
+    retention = [{"bucket": f"{b}-{b + 10}%", "sessions": by_bucket.get(b, 0)} for b in range(0, 100, 10)]
+
+    # ---- watchlist and new feedback ----
+    watchlist_total = _count(watchlist_collection, mine)
+    watchlist_period = _count(watchlist_collection, _and(mine, _date_query(days, ["savedAt", "createdAt", "addedAt", "timestamp"])))
+    window = _date_query(days, ["createdAt", "created_at", "timestamp"])
+    new_reviews = _count(video_reviews_collection, _and(mine, window, {"moderationStatus": {"$ne": "removed"}}))
+    new_comments = _count(comments_collection, _and(mine, window, _VISIBLE_COMMENT))
+
+    # ---- what viewers say (all-time reviews and comments, keyword rules) ----
+    fb = _feedback_by_video(3650, mine).get(key, {"texts": [], "comments": 0, "reviews": 0})
+    cast_names = []
+    for c in cast_collection.find(mine, {"name": 1, "characterName": 1}):
+        cast_names += [n for n in (c.get("name"), c.get("characterName")) if n]
+    a = _analyze_feedback(fb["texts"], cast_names)
+    feedback_total = a["pos"] + a["neg"] + a["neu"]
+    praised = a["themes_pos"].most_common(1)
+    criticised = a["themes_neg"].most_common(1)
+    feedback = {
+        "analyzed": len(fb["texts"]),
+        "sentiment": {"positive": a["pos"], "negative": a["neg"], "neutral": a["neu"]},
+        "themes": [{"theme": t, "mentions": n} for t, n in a["themes"].most_common(5)],
+        "praisedTheme": praised[0][0] if praised else None,
+        "criticisedTheme": criticised[0][0] if criticised else None,
+        "castMentions": [{"name": n, "mentions": c} for n, c in a["cast"].most_common(5)],
+    }
+
+    # ---- compare with the platform and write plain-English notes ----
+    _v, _catalog, _completion, platform = _platform_numbers(days)
+    pv, pc = platform.get("avgViews") or 0, platform.get("completionRate")
+    likes_t, dislikes_t = int(film.get("likes", 0) or 0), int(film.get("dislikes", 0) or 0)
+    avg_rating, rev_count = float(film.get("avgRating", 0) or 0), int(film.get("reviewCount", 0) or 0)
+    highlights, watchouts = [], []
+    if live:
+        if pv and views >= 1.5 * pv:
+            highlights.append(f"New viewers are {views / pv:.1f}x the platform average per film.")
+        elif pv and views <= 0.5 * pv:
+            watchouts.append("New viewers are less than half the platform average per film.")
+        if completion is not None and pc is not None:
+            if completion >= pc + 10:
+                highlights.append(f"{completion:.0f}% of viewers finished the film (platform average {pc:.0f}%).")
+            elif completion <= pc - 10:
+                watchouts.append(f"Only {completion:.0f}% of viewers finished the film (platform average {pc:.0f}%).")
+        if early_pct is not None and early_pct >= 40:
+            watchouts.append(f"{early_pct:.0f}% of viewers left within the first 20% of the film.")
+        if likes_t + dislikes_t >= 3:
+            ratio = likes_t / (likes_t + dislikes_t)
+            if ratio >= 0.8:
+                highlights.append(f"{ratio * 100:.0f}% of reactions are likes.")
+            elif ratio < 0.5:
+                watchouts.append(f"Only {ratio * 100:.0f}% of reactions are likes.")
+        if rev_count >= 2:
+            if avg_rating >= 4:
+                highlights.append(f"Average review rating is {avg_rating:.1f} out of 5.")
+            elif avg_rating <= 2.5:
+                watchouts.append(f"Average review rating is only {avg_rating:.1f} out of 5.")
+        if feedback_total >= 3 and a["neg"] / feedback_total >= 0.3:
+            watchouts.append(f"{a['neg']} of {feedback_total} reviews and comments read as negative.")
+        if feedback["praisedTheme"]:
+            highlights.append(f"Viewers praise the {feedback['praisedTheme'].lower()} the most.")
+        if feedback["criticisedTheme"]:
+            watchouts.append(f"Viewers criticise the {feedback['criticisedTheme'].lower()} the most.")
+        if views >= 10 and feedback_total == 0:
+            watchouts.append("Viewers are watching, but nobody has left a review or comment yet.")
+
+    return {
+        "videoId": key,
+        "periodDays": days,
+        "live": live,
+        "period": {
+            "views": views, "plays": plays, "watchMinutes": minutes,
+            "avgWatchSecPerPlay": avg_sec, "avgWatchPercent": avg_percent,
+            "completionRatePercent": completion, "finishedViewers": finished,
+            "earlyDropPercent": early_pct, "watchlistSaves": watchlist_period,
+            "newReviews": new_reviews, "newComments": new_comments,
+        },
+        "allTime": {"watchlist": watchlist_total},
+        "platform": platform,
+        "trend": trend,
+        "retention": retention,
+        "feedback": feedback,
+        "highlights": highlights,
+        "watchouts": watchouts,
+        "method": "Rule-based comparison with platform averages and keyword matching; not an AI model.",
+    }

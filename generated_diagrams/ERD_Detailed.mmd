@@ -1,0 +1,342 @@
+%% =========================================================================
+%% Proscenium Database Entity Relationship Diagram (ERD)
+%% Reverse-Engineered from MongoDB Collections and Backend Route Handlers
+%% Technology: MongoDB, PyMongo, FastAPI, Python
+%% =========================================================================
+
+erDiagram
+
+    %% ---------------------------------------------------------------------
+    %% 1. USER & IDENTITY COLLECTIONS
+    %% ---------------------------------------------------------------------
+
+    VIEWERS_COLLECTION {
+        ObjectId _id PK "Unique Viewer Identifier"
+        string username "Unique display handle"
+        string email "Unique user email address"
+        string passwordHash "Bcrypt hashed password"
+        date date_of_birth "Birth date for maturity gating"
+        string role "Fixed value: viewer"
+        string avatarUrl "Cloudinary asset URL or null"
+        string bio "Optional viewer biography"
+        boolean isBanned "Account ban status"
+        string banReason "Reason for account ban"
+        date bannedAt "Timestamp when banned"
+        ObjectId bannedBy "Admin who executed the ban"
+        boolean isVerifiedEmail "Email verification state"
+        int loginCount "Session counter"
+        array genrePreferences "Preferred genre strings"
+        array languagePreferences "Preferred film languages"
+        string maturitySetting "all or mature"
+        string gender "female/male/non_binary/prefer_not_to_say"
+        array recentWatched "Embedded summary of recently played films"
+        date createdAt "Registration timestamp"
+        date updatedAt "Profile update timestamp"
+    }
+
+    DIRECTORS_COLLECTION {
+        ObjectId _id PK "Unique Director Identifier"
+        string username "Unique filmmaker handle"
+        string email "Unique director email"
+        string passwordHash "Bcrypt hashed password"
+        date date_of_birth "Birth date"
+        string role "Fixed value: director"
+        string avatarUrl "Cloudinary profile image"
+        string bio "Director bio and statement"
+        string studioName "Production studio/company name"
+        string portfolioUrl "External website or portfolio link"
+        string accountStatus "active or suspended"
+        string suspendedReason "Administrative suspension rationale"
+        date suspendedAt "Timestamp of suspension"
+        ObjectId suspendedBy "Admin ID who suspended account"
+        boolean isBanned "Account ban flag"
+        string verificationStatus "pending/verified/rejected"
+        int uploadsCount "Total submitted films counter"
+        int loginCount "Session counter"
+        date createdAt "Registration timestamp"
+        date updatedAt "Profile update timestamp"
+    }
+
+    ADMIN_COLLECTION {
+        ObjectId _id PK "Unique Administrator Identifier"
+        string username "Admin handle"
+        string email "Admin email"
+        string passwordHash "Bcrypt hashed password"
+        date date_of_birth "Birth date"
+        string role "Fixed value: admin"
+        string adminLevel "moderator or superadmin"
+        string avatarUrl "Admin avatar URL"
+        string bio "Administrative bio"
+        int loginCount "Session counter"
+        date createdAt "Creation timestamp"
+        date updatedAt "Update timestamp"
+    }
+
+    VIEWER_SETTINGS_COLLECTION {
+        ObjectId _id PK "Settings Document ID"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        boolean autoplay "Auto-advance next video"
+        string defaultQuality "Preferred resolution (auto/1080p/etc)"
+        boolean subtitles "Default subtitle display state"
+        boolean emailNotifications "Master email opt-in switch"
+        boolean newReleaseNotifications "New film release notification flag"
+        boolean recommendationNotifications "Personalized film alerts"
+        boolean saveHistory "Opt-in to log viewing history"
+        date updatedAt "Last settings change timestamp"
+    }
+
+    ACCOUNT_DELETIONS_COLLECTION {
+        ObjectId _id PK "Deletion Audit Record ID"
+        string role "viewer or director"
+        string reason "Categorized deletion rationale code"
+        string details "Optional open text explanation"
+        int daysMember "Account lifespan in days"
+        date createdAt "Deletion execution timestamp"
+    }
+
+    %% ---------------------------------------------------------------------
+    %% 2. CONTENT & VIDEO STORAGE COLLECTIONS
+    %% ---------------------------------------------------------------------
+
+    FILM_COLLECTION {
+        ObjectId _id PK "Unique Film Identifier"
+        ObjectId directorId FK "Owner reference to DIRECTORS_COLLECTION"
+        string title "Film title"
+        string slug "URL-friendly kebab-case title"
+        string description "Synopsis and film narrative"
+        array genres "Array of genre labels"
+        array tags "Array of search tags"
+        string language "Primary spoken audio language"
+        array subtitles "Available subtitle tracks"
+        float durationSec "Exact runtime in seconds via ffprobe"
+        array cast "Array of ObjectIds referencing CAST_COLLECTION"
+        string thumbnailUrl "Cloudinary URL for display poster"
+        string hlsManifestUrl "Cloudinary raw master.m3u8 URL"
+        string rawFileUrl "Direct video file URL if stored"
+        array resolutions "Generated HLS variants (360p..2160p)"
+        int fileSizeBytes "Uploaded raw video size in bytes"
+        string mimeType "Video media type (e.g. video/mp4)"
+        string status "ready/processing/failed"
+        string visibility "private or public"
+        boolean ageRestricted "18+ restriction flag"
+        array contentWarnings "Specific tags: violence, nudity, etc."
+        string moderationStatus "pending/approved/rejected"
+        string moderationComment "Admin feedback or rejection reason"
+        ObjectId moderatedBy FK "Admin reference to ADMIN_COLLECTION"
+        date moderatedAt "Timestamp of moderation decision"
+        array moderationHistory "Audit log of status transitions"
+        array adminNotes "Internal admin notes on the film"
+        int views "Cumulative qualified views"
+        int uniqueViews "Distinct viewer count (>=75 percent threshold)"
+        int likes "Positive reaction counter"
+        int dislikes "Negative reaction counter"
+        float avgRating "Computed mean review score (1.0 - 5.0)"
+        int reviewCount "Total reviews counter"
+        int commentCount "Total comments counter"
+        int releaseYear "Original theatrical/production year"
+        string productionCountry "Country of origin"
+        boolean isFeatured "Curation spotlight flag"
+        date uploadedAt "Initial ingestion timestamp"
+        date publishedAt "Public approval timestamp"
+        date updatedAt "Metadata modification timestamp"
+    }
+
+    CAST_COLLECTION {
+        ObjectId _id PK "Unique Cast Member Record ID"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        string name "Actor / performer real name"
+        string characterName "Role / character portrayed"
+        string photoUrl "Cloudinary avatar image URL"
+        date createdAt "Creation timestamp"
+        date updatedAt "Update timestamp"
+    }
+
+    %% ---------------------------------------------------------------------
+    %% 3. WATCH TIME, STREAMING & ENGAGEMENT METRICS
+    %% ---------------------------------------------------------------------
+
+    WATCH_SESSIONS_COLLECTION {
+        ObjectId _id PK "Ephemeral Session ID"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        float accumulatedSeconds "Real playback duration in active session"
+        date lastHeartbeatAt "Timestamp of most recent ping"
+        float lastReportedTimeSec "Playhead position in seconds"
+        boolean counted "View threshold qualification flag (75 percent)"
+        ObjectId logId FK "Reference to WATCH_LOG_COLLECTION"
+    }
+
+    WATCH_LOG_COLLECTION {
+        ObjectId _id PK "Append-Only Play Record ID"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        date startedAt "Session initialization timestamp"
+        date lastHeartbeatAt "Latest recorded ping"
+        float accumulatedSeconds "Total seconds continuously credited"
+    }
+
+    WATCH_HISTORY_COLLECTION {
+        ObjectId _id PK "Persistent History Record ID"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        float currentTimeSec "Latest playhead position for resume"
+        float durationSec "Total film duration"
+        float progress "Completion percentage ratio (0.0 to 1.0)"
+        boolean completed "Finished viewing flag (>=95 percent)"
+        int timesWatched "Cumulative replay count"
+        date startedAt "First watched timestamp"
+        date lastWatchedAt "Most recent viewing timestamp"
+        date updatedAt "Record update timestamp"
+    }
+
+    VIDEO_VIEWS_COLLECTION {
+        ObjectId _id PK "Qualified Unique View Record ID"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        date firstWatchedAt "Timestamp when 75 percent gate was crossed"
+    }
+
+    WATCHLIST_COLLECTION {
+        ObjectId _id PK "Watchlist Entry ID"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        date addedAt "Bookmark creation timestamp"
+    }
+
+    VIDEO_REACTIONS_COLLECTION {
+        ObjectId _id PK "Video Reaction ID"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        string type "like or dislike"
+        date createdAt "Reaction timestamp"
+    }
+
+    %% ---------------------------------------------------------------------
+    %% 4. SOCIAL INTERACTION & MODERATED FEEDBACK
+    %% ---------------------------------------------------------------------
+
+    COMMENTS_COLLECTION {
+        ObjectId _id PK "Comment ID"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION (optional)"
+        string username "Author display name"
+        string avatarUrl "Author avatar image URL"
+        string text "Comment narrative content"
+        ObjectId parentId FK "Recursive reference to parent comment"
+        int likeCount "Total upvotes counter"
+        int dislikeCount "Total downvotes counter"
+        boolean flagged "Deterministic moderation flag"
+        object moderation "Embedded safety audit (terms/severity/languages)"
+        boolean adminRemoved "Admin soft-deletion / suppression flag"
+        date createdAt "Submission timestamp"
+        date updatedAt "Modification timestamp"
+    }
+
+    COMMENT_REACTIONS_COLLECTION {
+        ObjectId _id PK "Comment Reaction ID"
+        ObjectId commentId FK "Reference to COMMENTS_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        string type "like or dislike"
+        date createdAt "Reaction timestamp"
+    }
+
+    VIDEO_REVIEWS_COLLECTION {
+        ObjectId _id PK "Review ID"
+        ObjectId videoId FK "Reference to FILM_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION (optional)"
+        string username "Reviewer handle"
+        string avatarUrl "Reviewer avatar URL"
+        float rating "Star evaluation score (1.0 to 5.0)"
+        string text "Written editorial review"
+        int likeCount "Helpful / like counter"
+        boolean flagged "Deterministic moderation violation flag"
+        object moderation "Embedded safety audit report"
+        boolean adminRemoved "Admin suppression flag"
+        date createdAt "Submission timestamp"
+        date updatedAt "Modification timestamp"
+    }
+
+    REVIEW_REACTIONS_COLLECTION {
+        ObjectId _id PK "Review Reaction ID"
+        ObjectId reviewId FK "Reference to VIDEO_REVIEWS_COLLECTION"
+        ObjectId viewerId FK "Reference to VIEWERS_COLLECTION"
+        date createdAt "Reaction timestamp"
+    }
+
+    %% ---------------------------------------------------------------------
+    %% 5. NOTIFICATIONS & ANALYTICS TELEMETRY
+    %% ---------------------------------------------------------------------
+
+    NOTIFICATIONS_COLLECTION {
+        ObjectId _id PK "Notification ID"
+        string recipientRole "Target role: viewer / director / admin"
+        ObjectId recipientId "Polymorphic reference to Viewer/Director/Admin"
+        ObjectId viewerId "Legacy alias for viewer recipients"
+        string type "Event type (e.g. video_approved, new_release)"
+        string title "Short notification headline"
+        string message "Detailed notification body"
+        ObjectId actorId "User who triggered the event"
+        ObjectId videoId FK "Optional reference to FILM_COLLECTION"
+        ObjectId commentId FK "Optional reference to COMMENTS_COLLECTION"
+        ObjectId reviewId FK "Optional reference to VIDEO_REVIEWS_COLLECTION"
+        string link "Frontend deep-link route"
+        object meta "Arbitrary context payload"
+        boolean read "Status flag: unread vs read"
+        date readAt "Read confirmation timestamp"
+        string dedupeKey "Unique sparse index preventing spam"
+        date createdAt "Notification dispatch timestamp"
+    }
+
+    ANALYTICS_EVENTS_COLLECTION {
+        ObjectId _id PK "Telemetry Event ID"
+        string eventName "Event name (page_view, search, etc.)"
+        string eventCategory "Category grouping"
+        string sessionId "Client-generated session UUID"
+        string userRole "viewer, director, admin, or anonymous"
+        object properties "Dynamic event key-value attributes"
+        string path "Client application URL route"
+        string ipHash "SHA256 salted hash of client IP"
+        date timestamp "Event ingestion timestamp"
+    }
+
+    %% =====================================================================
+    %% RELATIONSHIP MAPPINGS (Actual Implementation & Cardinality)
+    %% =====================================================================
+
+    DIRECTORS_COLLECTION ||--o{ FILM_COLLECTION : "directs / owns"
+    ADMIN_COLLECTION ||--o{ FILM_COLLECTION : "moderates / reviews"
+    FILM_COLLECTION ||--o{ CAST_COLLECTION : "features cast members"
+    VIEWERS_COLLECTION ||--o| VIEWER_SETTINGS_COLLECTION : "configures preferences"
+
+    VIEWERS_COLLECTION ||--o{ WATCH_HISTORY_COLLECTION : "accumulates resume history"
+    FILM_COLLECTION ||--o{ WATCH_HISTORY_COLLECTION : "logged in history"
+
+    VIEWERS_COLLECTION ||--o{ WATCH_SESSIONS_COLLECTION : "maintains active playback"
+    FILM_COLLECTION ||--o{ WATCH_SESSIONS_COLLECTION : "played in session"
+    WATCH_SESSIONS_COLLECTION ||--o| WATCH_LOG_COLLECTION : "links append-only log"
+
+    VIEWERS_COLLECTION ||--o{ VIDEO_VIEWS_COLLECTION : "qualifies view (75% gate)"
+    FILM_COLLECTION ||--o{ VIDEO_VIEWS_COLLECTION : "credited with qualified view"
+
+    VIEWERS_COLLECTION ||--o{ WATCHLIST_COLLECTION : "bookmarks for later"
+    FILM_COLLECTION ||--o{ WATCHLIST_COLLECTION : "stored in watchlist"
+
+    VIEWERS_COLLECTION ||--o{ VIDEO_REACTIONS_COLLECTION : "reacts (like/dislike)"
+    FILM_COLLECTION ||--o{ VIDEO_REACTIONS_COLLECTION : "receives reaction"
+
+    VIEWERS_COLLECTION ||--o{ COMMENTS_COLLECTION : "authors comment"
+    FILM_COLLECTION ||--o{ COMMENTS_COLLECTION : "receives comment thread"
+    COMMENTS_COLLECTION ||--o{ COMMENTS_COLLECTION : "replies to parent comment"
+
+    VIEWERS_COLLECTION ||--o{ COMMENT_REACTIONS_COLLECTION : "reacts to comment"
+    COMMENTS_COLLECTION ||--o{ COMMENT_REACTIONS_COLLECTION : "receives upvote/downvote"
+
+    VIEWERS_COLLECTION ||--o{ VIDEO_REVIEWS_COLLECTION : "writes review and star rating"
+    FILM_COLLECTION ||--o{ VIDEO_REVIEWS_COLLECTION : "receives review"
+
+    VIEWERS_COLLECTION ||--o{ REVIEW_REACTIONS_COLLECTION : "likes review"
+    VIDEO_REVIEWS_COLLECTION ||--o{ REVIEW_REACTIONS_COLLECTION : "receives helpful like"
+
+    FILM_COLLECTION ||--o{ NOTIFICATIONS_COLLECTION : "references subject film"
+    COMMENTS_COLLECTION ||--o{ NOTIFICATIONS_COLLECTION : "references subject comment"
+    VIDEO_REVIEWS_COLLECTION ||--o{ NOTIFICATIONS_COLLECTION : "references subject review"

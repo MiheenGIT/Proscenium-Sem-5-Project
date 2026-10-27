@@ -1,0 +1,82 @@
+%% =========================================================================
+%% Proscenium - DFD Level 0: System Context Diagram
+%% Academic Standard: Center-Hub Context Model (Peter Chen / Yourdon Style)
+%% Layout: Left-to-Right Radial (Actors -> Central System -> Outputs & Sinks)
+%% =========================================================================
+
+flowchart LR
+
+    %% ---------------------------------------------------------------------
+    %% 1. CENTRAL SYSTEM PROCESS (Level 0.0 Oval / Ellipse)
+    %% ---------------------------------------------------------------------
+    SYSTEM(("Proscenium<br>Streaming & Curation<br>System"))
+
+    %% ---------------------------------------------------------------------
+    %% 2. EXTERNAL ENTITIES (Left Side: Primary User Actors)
+    %% ---------------------------------------------------------------------
+    VIEWER["Viewer"]
+    ADMINISTRATOR["Administrator"]
+    DIRECTOR["Director"]
+
+    %% ---------------------------------------------------------------------
+    %% 3. EXTERNAL ENTITIES & OUTPUT SINKS (Right Side: Services & Targets)
+    %% ---------------------------------------------------------------------
+    DISPLAY["System Display"]
+    REPORT["Report"]
+    CDN["Cloud Storage & CDN<br>(Cloudinary)"]
+    MAIL["Email Service<br>(Gmail SMTP)"]
+    TRANSCODER["Transcoding Engine<br>(OpenVINO / FFmpeg)"]
+
+    %% ---------------------------------------------------------------------
+    %% 4. DATA FLOWS - ACTORS (LEFT SIDE) TO / FROM SYSTEM
+    %% ---------------------------------------------------------------------
+
+    %% Viewer Flows
+    VIEWER -->|"Search & Browse"| SYSTEM
+    VIEWER -->|"Watch Heartbeats"| SYSTEM
+    VIEWER -->|"Submit Reviews & Ratings"| SYSTEM
+    VIEWER -->|"Post Comments"| SYSTEM
+    SYSTEM -->|"Feed & Recommendations"| VIEWER
+
+    %% Administrator Flows
+    ADMINISTRATOR -->|"Approve / Reject Decisions"| SYSTEM
+    ADMINISTRATOR -->|"Account Governance"| SYSTEM
+    SYSTEM -->|"Review Queue & Previews"| ADMINISTRATOR
+
+    %% Director Flows
+    DIRECTOR -->|"Upload Film Video (.mp4)"| SYSTEM
+    DIRECTOR -->|"Submit Metadata & Cast"| SYSTEM
+    DIRECTOR -->|"Re-upload Corrected Film"| SYSTEM
+    DIRECTOR -->|"Authentication"| SYSTEM
+    SYSTEM -->|"Moderation Status & Feedback"| DIRECTOR
+
+    %% ---------------------------------------------------------------------
+    %% 5. DATA FLOWS - SYSTEM TO / FROM OUTPUTS & SERVICES (RIGHT SIDE)
+    %% ---------------------------------------------------------------------
+
+    %% System Display (UI / Video Player)
+    SYSTEM -->|"Display Info."| DISPLAY
+    SYSTEM -->|"Stream Adaptive HLS Video"| DISPLAY
+
+    %% Reports (Analytics & Governance)
+    SYSTEM -->|"Generates"| REPORT
+
+    %% Cloud Storage & CDN
+    SYSTEM -->|"Uploads HLS Chunks & Manifests"| CDN
+    CDN -->|"Delivers Streaming Media URLs"| SYSTEM
+
+    %% Email Notification Service
+    SYSTEM -->|"Executes"| MAIL
+
+    %% Video Transcoding Engine
+    SYSTEM -->|"Dispatches Transcode Job"| TRANSCODER
+    TRANSCODER -->|"Returns HLS Segments & Poster"| SYSTEM
+
+    %% ---------------------------------------------------------------------
+    %% 6. ACADEMIC VISUAL STYLING (Crisp Black & White Academic Report UI)
+    %% ---------------------------------------------------------------------
+    classDef entity fill:#FFFFFF,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold,font-size:13px;
+    classDef system fill:#FFFFFF,stroke:#000000,stroke-width:2.5px,color:#000000,font-weight:bold,font-size:14px;
+
+    class VIEWER,ADMINISTRATOR,DIRECTOR,DISPLAY,REPORT,CDN,MAIL,TRANSCODER entity;
+    class SYSTEM system;

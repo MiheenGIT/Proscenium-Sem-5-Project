@@ -1,0 +1,61 @@
+%% =========================================================================
+%% Proscenium DFD Level 0: System Context Diagram
+%% Technology: FastAPI, React, MongoDB, Cloudinary, Docker/FFmpeg, SMTP
+%% =========================================================================
+
+flowchart TD
+    %% External Entities (Terminators)
+    EE_VIEWER["External Entity: Viewer\n(Audience / Consumer)"]
+    EE_DIRECTOR["External Entity: Director\n(Filmmaker / Content Creator)"]
+    EE_ADMIN["External Entity: Administrator\n(Moderator / Curation Team)"]
+    EE_CLOUDINARY["External Entity: Cloudinary CDN\n(Media Asset Storage & Delivery)"]
+    EE_AI_UPSCALE["External Entity: AI Upscaling Subsystem\n(Docker ESPCN / OpenVINO SR)"]
+    EE_SMTP["External Entity: SMTP Mail Service\n(Gmail SSL 465 Infrastructure)"]
+
+    %% Central Process (Process 0)
+    P0(("0.0\nProscenium Streaming,\nCuration & Analytics\nPlatform"))
+
+    %% Viewer Interactions
+    EE_VIEWER -->|"1. Credentials, Profile Info, Search/Browse Queries"| P0
+    EE_VIEWER -->|"2. Playback Heartbeats (current time, progress)"| P0
+    EE_VIEWER -->|"3. Social Interactions (Reviews, Comments, Reactions, Watchlist)"| P0
+    EE_VIEWER -->|"4. Telemetry Events (Navigation, Clicks, Searches)"| P0
+
+    P0 -->|"5. Catalog Metadata, Search Results, HLS Manifest URLs"| EE_VIEWER
+    P0 -->|"6. Feed of Reviews, Comments, Watch History & Watchlist"| EE_VIEWER
+    P0 -->|"7. In-App Notifications (New releases, replies, likes)"| EE_VIEWER
+    P0 -->|"8. Account Analytics & Personal Watch Demographics"| EE_VIEWER
+
+    %% Director Interactions
+    EE_DIRECTOR -->|"9. Director Profile, Studio Info & Bio"| P0
+    EE_DIRECTOR -->|"10. Video Upload (.mp4), Thumbnail, Cast Metadata & Upscale Config"| P0
+    EE_DIRECTOR -->|"11. Re-upload Video File / Resubmit for Review"| P0
+    EE_DIRECTOR -->|"12. Video Metadata Edits & Film Deletion"| P0
+
+    P0 -->|"13. Upload Progress, HLS Rendition Summary & Transcoding Status"| EE_DIRECTOR
+    P0 -->|"14. Moderation Decision Notices (Approval / Rejection & Feedback)"| EE_DIRECTOR
+    P0 -->|"15. Video Performance Metrics, Views, Reviews, Audience Analytics"| EE_DIRECTOR
+    P0 -->|"16. In-App Notifications (Comments, Reviews, Milestones)"| EE_DIRECTOR
+
+    %% Administrator Interactions
+    EE_ADMIN -->|"17. Authentication & Role Credentials"| P0
+    EE_ADMIN -->|"18. Moderation Decisions (Approve, Reject with Reason, Reset, Bulk)"| P0
+    EE_ADMIN -->|"19. Content Controls (Age Restriction, Content Warnings, Featured)"| P0
+    EE_ADMIN -->|"20. Feedback Moderation (Restore / Remove Flagged Comments & Reviews)"| P0
+    EE_ADMIN -->|"21. Director Governance (Suspend / Reinstate Accounts)"| P0
+    EE_ADMIN -->|"22. Internal Curation Notes & Admin Audit Remarks"| P0
+
+    P0 -->|"23. Moderation Review Queue & Stream Verification Data"| EE_ADMIN
+    P0 -->|"24. Deterministic Multilingual Flagged Feedback Queue"| EE_ADMIN
+    P0 -->|"25. Platform Intelligence, System Analytics & Churn Reports"| EE_ADMIN
+    P0 -->|"26. In-App Operational Notifications"| EE_ADMIN
+
+    %% External Infrastructure Services
+    P0 -->|"27. Raw Video Input & Super-Resolution Parameters"| EE_AI_UPSCALE
+    EE_AI_UPSCALE -->|"28. Super-Resolved Video Output (2x/4x)"| P0
+
+    P0 -->|"29. HLS Segments (.ts), Master/Rendition Playlists (.m3u8), Posters, Avatars"| EE_CLOUDINARY
+    EE_CLOUDINARY -->|"30. Secure Delivery URLs & Upload Receipts"| P0
+
+    P0 -->|"31. Formatted HTML/Text Emails (Approval, Rejection, Re-upload, New Releases)"| EE_SMTP
+    EE_SMTP -->|"32. Delivery Acknowledgments / Error Receipts"| P0

@@ -1,0 +1,91 @@
+%% =========================================================================
+%% Proscenium DFD Level 2: Multi-Channel Notification & Messaging Engine
+%% Technology: FastAPI BackgroundTasks, MongoDB, Gmail SMTP (SSL 465)
+%% =========================================================================
+
+flowchart TD
+    %% External Entities
+    EE_VIEWER["Viewer"]
+    EE_DIRECTOR["Director"]
+    EE_ADMIN["Administrator"]
+    EE_SMTP["SMTP Mail Service\n(smtp.gmail.com:465 SSL)"]
+
+    %% Data Stores
+    D_NOTIF[("D17: notifications")]
+    D_FILM[("D4: film_collection")]
+    D_VIEWER[("D1: viewers_collection")]
+    D_DIRECTOR[("D2: directors_collection")]
+    D_ADMIN[("D3: admin_collection")]
+
+    %% ---------------------------------------------------------------------
+    %% Sub-Process 6.1: Event Ingestion & Inter-Component Triggers
+    %% ---------------------------------------------------------------------
+    subgraph EVENT_TRIGGERS ["1. Domain Event Triggers"]
+        T_SUBMIT["Director Action:\nFilm upload / re-upload / resubmit"]
+        T_MODERATE["Admin Action:\nApprove / reject film, suspension, note, remove feedback"]
+        T_ENGAGE["Viewer Action:\nComment, reply, review, like reaction"]
+        T_MILESTONE["Playback Engine:\nView milestone reached (10..100k)"]
+    end
+
+    %% ---------------------------------------------------------------------
+    %% Sub-Process 6.2: In-App Notification Router
+    %% ---------------------------------------------------------------------
+    subgraph IN_APP_ENGINE ["2. In-App Notification Core Processing"]
+        P6_1["6.1 Self-Action & Recipient Filter\n(If actorId == recipientId, discard;\nverify recipient exists)"]
+        P6_2["6.2 Deduplication Engine\n(Evaluate dedupeKey against unique sparse index;\nprevent duplicate like/view notifications)"]
+        P6_3["6.3 Build Notification Document\n(recipientRole, recipientId, legacy viewerId, type, title,\nmessage, actorId, videoId, deep-link route, meta, read=False)"]
+        P6_4["6.4 Persist Notification Record\n(Insert into notifications_collection)"]
+        P6_5["6.5 Notification Query & State Manager\n(Scoped pagination, unread counter, patch single read, batch read-all)"]
+    end
+
+    T_SUBMIT -->|"video_submitted / video_reuploaded"| P6_1
+    T_MODERATE -->|"video_approved / video_rejected / feedback_removed"| P6_1
+    T_ENGAGE -->|"new_comment / comment_reply / new_review / comment_like"| P6_1
+    T_MILESTONE -->|"view_milestone"| P6_1
+
+    P6_1 -->|"Verified target recipient"| P6_2
+    P6_2 -->|"Unique event"| P6_3
+    P6_3 --> P6_4
+    P6_4 -->|"Insert document"| D_NOTIF
+
+    %% Feed retrieval by actors
+    EE_VIEWER -->|"GET /notifications or PATCH read"| P6_5
+    EE_DIRECTOR -->|"GET /notifications or PATCH read"| P6_5
+    EE_ADMIN -->|"GET /notifications or PATCH read"| P6_5
+    D_NOTIF <-->|"Read & update read/readAt flags"| P6_5
+    P6_5 -->|"Deliver notifications & unread counts"| EE_VIEWER
+    P6_5 -->|"Deliver notifications & unread counts"| EE_DIRECTOR
+    P6_5 -->|"Deliver notifications & unread counts"| EE_ADMIN
+
+    %% ---------------------------------------------------------------------
+    %% Sub-Process 6.3: Email Notification & Delivery Subsystem
+    %% ---------------------------------------------------------------------
+    subgraph EMAIL_ENGINE ["3. Email Generation & SMTP Dispatch Pipeline"]
+        P6_6["6.6 BackgroundTasks Enqueue\n(FastAPI non-blocking async dispatch after HTTP response)"]
+        P6_7{"6.7 Email Event Type"}
+        P6_8["6.8 Director Status Email\n(notify_director_approved / notify_director_rejected)"]
+        P6_9["6.9 Admin Re-upload Alert\n(notify_admin_reuploaded / notify_admin_resubmitted)"]
+        P6_10["6.10 Viewer New-Release Broadcast\n(Query opted-in viewers where newReleaseNotifications!=False)"]
+        P6_11["6.11 Branded Layout Template Assembly\n(Gold/Dark palette, HTML preheader, badge, poster thumbnail,\nadmin quote box, action CTA button, plain-text fallback)"]
+        P6_12["6.12 SMTP SSL Transport\n(Connect to smtp.gmail.com:465; single or batch send_many)"]
+    end
+
+    T_MODERATE -->|"Approve / Reject decision"| P6_6
+    T_SUBMIT -->|"Re-upload / Resubmit"| P6_6
+    P6_6 --> P6_7
+
+    P6_7 -->|"Approval / Rejection"| P6_8
+    P6_7 -->|"Re-upload / Resubmit"| P6_9
+    P6_7 -->|"Approved film broadcast"| P6_10
+
+    D_DIRECTOR -->|"Lookup director email & username"| P6_8
+    D_FILM -->|"Lookup title & thumbnail"| P6_8
+    D_ADMIN -->|"Lookup admin email (ADMIN_NOTIFY_EMAIL)"| P6_9
+    D_VIEWER -->|"Lookup opted-in emails (newReleaseNotifications)"| P6_10
+
+    P6_8 -->|"Payload parameters"| P6_11
+    P6_9 -->|"Payload parameters"| P6_11
+    P6_10 -->|"Batch message tuples (to, subj, text, html)"| P6_11
+
+    P6_11 -->|"EmailMessage instances"| P6_12
+    P6_12 -->|"Deliver over TLS/SSL"| EE_SMTP

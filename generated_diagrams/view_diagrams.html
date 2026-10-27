@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proscenium - Architecture Diagrams (College Black Book & Detailed)</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --bg: #0b0b10;
+            --card-bg: #15151d;
+            --border: #26262f;
+            --gold: #e8b04b;
+            --text: #f2f2f5;
+            --muted: #9a9aa8;
+            --green: #2fbf71;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 24px;
+        }
+        header {
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        header h1 {
+            font-size: 24px;
+            color: var(--gold);
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        header p {
+            color: var(--muted);
+            font-size: 14px;
+        }
+        .instructions-box {
+            background: rgba(232, 176, 75, 0.08);
+            border: 1px solid rgba(232, 176, 75, 0.25);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .instructions-box strong {
+            color: var(--gold);
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 10px 18px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .tab-btn:hover {
+            color: var(--text);
+            border-color: var(--gold);
+        }
+        .tab-btn.active {
+            background: var(--gold);
+            color: #111;
+            font-weight: 600;
+            border-color: var(--gold);
+        }
+        .tab-badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #232330;
+            margin-left: 6px;
+        }
+        .tab-badge.black-book {
+            background: rgba(47, 191, 113, 0.2);
+            color: var(--green);
+            font-weight: bold;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .file-badge {
+            font-size: 12px;
+            font-family: monospace;
+            background: #20202c;
+            padding: 4px 10px;
+            border-radius: 4px;
+            color: var(--gold);
+            border: 1px solid var(--border);
+            margin-left: 8px;
+        }
+        .diagram-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            overflow-x: auto;
+            min-height: 520px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .mermaid {
+            width: 100%;
+            text-align: center;
+        }
+        @media print {
+            body { background: white; color: black; padding: 0; }
+            .tabs, .instructions-box, header p { display: none; }
+            .diagram-container { border: none; background: white; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PROSCENIUM ARCHITECTURE & DFD VIEWER</h1>
+        <p>College Black Book-optimized diagrams and full technical architectural representations.</p>
+    </header>
+
+    <div class="instructions-box">
+        <strong>How to Export to Portrait A4:</strong>
+        <ol style="margin-left: 20px; margin-top: 6px;">
+            <li><strong>Online (Recommended):</strong> Copy any code from the <code>.mmd</code> file into <a href="https://mermaid.live" target="_blank" style="color:var(--gold); text-decoration:underline;">mermaid.live</a> and click <strong>Actions &rarr; Download PNG / SVG</strong>. Paste directly into Word or LaTeX!</li>
+            <li><strong>Browser Print:</strong> Select the tab you want to print, press <code>Ctrl + P</code>, choose <strong>Destination: Save as PDF</strong>, <strong>Layout: Portrait</strong>, and adjust scale to fit on 1 page.</li>
+        </ol>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('erd', this)">
+            Simplified ERD <span class="tab-badge black-book">A4 Black Book</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('dfd0', this)">
+            DFD Level 0 <span class="tab-badge black-book">A4 Black Book</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('dfd1', this)">
+            DFD Level 1 <span class="tab-badge black-book">A4 Black Book</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('dfd2_video', this)">
+            DFD Level 2: Video Workflow <span class="tab-badge">Detailed</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('dfd2_notif', this)">
+            DFD Level 2: Notifications <span class="tab-badge">Detailed</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('erd_detailed', this)">
+            Full ERD (19 Collections) <span class="tab-badge">Detailed</span>
+        </button>
+    </div>
+
+    <!-- 1. SIMPLIFIED ERD -->
+    <div id="tab-erd" class="tab-content" style="display: block;">
+        <div class="toolbar">
+            <h2>Simplified Entity Relationship Diagram <span class="file-badge">ERD.mmd</span></h2>
+        </div>
+        <div class="diagram-container">
+flowchart TD
+
+    %% ---------------------------------------------------------------------
+    %% 1. ENTITY SETS (Rectangles)
+    %% ---------------------------------------------------------------------
+    E_DIRECTOR["DIRECTOR"]
+    E_ADMIN["ADMIN"]
+    E_FILM["FILM"]
+    E_CAST["CAST"]
+    E_VIEWER["VIEWER"]
+    E_REVIEW["REVIEW"]
+    E_COMMENT["COMMENT"]
+
+    %% ---------------------------------------------------------------------
+    %% 2. RELATIONSHIP SETS (Diamonds)
+    %% ---------------------------------------------------------------------
+    R_SUBMITS{"Submits"}
+    R_MODERATES{"Moderates"}
+    R_FEATURES{"Features"}
+    R_WATCHES{"Watches"}
+    R_WRITES_REV{"Writes"}
+    R_EVALUATES{"Evaluates"}
+    R_POSTS_COMM{"Posts"}
+    R_CONTAINS{"Contains"}
+
+    %% ---------------------------------------------------------------------
+    %% 3. ATTRIBUTES (Ellipses / Ovals)
+    %% ---------------------------------------------------------------------
+
+    %% DIRECTOR Attributes
+    A_DIR_ID(["<u>director_id</u>"]) --- E_DIRECTOR
+    A_DIR_NAME(["username"]) --- E_DIRECTOR
+    A_DIR_EMAIL(["email"]) --- E_DIRECTOR
+    A_DIR_STUDIO(["studio_name"]) --- E_DIRECTOR
+    A_DIR_STATUS(["account_status"]) --- E_DIRECTOR
+
+    %% ADMIN Attributes
+    A_ADM_ID(["<u>admin_id</u>"]) --- E_ADMIN
+    A_ADM_NAME(["username"]) --- E_ADMIN
+    A_ADM_EMAIL(["email"]) --- E_ADMIN
+    A_ADM_LEVEL(["admin_level"]) --- E_ADMIN
+
+    %% FILM Attributes
+    A_FLM_ID(["<u>film_id</u>"]) --- E_FILM
+    A_FLM_TITLE(["title"]) --- E_FILM
+    A_FLM_DUR(["duration"]) --- E_FILM
+    A_FLM_MOD(["moderation_status"]) --- E_FILM
+    A_FLM_VIS(["visibility"]) --- E_FILM
+
+    %% CAST Attributes
+    A_CST_ID(["<u>cast_id</u>"]) --- E_CAST
+    A_CST_ACTOR(["actor_name"]) --- E_CAST
+    A_CST_ROLE(["character_name"]) --- E_CAST
+
+    %% VIEWER Attributes
+    A_VIW_ID(["<u>viewer_id</u>"]) --- E_VIEWER
+    A_VIW_NAME(["username"]) --- E_VIEWER
+    A_VIW_EMAIL(["email"]) --- E_VIEWER
+    A_VIW_MAT(["maturity_setting"]) --- E_VIEWER
+
+    %% REVIEW Attributes
+    A_REV_ID(["<u>review_id</u>"]) --- E_REVIEW
+    A_REV_RATE(["rating"]) --- E_REVIEW
+    A_REV_TEXT(["review_text"]) --- E_REVIEW
+
+    %% COMMENT Attributes
+    A_COM_ID(["<u>comment_id</u>"]) --- E_COMMENT
+    A_COM_TEXT(["comment_text"]) --- E_COMMENT
+    A_COM_FLAG(["flagged"]) --- E_COMMENT
+
+    %% Descriptive Attribute on Relationship (Watches)
+    A_WAT_PROG(["progress_pct"]) --- R_WATCHES
+
+    %% ---------------------------------------------------------------------
+    %% 4. RELATIONSHIPS & CARDINALITY MAPPINGS
+    %% ---------------------------------------------------------------------
+    E_DIRECTOR ---|"1"| R_SUBMITS
+    R_SUBMITS ---|"N"| E_FILM
+
+    E_ADMIN ---|"1"| R_MODERATES
+    R_MODERATES ---|"N"| E_FILM
+
+    E_FILM ---|"1"| R_FEATURES
+    R_FEATURES ---|"N"| E_CAST
+
+    E_VIEWER ---|"M"| R_WATCHES
+    R_WATCHES ---|"N"| E_FILM
+
+    E_VIEWER ---|"1"| R_WRITES_REV
+    R_WRITES_REV ---|"N"| E_REVIEW
+
+    E_FILM ---|"1"| R_EVALUATES
+    R_EVALUATES ---|"N"| E_REVIEW
+
+    E_VIEWER ---|"1"| R_POSTS_COMM
+    R_POSTS_COMM ---|"N"| E_COMMENT
+
+    E_FILM ---|"1"| R_CONTAINS
+    R_CONTAINS ---|"N"| E_COMMENT
+
+    %% ---------------------------------------------------------------------
+    %% 5. STYLING (Standard Academic Visual Conventions)
+    %% ---------------------------------------------------------------------
+    classDef entity fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1,font-weight:bold;
+    classDef relationship fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20,font-weight:bold;
+    classDef attribute fill:#fffde7,stroke:#f57f17,stroke-width:1.5px,color:#3e2723;
+    classDef keyAttr fill:#fffde7,stroke:#c2185b,stroke-width:1.5px,color:#880e4f,font-weight:bold;
+
+    class E_DIRECTOR,E_ADMIN,E_FILM,E_CAST,E_VIEWER,E_REVIEW,E_COMMENT entity;
+    class R_SUBMITS,R_MODERATES,R_FEATURES,R_WATCHES,R_WRITES_REV,R_EVALUATES,R_POSTS_COMM,R_CONTAINS relationship;
+    class A_DIR_NAME,A_DIR_EMAIL,A_DIR_STUDIO,A_DIR_STATUS,A_ADM_NAME,A_ADM_EMAIL,A_ADM_LEVEL,A_FLM_TITLE,A_FLM_DUR,A_FLM_MOD,A_FLM_VIS,A_CST_ACTOR,A_CST_ROLE,A_VIW_NAME,A_VIW_EMAIL,A_VIW_MAT,A_REV_RATE,A_REV_TEXT,A_COM_TEXT,A_COM_FLAG,A_WAT_PROG attribute;
+    class A_DIR_ID,A_ADM_ID,A_FLM_ID,A_CST_ID,A_VIW_ID,A_REV_ID,A_COM_ID keyAttr;
+            </pre>
+        </div>
+    </div>
+
+    <!-- 2. SIMPLIFIED DFD LEVEL 0 -->
+    <div id="tab-dfd0" class="tab-content" style="display: none;">
+        <div class="toolbar">
+            <h2>DFD Level 0: System Context Diagram <span class="file-badge">DFD_Level_0.mmd</span></h2>
+        </div>
+        <div class="diagram-container">
+            <pre class="mermaid">
+flowchart LR
+
+    %% Central System Process (Level 0.0 Oval)
+    SYSTEM(("Proscenium<br>Streaming & Curation<br>System"))
+
+    %% External Entities (Left: Primary Actors)
+    VIEWER["Viewer"]
+    ADMINISTRATOR["Administrator"]
+    DIRECTOR["Director"]
+
+    %% External Entities & Outputs (Right: Sinks & Services)
+    DISPLAY["System Display"]
+    REPORT["Report"]
+    CDN["Cloud Storage & CDN<br>(Cloudinary)"]
+    MAIL["Email Service<br>(Gmail SMTP)"]
+    TRANSCODER["Transcoding Engine<br>(OpenVINO / FFmpeg)"]
+
+    %% Viewer Flows
+    VIEWER -->|"Search & Browse"| SYSTEM
+    VIEWER -->|"Watch Heartbeats"| SYSTEM
+    VIEWER -->|"Submit Reviews & Ratings"| SYSTEM
+    VIEWER -->|"Post Comments"| SYSTEM
+    SYSTEM -->|"Feed & Recommendations"| VIEWER
+
+    %% Administrator Flows
+    ADMINISTRATOR -->|"Approve / Reject Decisions"| SYSTEM
+    ADMINISTRATOR -->|"Account Governance"| SYSTEM
+    SYSTEM -->|"Review Queue & Previews"| ADMINISTRATOR
+
+    %% Director Flows
+    DIRECTOR -->|"Upload Film Video (.mp4)"| SYSTEM
+    DIRECTOR -->|"Submit Metadata & Cast"| SYSTEM
+    DIRECTOR -->|"Re-upload Corrected Film"| SYSTEM
+    DIRECTOR -->|"Authentication"| SYSTEM
+    SYSTEM -->|"Moderation Status & Feedback"| DIRECTOR
+
+    %% System Outputs & Services
+    SYSTEM -->|"Display Info."| DISPLAY
+    SYSTEM -->|"Stream Adaptive HLS Video"| DISPLAY
+
+    SYSTEM -->|"Generates"| REPORT
+
+    SYSTEM -->|"Uploads HLS Chunks & Manifests"| CDN
+    CDN -->|"Delivers Streaming Media URLs"| SYSTEM
+
+    SYSTEM -->|"Executes"| MAIL
+
+    SYSTEM -->|"Dispatches Transcode Job"| TRANSCODER
+    TRANSCODER -->|"Returns HLS Segments & Poster"| SYSTEM
+
+    %% Visual Styling
+    classDef entity fill:#FFFFFF,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold,font-size:13px;
+    classDef system fill:#FFFFFF,stroke:#000000,stroke-width:2.5px,color:#000000,font-weight:bold,font-size:14px;
+
+    class VIEWER,ADMINISTRATOR,DIRECTOR,DISPLAY,REPORT,CDN,MAIL,TRANSCODER entity;
+    class SYSTEM system;
+            </pre>
+        </div>
+    </div>
+
+    <!-- 3. SIMPLIFIED DFD LEVEL 1 -->
+    <div id="tab-dfd1" class="tab-content" style="display: none;">
+        <div class="toolbar">
+            <h2>DFD Level 1: Major Processes & Data Stores <span class="file-badge">DFD_Level_1.mmd</span></h2>
+        </div>
+        <div class="diagram-container">
+            <pre class="mermaid">
+flowchart TD
+
+    %% External Entities
+    EE_DIR["Director"]
+    EE_ADM["Administrator"]
+    EE_VIE["Viewer"]
+    EE_CDN["Cloud Storage & CDN<br>(Cloudinary)"]
+    EE_MAIL["Email Service<br>(Gmail SMTP)"]
+
+    %% Data Stores
+    subgraph DATA_STORES ["MongoDB Data Collections"]
+        D1[("D1: User Profiles & Roles")]
+        D2[("D2: Film Catalog & Cast")]
+        D3[("D3: Watch History & Views")]
+        D4[("D4: Reviews & Comments")]
+        D5[("D5: Notifications")]
+    end
+
+    %% Major Processes
+    P1(("1.0<br>User Auth &<br>Access Control"))
+    P2(("2.0<br>Film Ingestion &<br>Transcoding"))
+    P3(("3.0<br>Administrative Review<br>& Moderation"))
+    P4(("4.0<br>Video Streaming &<br>Playback Tracking"))
+    P5(("5.0<br>Social Feedback &<br>Notifications"))
+
+    %% Process 1.0 Flows
+    EE_DIR -->|"Credentials & Profile"| P1
+    EE_ADM -->|"Login Credentials"| P1
+    EE_VIE -->|"Credentials & Registration"| P1
+    P1 -->|"JWT Tokens & Role Access"| EE_VIE
+    P1 <-->|"Verify & Store User Data"| D1
+
+    %% Process 2.0 Flows
+    EE_DIR -->|"Upload Video & Metadata"| P2
+    P2 -->|"Upload Video Segments & Poster"| EE_CDN
+    EE_CDN -->|"HLS Manifest & Media URLs"| P2
+    P2 -->|"Save Pending Film & Cast"| D2
+    P2 -->|"Trigger Upload Alert"| P5
+
+    %% Process 3.0 Flows
+    EE_ADM -->|"Approve / Reject Decision"| P3
+    P3 <-->|"Fetch Pending / Update Status"| D2
+    P3 -->|"Update Director Status"| D1
+    P3 -->|"Trigger Decision Alert"| P5
+
+    %% Process 4.0 Flows
+    EE_VIE -->|"Browse & Stream Request"| P4
+    P4 -->|"Stream URL & Film Details"| EE_VIE
+    D2 -->|"Film Metadata & Manifest"| P4
+    EE_VIE -->|"Periodic Playhead Heartbeats"| P4
+    P4 <-->|"Update Resume & Log 75% Views"| D3
+
+    %% Process 5.0 Flows
+    EE_VIE -->|"Submit Reviews & Comments"| P5
+    P5 -->|"Save Reviews & Comments"| D4
+    P5 -->|"Persist In-App Notifications"| D5
+    P5 -->|"Dispatch Emails"| EE_MAIL
+    D5 -->|"Unread Alerts & Badges"| EE_VIE
+    D5 -->|"Moderation Feedback Notices"| EE_DIR
+
+    %% Visual Styling
+    classDef entity fill:#FFFFFF,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold,font-size:12px;
+    classDef process fill:#FFFFFF,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold,font-size:12px;
+    classDef store fill:#FFFFFF,stroke:#000000,stroke-width:1.5px,color:#000000,font-weight:bold,font-size:11px;
+
+    class EE_DIR,EE_ADM,EE_VIE,EE_CDN,EE_MAIL entity;
+    class P1,P2,P3,P4,P5 process;
+    class D1,D2,D3,D4,D5 store;
+            </pre>
+        </div>
+    </div>
+
+    <!-- 4. DFD LEVEL 2 VIDEO WORKFLOW -->
+    <div id="tab-dfd2_video" class="tab-content" style="display: none;">
+        <div class="toolbar">
+            <h2>DFD Level 2: Video Lifecycle Workflow <span class="file-badge">DFD_Level_2_Video_Workflow.mmd</span></h2>
+        </div>
+        <div class="diagram-container">
+            <pre class="mermaid">
+flowchart TD
+    EE_DIR["Director"]
+    EE_ADM["Administrator"]
+    EE_VIE["Viewer"]
+    EE_CLD["Cloudinary CDN"]
+    EE_DOCKER["Docker / TensorFlow Engine\n(miratmu/ffmpeg-tensorflow)"]
+    EE_SMTP["SMTP Mail Server"]
+
+    D_FILM[("D4: film_collection")]
+    D_CAST[("D5: cast")]
+    D_VIEW[("D9: video_views")]
+    D_SESS[("D6: watch_sessions")]
+    D_LOG[("D7: watch_session_log")]
+    D_HIST[("D8: watch_history")]
+    D_NOTIF[("D17: notifications")]
+    D_VIEWER[("D1: viewers_collection")]
+
+    subgraph PHASE_INGESTION ["Phase 1: Ingestion & Metadata Processing"]
+        P2_1["2.1 Receive Multipart Upload\n(Validate role, video file, cast JSON, thumbnail)"]
+        P2_2["2.2 Probe Video Stream\n(FFprobe: duration in seconds, width, height)"]
+        P2_3["2.3 Process Cast Members\n(Upload photos to Cloudinary, insert cast records)"]
+        P2_4["2.4 Prepare Poster / Thumbnail\n(Validate custom file OR extract frame at 1s via FFmpeg;\nupload to Cloudinary)"]
+    end
+
+    EE_DIR -->|"Upload film (.mp4), metadata, poster, cast"| P2_1
+    P2_1 -->|"Write temporary original.mp4 to disk"| P2_2
+    P2_1 -->|"Extract cast member photos"| P2_3
+    P2_3 -->|"Upload cast photo"| EE_CLD
+    EE_CLD -->|"Return cast photo URL"| P2_3
+    P2_3 -->|"Insert cast documents with videoId"| D_CAST
+
+    P2_2 -->|"Raw video path & duration"| P2_4
+    P2_4 -->|"Upload thumbnail image"| EE_CLD
+    EE_CLD -->|"Return secure thumbnail URL"| P2_4
+
+    subgraph PHASE_TRANSCODING ["Phase 2: AI Super-Resolution & HLS Transcoding Pipeline"]
+        P2_5{"2.5 Resolution Check\nSource Height < 1080p\n& use_upscale == True?"}
+        P2_6["2.6 AI Super-Resolution\n(Docker: extract YUV planes, run ESPCN 2x/4x model on Y plane,\nlanczos scale U/V planes, merge & encode)"]
+        P2_7["2.7 Select Resolution Ladder\n(Filter resolutions <= input height * 1.2;\n360p, 480p, 720p, 1080p, 1440p, 2160p)"]
+        P2_8["2.8 Multi-bitrate HLS Transcode\n(FFmpeg: 6s segments, libx264, AAC 128k, index_{res}.m3u8)"]
+        P2_9["2.9 Cloudinary Media Dispatch\n(Upload .ts segments, rewrite index playlists with remote URLs,\ngenerate master.m3u8, upload master playlist)"]
+        P2_10["2.10 Disk Cleanup & DB Persistence\n(Purge local media directory, insert film document with\nstatus='ready', moderationStatus='pending', visibility='private')"]
+    end
+
+    P2_2 -->|"Resolution (w x h)"| P2_5
+    P2_5 -->|"Yes (<1080p)"| P2_6
+    P2_5 -->|"No (>=1080p or disabled)"| P2_7
+    P2_6 -->|"Mount /data & execute ESPCN model"| EE_DOCKER
+    EE_DOCKER -->|"Return ai_upscaled.mp4"| P2_6
+    P2_6 -->|"Upscaled video file"| P2_7
+
+    P2_7 -->|"Active rendition targets"| P2_8
+    P2_8 -->|"Generated .ts segments & index playlists"| P2_9
+    P2_9 -->|"Upload video segments & m3u8 manifests"| EE_CLD
+    EE_CLD -->|"Return segment & master manifest URLs"| P2_9
+    P2_9 -->|"Manifest URL & renditions metadata"| P2_10
+    P2_10 -->|"Store film document (status=ready, visibility=private)"| D_FILM
+    P2_10 -->|"Notify admin: New film awaiting review"| D_NOTIF
+
+    subgraph PHASE_MODERATION ["Phase 3: Administrative Moderation & Curation"]
+        P3_1["3.1 Review Moderation Queue\n(Fetch pending submissions, inspect metadata, play stream preview)"]
+        P3_2{"3.2 Moderation Decision"}
+        P3_3["3.3 Reject Film\n(Set moderationStatus='rejected', visibility='private',\nrecord reason in moderationHistory)"]
+        P3_4["3.4 Approve Film\n(Set moderationStatus='approved', visibility='public',\npublishedAt=now)"]
+        P3_5["3.5 Audience Notification Fan-Out\n(Queue in-app notification & batch HTML email via SMTP\nto all opted-in viewers)"]
+    end
+
+    EE_ADM -->|"Inspect pending films"| P3_1
+    D_FILM -->|"Read film details & stream URL"| P3_1
+    P3_1 -->|"Submit moderation action"| P3_2
+
+    P3_2 -->|"Reject (with reason)"| P3_3
+    P3_3 -->|"Update film moderationStatus=rejected"| D_FILM
+    P3_3 -->|"Insert rejection notice for director"| D_NOTIF
+    P3_3 -->|"Send rejection email via SMTP"| EE_SMTP
+
+    P3_2 -->|"Approve (with optional comment)"| P3_4
+    P3_4 -->|"Update film moderationStatus=approved, visibility=public"| D_FILM
+    P3_4 -->|"Insert approval notice for director"| D_NOTIF
+    P3_4 -->|"Send approval email via SMTP"| EE_SMTP
+    P3_4 -->|"Trigger new release broadcast"| P3_5
+
+    P3_5 -->|"Query opted-in viewers"| D_VIEWER
+    P3_5 -->|"Insert in-app notification for each viewer"| D_NOTIF
+    P3_5 -->|"Queue batch new release email"| EE_SMTP
+
+    subgraph PHASE_STREAMING ["Phase 4: Streaming, Heartbeats & View Verification"]
+        P4_1["4.1 Initialize Playback Session\n(Verify age restrictions & maturity settings, get master.m3u8,\nfetch resume position from history, create session)"]
+        P4_2["4.2 HLS Adaptive Stream Playback\n(Client video player downloads manifests & segments)"]
+        P4_3["4.3 Playback Heartbeat Ping\n(Receive currentTimeSec, calculate wall-clock gap,\nverify anti-drift tolerance <= 5s)"]
+        P4_4["4.4 Accumulate Watch Time & Log\n(Increment accumulatedSeconds in session & append-only watch_session_log,\nupdate resume position in watch_history)"]
+        P4_5{"4.5 Qualified View Gate\naccumulatedSeconds / durationSec\n>= 0.75 (75%) ?"}
+        P4_6["4.6 Credit Qualified View\n(Insert unique record in video_views; increment views & uniqueViews\non film; check viewing milestones 10..100k)"]
+    end
+
+    EE_VIE -->|"Click watch video"| P4_1
+    D_FILM -->|"Read hlsManifestUrl & ageRestricted"| P4_1
+    D_HIST -->|"Read currentTimeSec (resume)"| P4_1
+    P4_1 -->|"Initialize session document"| D_SESS
+    P4_1 -->|"Create append-only play record"| D_LOG
+    P4_1 -->|"Return stream_url & resume time"| EE_VIE
+
+    EE_VIE -->|"Request HLS video segments"| EE_CLD
+    EE_CLD -->|"Deliver media segments (.ts)"| EE_VIE
+
+    EE_VIE -->|"Periodic heartbeat (currentTimeSec every ~5-10s)"| P4_3
+    P4_3 -->|"Read current session state"| D_SESS
+    P4_3 -->|"Credited playback delta"| P4_4
+    P4_4 -->|"Update accumulatedSeconds in session"| D_SESS
+    P4_4 -->|"Increment total seconds in log"| D_LOG
+    P4_4 -->|"Upsert current playhead position & progress %"| D_HIST
+    P4_4 --> P4_5
+
+    P4_5 -->|"No (<75%)"| P4_3
+    P4_5 -->|"Yes (>=75% for first time)"| P4_6
+    P4_6 -->|"Insert unique (videoId, viewerId) record"| D_VIEW
+    P4_6 -->|"Increment views and uniqueViews"| D_FILM
+    P4_6 -->|"If milestone reached, notify director"| D_NOTIF
+            </pre>
+        </div>
+    </div>
+
+    <!-- 5. DFD LEVEL 2 NOTIFICATIONS -->
+    <div id="tab-dfd2_notif" class="tab-content" style="display: none;">
+        <div class="toolbar">
+            <h2>DFD Level 2: Notification & Messaging Engine <span class="file-badge">DFD_Level_2_Notifications.mmd</span></h2>
+        </div>
+        <div class="diagram-container">
+            <pre class="mermaid">
+flowchart TD
+    EE_VIEWER["Viewer"]
+    EE_DIRECTOR["Director"]
+    EE_ADMIN["Administrator"]
+    EE_SMTP["SMTP Mail Service\n(smtp.gmail.com:465 SSL)"]
+
+    D_NOTIF[("D17: notifications")]
+    D_FILM[("D4: film_collection")]
+    D_VIEWER[("D1: viewers_collection")]
+    D_DIRECTOR[("D2: directors_collection")]
+    D_ADMIN[("D3: admin_collection")]
+
+    subgraph EVENT_TRIGGERS ["1. Domain Event Triggers"]
+        T_SUBMIT["Director Action:\nFilm upload / re-upload / resubmit"]
+        T_MODERATE["Admin Action:\nApprove / reject film, suspension, note, remove feedback"]
+        T_ENGAGE["Viewer Action:\nComment, reply, review, like reaction"]
+        T_MILESTONE["Playback Engine:\nView milestone reached (10..100k)"]
+    end
+
+    subgraph IN_APP_ENGINE ["2. In-App Notification Core Processing"]
+        P6_1["6.1 Self-Action & Recipient Filter\n(If actorId == recipientId, discard;\nverify recipient exists)"]
+        P6_2["6.2 Deduplication Engine\n(Evaluate dedupeKey against unique sparse index;\nprevent duplicate like/view notifications)"]
+        P6_3["6.3 Build Notification Document\n(recipientRole, recipientId, legacy viewerId, type, title,\nmessage, actorId, videoId, deep-link route, meta, read=False)"]
+        P6_4["6.4 Persist Notification Record\n(Insert into notifications_collection)"]
+        P6_5["6.5 Notification Query & State Manager\n(Scoped pagination, unread counter, patch single read, batch read-all)"]
+    end
+
+    T_SUBMIT -->|"video_submitted / video_reuploaded"| P6_1
+    T_MODERATE -->|"video_approved / video_rejected / feedback_removed"| P6_1
+    T_ENGAGE -->|"new_comment / comment_reply / new_review / comment_like"| P6_1
+    T_MILESTONE -->|"view_milestone"| P6_1
+
+    P6_1 -->|"Verified target recipient"| P6_2
+    P6_2 -->|"Unique event"| P6_3
+    P6_3 --> P6_4
+    P6_4 -->|"Insert document"| D_NOTIF
+
+    EE_VIEWER -->|"GET /notifications or PATCH read"| P6_5
+    EE_DIRECTOR -->|"GET /notifications or PATCH read"| P6_5
+    EE_ADMIN -->|"GET /notifications or PATCH read"| P6_5
+    D_NOTIF <-->|"Read & update read/readAt flags"| P6_5
+    P6_5 -->|"Deliver notifications & unread counts"| EE_VIEWER
+    P6_5 -->|"Deliver notifications & unread counts"| EE_DIRECTOR
+    P6_5 -->|"Deliver notifications & unread counts"| EE_ADMIN
+
+    subgraph EMAIL_ENGINE ["3. Email Generation & SMTP Dispatch Pipeline"]
+        P6_6["6.6 BackgroundTasks Enqueue\n(FastAPI non-blocking async dispatch after HTTP response)"]
+        P6_7{"6.7 Email Event Type"}
+        P6_8["6.8 Director Status Email\n(notify_director_approved / notify_director_rejected)"]
+        P6_9["6.9 Admin Re-upload Alert\n(notify_admin_reuploaded / notify_admin_resubmitted)"]
+        P6_10["6.10 Viewer New-Release Broadcast\n(Query opted-in viewers where newReleaseNotifications!=False)"]
+        P6_11["6.11 Branded Layout Template Assembly\n(Gold/Dark palette, HTML preheader, badge, poster thumbnail,\nadmin quote box, action CTA button, plain-text fallback)"]
+        P6_12["6.12 SMTP SSL Transport\n(Connect to smtp.gmail.com:465; single or batch send_many)"]
+    end
+
+    T_MODERATE -->|"Approve / Reject decision"| P6_6
+    T_SUBMIT -->|"Re-upload / Resubmit"| P6_6
+    P6_6 --> P6_7
+
+    P6_7 -->|"Approval / Rejection"| P6_8
+    P6_7 -->|"Re-upload / Resubmit"| P6_9
+    P6_7 -->|"Approved film broadcast"| P6_10
+
+    D_DIRECTOR -->|"Lookup director email & username"| P6_8
+    D_FILM -->|"Lookup title & thumbnail"| P6_8
+    D_ADMIN -->|"Lookup admin email (ADMIN_NOTIFY_EMAIL)"| P6_9
+    D_VIEWER -->|"Lookup opted-in emails (newReleaseNotifications)"| P6_10
+
+    P6_8 -->|"Payload parameters"| P6_11
+    P6_9 -->|"Payload parameters"| P6_11
+    P6_10 -->|"Batch message tuples (to, subj, text, html)"| P6_11
+
+    P6_11 -->|"EmailMessage instances"| P6_12
+    P6_12 -->|"Deliver over TLS/SSL"| EE_SMTP
+            </pre>
+        </div>
+    </div>
+
+    <!-- 6. DETAILED ERD -->
+    <div id="tab-erd_detailed" class="tab-content" style="display: none;">
+        <div class="toolbar">
+            <h2>Detailed Entity Relationship Diagram (19 Collections) <span class="file-badge">ERD_Detailed.mmd</span></h2>
+        </div>
+        <div class="diagram-container">
+            <p style="color:var(--muted); font-size: 14px; text-align: center; padding: 20px;">
+                The complete 19-collection detailed ERD has been preserved in <code>generated_diagrams/ERD_Detailed.mmd</code>.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            themeVariables: {
+                primaryColor: '#252538',
+                primaryTextColor: '#f2f2f5',
+                primaryBorderColor: '#e8b04b',
+                lineColor: '#e8b04b',
+                secondaryColor: '#1d1d29',
+                tertiaryColor: '#15151d',
+                fontFamily: 'Segoe UI, sans-serif'
+            }
+        });
+
+        function switchTab(targetKey, btnElement) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            const activeTab = document.getElementById('tab-' + targetKey);
+            if (activeTab) {
+                activeTab.style.display = 'block';
+            }
+            if (btnElement) {
+                btnElement.classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>

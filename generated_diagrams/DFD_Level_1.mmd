@@ -1,0 +1,86 @@
+%% =========================================================================
+%% Proscenium - DFD Level 1: Major Processes & Data Stores
+%% Academic Standard: Decomposed Process Diagram (Gane & Sarson / Yourdon Style)
+%% Optimized for Academic Black Book / Portrait A4 Report Printing
+%% =========================================================================
+
+flowchart TD
+
+    %% ---------------------------------------------------------------------
+    %% 1. EXTERNAL ENTITIES (Rectangles)
+    %% ---------------------------------------------------------------------
+    EE_DIR["Director"]
+    EE_ADM["Administrator"]
+    EE_VIE["Viewer"]
+    EE_CDN["Cloud Storage & CDN<br>(Cloudinary)"]
+    EE_MAIL["Email Service<br>(Gmail SMTP)"]
+
+    %% ---------------------------------------------------------------------
+    %% 2. DATA STORES (Open Data Stores / Databases)
+    %% ---------------------------------------------------------------------
+    subgraph DATA_STORES ["MongoDB Data Collections"]
+        D1[("D1: User Profiles & Roles")]
+        D2[("D2: Film Catalog & Cast")]
+        D3[("D3: Watch History & Views")]
+        D4[("D4: Reviews & Comments")]
+        D5[("D5: Notifications")]
+    end
+
+    %% ---------------------------------------------------------------------
+    %% 3. MAJOR SYSTEM PROCESSES (1.0 to 5.0 Circles / Ellipses)
+    %% ---------------------------------------------------------------------
+    P1(("1.0<br>User Auth &<br>Access Control"))
+    P2(("2.0<br>Film Ingestion &<br>Transcoding"))
+    P3(("3.0<br>Administrative Review<br>& Moderation"))
+    P4(("4.0<br>Video Streaming &<br>Playback Tracking"))
+    P5(("5.0<br>Social Feedback &<br>Notifications"))
+
+    %% ---------------------------------------------------------------------
+    %% 4. PROCESS INTERACTIONS & FLOWS
+    %% ---------------------------------------------------------------------
+
+    %% Process 1.0: User Authentication & Access Control
+    EE_DIR -->|"Credentials & Profile"| P1
+    EE_ADM -->|"Login Credentials"| P1
+    EE_VIE -->|"Credentials & Registration"| P1
+    P1 -->|"JWT Tokens & Role Access"| EE_VIE
+    P1 <-->|"Verify & Store User Data"| D1
+
+    %% Process 2.0: Film Ingestion & Transcoding
+    EE_DIR -->|"Upload Video & Metadata"| P2
+    P2 -->|"Upload Video Segments & Poster"| EE_CDN
+    EE_CDN -->|"HLS Manifest & Media URLs"| P2
+    P2 -->|"Save Pending Film & Cast"| D2
+    P2 -->|"Trigger Upload Alert"| P5
+
+    %% Process 3.0: Administrative Review & Moderation
+    EE_ADM -->|"Approve / Reject Decision"| P3
+    P3 <-->|"Fetch Pending / Update Status"| D2
+    P3 -->|"Update Director Status"| D1
+    P3 -->|"Trigger Decision Alert"| P5
+
+    %% Process 4.0: Video Streaming & Playback Tracking
+    EE_VIE -->|"Browse & Stream Request"| P4
+    P4 -->|"Stream URL & Film Details"| EE_VIE
+    D2 -->|"Film Metadata & Manifest"| P4
+    EE_VIE -->|"Periodic Playhead Heartbeats"| P4
+    P4 <-->|"Update Resume & Log 75% Views"| D3
+
+    %% Process 5.0: Social Feedback & Notifications
+    EE_VIE -->|"Submit Reviews & Comments"| P5
+    P5 -->|"Save Reviews & Comments"| D4
+    P5 -->|"Persist In-App Notifications"| D5
+    P5 -->|"Dispatch Emails"| EE_MAIL
+    D5 -->|"Unread Alerts & Badges"| EE_VIE
+    D5 -->|"Moderation Feedback Notices"| EE_DIR
+
+    %% ---------------------------------------------------------------------
+    %% 5. ACADEMIC VISUAL STYLING (Crisp Black & White Theme)
+    %% ---------------------------------------------------------------------
+    classDef entity fill:#FFFFFF,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold,font-size:12px;
+    classDef process fill:#FFFFFF,stroke:#000000,stroke-width:2px,color:#000000,font-weight:bold,font-size:12px;
+    classDef store fill:#FFFFFF,stroke:#000000,stroke-width:1.5px,color:#000000,font-weight:bold,font-size:11px;
+
+    class EE_DIR,EE_ADM,EE_VIE,EE_CDN,EE_MAIL entity;
+    class P1,P2,P3,P4,P5 process;
+    class D1,D2,D3,D4,D5 store;

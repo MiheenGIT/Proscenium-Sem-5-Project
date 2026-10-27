@@ -46,6 +46,8 @@ from database import (
     comments_collection,
     comment_reactions_collection,
     viewers_collection,
+    video_reviews_collection,
+    review_reactions_collection,
 )
 
 from models.schemas import BioUpdateRequest
@@ -2844,4 +2846,104 @@ def update_director_avatar(
     return {
         "message": "Avatar updated successfully",
         "avatarUrl": avatar_url,
+    }
+
+# ============================================================
+# DIRECTOR REVIEW READ-ONLY VIEW
+# ============================================================
+
+def _serialize_director_review(review: dict) -> dict:
+    viewer = viewers_collection.find_one(
+        {"_id": review["viewerId"]},
+        {"username": 1, "avatarUrl": 1},
+    )
+
+    return {
+        "id": str(review["_id"]),
+        "videoId": str(review["videoId"]),
+        "viewerId": str(review["viewerId"]),
+        "viewerUsername": viewer.get("username", "Viewer") if viewer else "Viewer",
+        "viewerAvatarUrl": viewer.get("avatarUrl") if viewer else None,
+        "rating": float(review.get("rating", 0) or 0),
+        "text": review.get("text", ""),
+        "likes": review_reactions_collection.count_documents(
+            {"reviewId": review["_id"], "type": "like"}
+        ),
+        "createdAt": review.get("createdAt"),
+        "updatedAt": review.get("updatedAt"),
+    }
+
+
+@router.get("/videos/{video_id}/reviews")
+async def list_my_video_reviews(
+    video_id: str,
+    sort: str = "recent",
+    rating: int | None = None,
+    page: int = 1,
+    limit: int = 20,
+    payload: dict = Depends(require_role("director")),
+):
+    try:
+        oid = ObjectId(video_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid video id")
+
+    limit = max(1, min(int(limit), 100))
+    page = max(1, int(page))
+
+    video = film_collection.find_one({
+        "_id": oid,
+        "directorId": ObjectId(payload["user_id"]),
+    })
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Same visibility viewers get, so counts match the film's reviewCount.
+    base = {"videoId": oid, "moderationStatus": {"$ne": "removed"}}
+    query = dict(base)
+
+    if rating is not None:
+        if rating < 1 or rating > 5:
+            raise HTTPException(status_code=400, detail="rating must be between 1 and 5")
+        query["rating"] = (
+            {"$gte": rating, "$lt": rating + 1} if rating < 5 else {"$gte": 5.0}
+        )
+
+    sort_spec = {
+        "recent": [("updatedAt", -1)],
+        "oldest": [("createdAt", 1)],
+        "highest": [("rating", -1), ("updatedAt", -1)],
+        "lowest": [("rating", 1), ("updatedAt", -1)],
+    }.get(sort, [("updatedAt", -1)])
+
+    total_matching = video_reviews_collection.count_documents(query)
+    total_all = video_reviews_collection.count_documents(base)
+
+    distribution = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+    for stat in video_reviews_collection.aggregate([
+        {"$match": base},
+        {"$project": {"starBucket": {"$floor": "$rating"}}},
+        {"$group": {"_id": "$starBucket", "count": {"$sum": 1}}},
+    ]):
+        bucket = stat.get("_id")
+        if bucket is not None:
+            k = str(min(5, max(1, int(bucket))))
+            distribution[k] += int(stat["count"])
+
+    reviews = list(
+        video_reviews_collection.find(query)
+        .sort(sort_spec)
+        .skip((page - 1) * limit)
+        .limit(limit)
+    )
+
+    return {
+        "videoId": video_id,
+        "count": total_matching,
+        "total": total_all,
+        "avgRating": float(video.get("avgRating", 0) or 0),
+        "distribution": distribution,
+        "page": page,
+        "limit": limit,
+        "reviews": [_serialize_director_review(r) for r in reviews],
     }

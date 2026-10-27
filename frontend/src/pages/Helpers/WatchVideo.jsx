@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import "plyr/dist/plyr.css";
 import { getRequest, deleteRequest, postEmpty } from "../../api/client";
 import ConfirmDialog from "../../components/ConfirmDialog.jsx";
+import { PerformancePanel, AudienceFeedback } from "./VideoInsights.jsx";
 
 /* -------------------------------------------------------------------------- */
 /*                                    ICONS                                   */
@@ -329,7 +330,7 @@ function DirectorComments({ videoId }) {
   }, [videoId]);
 
   return (
-    <section className="mt-10 border-t border-white/[0.06] pt-8">
+    <section className="mt-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-[var(--font-mono)] text-[0.62rem] uppercase tracking-[0.18em] text-[var(--gold)]">
@@ -915,7 +916,12 @@ export default function WatchVideo() {
           </div>
         </div>
 
-        <DirectorComments videoId={id} />
+        <PerformancePanel video={video} videoId={id} />
+        <AudienceFeedback
+          videoId={id}
+          video={video}
+          commentsView={<DirectorComments videoId={id} />}
+        />
       </main>
 
       {/* Floating Error Toast */}

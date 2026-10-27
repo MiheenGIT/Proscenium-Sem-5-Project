@@ -1,0 +1,130 @@
+%% =========================================================================
+%% Proscenium - Peter Chen Classic Notation Entity-Relationship Diagram (ERD)
+%% Standard Academic Syllabus Notation:
+%%   - Rectangles [ ]  : Entity Sets
+%%   - Diamonds   { }  : Relationship Sets
+%%   - Ellipses   ([ ]): Attributes
+%%   - Underlined text : Key Attributes (Primary Keys)
+%%   - Labels 1, N, M  : Structural Cardinality Constraints
+%% Optimized for Academic Black Book / Single Portrait A4 Page Printing
+%% =========================================================================
+
+flowchart TD
+
+    %% ---------------------------------------------------------------------
+    %% 1. ENTITY SETS (Rectangles)
+    %% ---------------------------------------------------------------------
+    E_DIRECTOR["DIRECTOR"]
+    E_ADMIN["ADMIN"]
+    E_FILM["FILM"]
+    E_CAST["CAST"]
+    E_VIEWER["VIEWER"]
+    E_REVIEW["REVIEW"]
+    E_COMMENT["COMMENT"]
+
+    %% ---------------------------------------------------------------------
+    %% 2. RELATIONSHIP SETS (Diamonds)
+    %% ---------------------------------------------------------------------
+    R_SUBMITS{"Submits"}
+    R_MODERATES{"Moderates"}
+    R_FEATURES{"Features"}
+    R_WATCHES{"Watches"}
+    R_WRITES_REV{"Writes"}
+    R_EVALUATES{"Evaluates"}
+    R_POSTS_COMM{"Posts"}
+    R_CONTAINS{"Contains"}
+
+    %% ---------------------------------------------------------------------
+    %% 3. ATTRIBUTES (Ellipses / Ovals)
+    %% ---------------------------------------------------------------------
+
+    %% DIRECTOR Attributes
+    A_DIR_ID(["<u>director_id</u>"]) --- E_DIRECTOR
+    A_DIR_NAME(["username"]) --- E_DIRECTOR
+    A_DIR_EMAIL(["email"]) --- E_DIRECTOR
+    A_DIR_STUDIO(["studio_name"]) --- E_DIRECTOR
+    A_DIR_STATUS(["account_status"]) --- E_DIRECTOR
+
+    %% ADMIN Attributes
+    A_ADM_ID(["<u>admin_id</u>"]) --- E_ADMIN
+    A_ADM_NAME(["username"]) --- E_ADMIN
+    A_ADM_EMAIL(["email"]) --- E_ADMIN
+    A_ADM_LEVEL(["admin_level"]) --- E_ADMIN
+
+    %% FILM Attributes
+    A_FLM_ID(["<u>film_id</u>"]) --- E_FILM
+    A_FLM_TITLE(["title"]) --- E_FILM
+    A_FLM_DUR(["duration"]) --- E_FILM
+    A_FLM_MOD(["moderation_status"]) --- E_FILM
+    A_FLM_VIS(["visibility"]) --- E_FILM
+
+    %% CAST Attributes
+    A_CST_ID(["<u>cast_id</u>"]) --- E_CAST
+    A_CST_ACTOR(["actor_name"]) --- E_CAST
+    A_CST_ROLE(["character_name"]) --- E_CAST
+
+    %% VIEWER Attributes
+    A_VIW_ID(["<u>viewer_id</u>"]) --- E_VIEWER
+    A_VIW_NAME(["username"]) --- E_VIEWER
+    A_VIW_EMAIL(["email"]) --- E_VIEWER
+    A_VIW_MAT(["maturity_setting"]) --- E_VIEWER
+
+    %% REVIEW Attributes
+    A_REV_ID(["<u>review_id</u>"]) --- E_REVIEW
+    A_REV_RATE(["rating"]) --- E_REVIEW
+    A_REV_TEXT(["review_text"]) --- E_REVIEW
+
+    %% COMMENT Attributes
+    A_COM_ID(["<u>comment_id</u>"]) --- E_COMMENT
+    A_COM_TEXT(["comment_text"]) --- E_COMMENT
+    A_COM_FLAG(["flagged"]) --- E_COMMENT
+
+    %% Descriptive Attribute on Relationship (Watches)
+    A_WAT_PROG(["progress_pct"]) --- R_WATCHES
+
+    %% ---------------------------------------------------------------------
+    %% 4. RELATIONSHIPS & CARDINALITY MAPPINGS (Lines with Cardinality)
+    %% ---------------------------------------------------------------------
+
+    %% Director submits Film (1 : N)
+    E_DIRECTOR ---|"1"| R_SUBMITS
+    R_SUBMITS ---|"N"| E_FILM
+
+    %% Admin moderates Film (1 : N)
+    E_ADMIN ---|"1"| R_MODERATES
+    R_MODERATES ---|"N"| E_FILM
+
+    %% Film features Cast (1 : N)
+    E_FILM ---|"1"| R_FEATURES
+    R_FEATURES ---|"N"| E_CAST
+
+    %% Viewer watches Film (M : N with descriptive attribute)
+    E_VIEWER ---|"M"| R_WATCHES
+    R_WATCHES ---|"N"| E_FILM
+
+    %% Viewer writes Review (1 : N) & Film evaluates via Review (1 : N)
+    E_VIEWER ---|"1"| R_WRITES_REV
+    R_WRITES_REV ---|"N"| E_REVIEW
+
+    E_FILM ---|"1"| R_EVALUATES
+    R_EVALUATES ---|"N"| E_REVIEW
+
+    %% Viewer posts Comment (1 : N) & Film contains Comment (1 : N)
+    E_VIEWER ---|"1"| R_POSTS_COMM
+    R_POSTS_COMM ---|"N"| E_COMMENT
+
+    E_FILM ---|"1"| R_CONTAINS
+    R_CONTAINS ---|"N"| E_COMMENT
+
+    %% ---------------------------------------------------------------------
+    %% 5. STYLING (Standard Academic Visual Conventions)
+    %% ---------------------------------------------------------------------
+    classDef entity fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1,font-weight:bold;
+    classDef relationship fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20,font-weight:bold;
+    classDef attribute fill:#fffde7,stroke:#f57f17,stroke-width:1.5px,color:#3e2723;
+    classDef keyAttr fill:#fffde7,stroke:#c2185b,stroke-width:1.5px,color:#880e4f,font-weight:bold;
+
+    class E_DIRECTOR,E_ADMIN,E_FILM,E_CAST,E_VIEWER,E_REVIEW,E_COMMENT entity;
+    class R_SUBMITS,R_MODERATES,R_FEATURES,R_WATCHES,R_WRITES_REV,R_EVALUATES,R_POSTS_COMM,R_CONTAINS relationship;
+    class A_DIR_NAME,A_DIR_EMAIL,A_DIR_STUDIO,A_DIR_STATUS,A_ADM_NAME,A_ADM_EMAIL,A_ADM_LEVEL,A_FLM_TITLE,A_FLM_DUR,A_FLM_MOD,A_FLM_VIS,A_CST_ACTOR,A_CST_ROLE,A_VIW_NAME,A_VIW_EMAIL,A_VIW_MAT,A_REV_RATE,A_REV_TEXT,A_COM_TEXT,A_COM_FLAG,A_WAT_PROG attribute;
+    class A_DIR_ID,A_ADM_ID,A_FLM_ID,A_CST_ID,A_VIW_ID,A_REV_ID,A_COM_ID keyAttr;

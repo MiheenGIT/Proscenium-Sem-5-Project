@@ -1,0 +1,163 @@
+%% =========================================================================
+%% Proscenium DFD Level 1: Major System Processes & Data Stores
+%% Technology: FastAPI, React, MongoDB, Cloudinary, Docker/FFmpeg, SMTP
+%% =========================================================================
+
+flowchart TD
+    %% ---------------------------------------------------------------------
+    %% External Entities (Terminators)
+    %% ---------------------------------------------------------------------
+    EE_VIEWER["External Entity:\nViewer"]
+    EE_DIRECTOR["External Entity:\nDirector"]
+    EE_ADMIN["External Entity:\nAdministrator"]
+    EE_CLOUDINARY["External Entity:\nCloudinary CDN"]
+    EE_AI["External Entity:\nDocker / AI Upscaling"]
+    EE_SMTP["External Entity:\nSMTP Mail Service"]
+
+    %% ---------------------------------------------------------------------
+    %% Major System Processes (1.0 - 7.0)
+    %% ---------------------------------------------------------------------
+    P1(("1.0\nAuthentication &\nIdentity Management"))
+    P2(("2.0\nVideo Ingestion &\nAI Processing Pipeline"))
+    P3(("3.0\nAdministrative Curation &\nContent Moderation"))
+    P4(("4.0\nCatalog Discovery,\nStreaming & Playback"))
+    P5(("5.0\nSocial Engagement &\nCommunity Feedback"))
+    P6(("6.0\nMulti-Channel Notification\n& Messaging Engine"))
+    P7(("7.0\nPlatform Telemetry &\nAnalytics Aggregation"))
+
+    %% ---------------------------------------------------------------------
+    %% Data Stores (MongoDB Collections D1 - D19)
+    %% ---------------------------------------------------------------------
+    subgraph DATA_STORES ["MongoDB Database: proscenium"]
+        D1[("D1: viewers_collection")]
+        D2[("D2: directors_collection")]
+        D3[("D3: admin_collection")]
+        D4[("D4: film_collection")]
+        D5[("D5: cast")]
+        D6[("D6: watch_sessions")]
+        D7[("D7: watch_session_log")]
+        D8[("D8: watch_history")]
+        D9[("D9: video_views")]
+        D10[("D10: watchlist")]
+        D11[("D11: comments_collection")]
+        D12[("D12: comment_reactions")]
+        D13[("D13: video_reactions")]
+        D14[("D14: video_reviews")]
+        D15[("D15: review_reactions")]
+        D16[("D16: viewer_settings")]
+        D17[("D17: notifications")]
+        D18[("D18: account_deletions")]
+        D19[("D19: analytics_events")]
+    end
+
+    %% ---------------------------------------------------------------------
+    %% Process 1.0: Authentication & Identity Management
+    %% ---------------------------------------------------------------------
+    EE_VIEWER -->|"Registration details, credentials, avatar"| P1
+    EE_DIRECTOR -->|"Registration details, bio, studio info"| P1
+    EE_ADMIN -->|"Login credentials"| P1
+    P1 -->|"JWT Bearer token, session roles"| EE_VIEWER
+    P1 -->|"JWT Bearer token, director status"| EE_DIRECTOR
+    P1 -->|"JWT Bearer token, admin permissions"| EE_ADMIN
+
+    P1 -->|"Read / Write viewer profiles & bans"| D1
+    P1 -->|"Read / Write director records & suspensions"| D2
+    P1 -->|"Verify admin identity & permissions"| D3
+    P1 -->|"Audit account deletion reason & lifespan"| D18
+    P1 -->|"Upload avatar images"| EE_CLOUDINARY
+
+    %% ---------------------------------------------------------------------
+    %% Process 2.0: Video Ingestion & AI Processing Pipeline
+    %% ---------------------------------------------------------------------
+    EE_DIRECTOR -->|"Upload video (.mp4), metadata, poster, cast, upscale flag"| P2
+    EE_DIRECTOR -->|"Re-upload revised video file"| P2
+    P2 -->|"Upload progress % & HLS rendition output"| EE_DIRECTOR
+
+    P2 -->|"Pass raw low-res video stream (<1080p)"| EE_AI
+    EE_AI -->|"Return 2x / 4x super-resolved video"| P2
+
+    P2 -->|"Upload .ts segments, rendition & master .m3u8, posters"| EE_CLOUDINARY
+    EE_CLOUDINARY -->|"Return secure HLS & thumbnail URLs"| P2
+
+    P2 -->|"Insert / Update film document (pending review)"| D4
+    P2 -->|"Insert cast records & photos"| D5
+    P2 -.->|"Trigger on_video_submitted / on_video_reuploaded"| P6
+
+    %% ---------------------------------------------------------------------
+    %% Process 3.0: Administrative Curation & Content Moderation
+    %% ---------------------------------------------------------------------
+    EE_ADMIN -->|"Approve, reject (with reason), reset moderation, bulk actions"| P3
+    EE_ADMIN -->|"Content warnings, age restrictions, feature flags, admin notes"| P3
+    EE_ADMIN -->|"Moderate flagged feedback (remove / restore), suspend director"| P3
+    P3 -->|"Review queue, playback preview data, flagged feedback list"| EE_ADMIN
+
+    P3 -->|"Update moderationStatus, visibility, publishedAt, adminNotes"| D4
+    P3 -->|"Update director accountStatus (active / suspended)"| D2
+    P3 -->|"Toggle adminRemoved on comments"| D11
+    P3 -->|"Toggle adminRemoved on reviews"| D14
+    P3 -.->|"Trigger on_video_approved, on_video_rejected, on_feedback_removed"| P6
+
+    %% ---------------------------------------------------------------------
+    %% Process 4.0: Catalog Discovery, Streaming & Playback Tracking
+    %% ---------------------------------------------------------------------
+    EE_VIEWER -->|"Search, genre/tag filters, request video watch stream"| P4
+    EE_VIEWER -->|"Periodic watch heartbeat (currentTimeSec)"| P4
+    EE_VIEWER -->|"Add / remove watchlist bookmark"| P4
+    P4 -->|"Public catalog, film metadata, HLS stream URL, resume time"| EE_VIEWER
+    P4 -->|"Watchlist & history playback lists"| EE_VIEWER
+
+    P4 -->|"Query approved public films & details"| D4
+    P4 -->|"Update accumulatedSeconds, lastHeartbeatAt, 75% gate"| D6
+    P4 -->|"Append continuous watch duration"| D7
+    P4 -->|"Upsert resume position, completion flag (>=95%)"| D8
+    P4 -->|"Insert qualified unique view (once per user per film)"| D9
+    P4 -->|"Increment views and uniqueViews counters"| D4
+    P4 -->|"Add / delete watchlist items"| D10
+    P4 -->|"Update recentWatched array"| D1
+    P4 -->|"Read user playback & subtitle settings"| D16
+    P4 -.->|"Trigger on_view_counted (at viewing milestones)"| P6
+
+    %% ---------------------------------------------------------------------
+    %% Process 5.0: Social Engagement & Community Feedback
+    %% ---------------------------------------------------------------------
+    EE_VIEWER -->|"Submit comment, reply, 1-5 star review, like/dislike reaction"| P5
+    P5 -->|"Public comment threads, star ratings, review catalog"| EE_VIEWER
+
+    P5 -->|"Store comment with deterministic moderation audit"| D11
+    P5 -->|"Store review with rating & moderation audit"| D14
+    P5 -->|"Update film avgRating, reviewCount, commentCount, likes/dislikes"| D4
+    P5 -->|"Record comment like / dislike"| D12
+    P5 -->|"Record video like / dislike"| D13
+    P5 -->|"Record review helpful like"| D15
+    P5 -.->|"Trigger on_comment_added, on_comment_reply, on_review_posted"| P6
+
+    %% ---------------------------------------------------------------------
+    %% Process 6.0: Multi-Channel Notification & Messaging Engine
+    %% ---------------------------------------------------------------------
+    EE_VIEWER -->|"Fetch notifications, mark read, mark all read"| P6
+    EE_DIRECTOR -->|"Fetch notifications, mark read"| P6
+    EE_ADMIN -->|"Fetch admin operational alerts, mark read"| P6
+    P6 -->|"Notification list, unread badge counters"| EE_VIEWER
+    P6 -->|"Notification list, unread badge counters"| EE_DIRECTOR
+    P6 -->|"Notification list, unread badge counters"| EE_ADMIN
+
+    P6 -->|"Insert notification with deduplication key & query unread"| D17
+    P6 -->|"Read opt-in settings & email addresses for fan-out"| D1
+    P6 -->|"Read director email & film title"| D2
+    P6 -->|"Read admin email list"| D3
+    P6 -->|"Dispatch formatted HTML & plain-text emails via SMTP SSL"| EE_SMTP
+
+    %% ---------------------------------------------------------------------
+    %% Process 7.0: Platform Telemetry & Analytics Aggregation
+    %% ---------------------------------------------------------------------
+    EE_VIEWER -->|"Client event logging (page_view, search, player_event)"| P7
+    EE_DIRECTOR -->|"Request director video performance & audience insights"| P7
+    EE_ADMIN -->|"Request platform intelligence, engagement & deletion insights"| P7
+    P7 -->|"Director analytics charts & performance metrics"| EE_DIRECTOR
+    P7 -->|"Admin system dashboards, churn analysis & tag analytics"| EE_ADMIN
+
+    P7 -->|"Insert raw anonymous telemetry event"| D19
+    P7 -->|"Aggregate session counts & continuous watch time"| D7
+    P7 -->|"Aggregate qualified views, unique viewers & retention"| D9
+    P7 -->|"Aggregate content performance & rankings"| D4
+    P7 -->|"Aggregate churn reasons & membership lifespans"| D18
